@@ -1,0 +1,73 @@
+[project]
+name = "sidera"
+version = "0.1.0"
+description = "Sidera — AI agent for cross-platform performance marketing intelligence"
+requires-python = ">=3.11"
+dependencies = [
+    # Agent framework
+    "claude-agent-sdk>=0.1.0",
+    "anthropic>=0.45.0",
+
+    # API framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+
+    # Database
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+
+    # Cache
+    "redis>=5.0.0",
+
+    # Workflow orchestration
+    "inngest>=0.4.0",
+
+    # Ad platform APIs
+    "google-ads>=25.0.0",
+    "facebook-business>=21.0.0",
+
+    # Slack
+    "slack-bolt>=1.21.0",
+    "slack-sdk>=3.33.0",
+
+    # Email
+    "resend>=2.0.0",
+
+    # Utilities
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.0",
+    "structlog>=24.4.0",
+
+    # Monitoring
+    "sentry-sdk[fastapi]>=2.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+dashboard = [
+    "streamlit>=1.41.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
