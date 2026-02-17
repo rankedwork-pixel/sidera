@@ -1,0 +1,28 @@
+{
+  "campaigns": [
+    {
+      "campaign.id": "123456789",
+      "campaign.name": "Brand Search - US",
+      "campaign.status": "ENABLED",
+      "campaign.advertising_channel_type": "SEARCH",
+      "campaign_budget.amount_micros": "50000000",
+      "metrics.impressions": "15420",
+      "metrics.clicks": "892",
+      "metrics.cost_micros": "12450000",
+      "metrics.conversions": "45.2",
+      "metrics.conversions_value": "8240.50"
+    },
+    {
+      "campaign.id": "987654321",
+      "campaign.name": "Performance Max - Ecommerce",
+      "campaign.status": "ENABLED",
+      "campaign.advertising_channel_type": "PERFORMANCE_MAX",
+      "campaign_budget.amount_micros": "100000000",
+      "metrics.impressions": "42100",
+      "metrics.clicks": "1560",
+      "metrics.cost_micros": "28900000",
+      "metrics.conversions": "89.0",
+      "metrics.conversions_value": "18500.00"
+    }
+  ]
+}

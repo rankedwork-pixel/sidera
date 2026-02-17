@@ -1,0 +1,21 @@
+{
+  "campaigns": [
+    {
+      "id": "120330000000123456",
+      "name": "Prospecting - Lookalike",
+      "status": "ACTIVE",
+      "objective": "OUTCOME_SALES",
+      "daily_budget": "5000",
+      "impressions": "28500",
+      "clicks": "1120",
+      "spend": "48.75",
+      "actions": [
+        {"action_type": "purchase", "value": "32"},
+        {"action_type": "add_to_cart", "value": "145"}
+      ],
+      "action_values": [
+        {"action_type": "purchase", "value": "4850.00"}
+      ]
+    }
+  ]
+}

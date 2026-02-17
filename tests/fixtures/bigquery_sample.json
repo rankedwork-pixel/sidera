@@ -1,0 +1,206 @@
+{
+  "goals": [
+    {
+      "period": "2024-01",
+      "channel": "google_ads",
+      "metric_name": "revenue",
+      "target_value": 150000.00,
+      "revenue_target": 150000.00,
+      "cpa_target": 45.00,
+      "roas_target": 4.5,
+      "budget_planned": 35000.00
+    },
+    {
+      "period": "2024-01",
+      "channel": "meta",
+      "metric_name": "revenue",
+      "target_value": 100000.00,
+      "revenue_target": 100000.00,
+      "cpa_target": 38.00,
+      "roas_target": 5.0,
+      "budget_planned": 22000.00
+    },
+    {
+      "period": "2024-01",
+      "channel": "all",
+      "metric_name": "revenue",
+      "target_value": 280000.00,
+      "revenue_target": 280000.00,
+      "cpa_target": 42.00,
+      "roas_target": 4.7,
+      "budget_planned": 60000.00
+    }
+  ],
+  "budget_pacing": [
+    {
+      "period": "2024-01",
+      "channel": "google_ads",
+      "campaign_name": "Brand Search",
+      "budget_planned": 15000.00,
+      "budget_spent": 8200.00,
+      "days_elapsed": 15,
+      "days_remaining": 16,
+      "projected_spend": 16940.00,
+      "pacing_status": "overspend"
+    },
+    {
+      "period": "2024-01",
+      "channel": "google_ads",
+      "campaign_name": "Non-Brand Search",
+      "budget_planned": 20000.00,
+      "budget_spent": 9100.00,
+      "days_elapsed": 15,
+      "days_remaining": 16,
+      "projected_spend": 18820.00,
+      "pacing_status": "on_track"
+    },
+    {
+      "period": "2024-01",
+      "channel": "meta",
+      "campaign_name": "Prospecting",
+      "budget_planned": 12000.00,
+      "budget_spent": 4800.00,
+      "days_elapsed": 15,
+      "days_remaining": 16,
+      "projected_spend": 9920.00,
+      "pacing_status": "underspend"
+    }
+  ],
+  "orders": [
+    {
+      "date": "2024-01-15",
+      "revenue": 9500.00,
+      "orders": 42,
+      "aov": 226.19
+    },
+    {
+      "date": "2024-01-14",
+      "revenue": 8700.00,
+      "orders": 38,
+      "aov": 228.95
+    },
+    {
+      "date": "2024-01-13",
+      "revenue": 7200.00,
+      "orders": 31,
+      "aov": 232.26
+    }
+  ],
+  "channel_performance": [
+    {
+      "channel": "google_ads",
+      "date": "2024-01-15",
+      "revenue": 5200.00,
+      "orders": 23,
+      "cost": 1150.00,
+      "aov": 226.09
+    },
+    {
+      "channel": "meta",
+      "date": "2024-01-15",
+      "revenue": 3100.00,
+      "orders": 14,
+      "cost": 680.00,
+      "aov": 221.43
+    },
+    {
+      "channel": "google_ads",
+      "date": "2024-01-14",
+      "revenue": 4800.00,
+      "orders": 21,
+      "cost": 1080.00,
+      "aov": 228.57
+    },
+    {
+      "channel": "meta",
+      "date": "2024-01-14",
+      "revenue": 2900.00,
+      "orders": 12,
+      "cost": 620.00,
+      "aov": 241.67
+    }
+  ],
+  "campaign_attribution": [
+    {
+      "campaign_id": "gads_12345",
+      "campaign_name": "Brand Search",
+      "channel": "google_ads",
+      "date": "2024-01-15",
+      "conversions": 15,
+      "revenue": 3400.00,
+      "orders": 15,
+      "cost": 520.00,
+      "platform_campaign_id": "12345678901"
+    },
+    {
+      "campaign_id": "gads_67890",
+      "campaign_name": "Non-Brand Search",
+      "channel": "google_ads",
+      "date": "2024-01-15",
+      "conversions": 8,
+      "revenue": 1800.00,
+      "orders": 8,
+      "cost": 630.00,
+      "platform_campaign_id": "12345678902"
+    },
+    {
+      "campaign_id": "meta_11111",
+      "campaign_name": "Prospecting LAL",
+      "channel": "meta",
+      "date": "2024-01-15",
+      "conversions": 10,
+      "revenue": 2200.00,
+      "orders": 10,
+      "cost": 480.00,
+      "platform_campaign_id": "23456789012"
+    },
+    {
+      "campaign_id": "meta_22222",
+      "campaign_name": "Retargeting",
+      "channel": "meta",
+      "date": "2024-01-15",
+      "conversions": 4,
+      "revenue": 900.00,
+      "orders": 4,
+      "cost": 200.00,
+      "platform_campaign_id": "23456789013"
+    }
+  ],
+  "tables": [
+    {
+      "table_id": "goals",
+      "table_type": "TABLE",
+      "num_rows": 36,
+      "num_bytes": 4096,
+      "description": "Monthly revenue/CPA/ROAS targets per channel"
+    },
+    {
+      "table_id": "orders",
+      "table_type": "TABLE",
+      "num_rows": 52340,
+      "num_bytes": 8388608,
+      "description": "All e-commerce orders with revenue and attribution"
+    },
+    {
+      "table_id": "channel_performance",
+      "table_type": "TABLE",
+      "num_rows": 1095,
+      "num_bytes": 131072,
+      "description": "Daily revenue/orders/cost by marketing channel"
+    },
+    {
+      "table_id": "budget_pacing",
+      "table_type": "TABLE",
+      "num_rows": 180,
+      "num_bytes": 16384,
+      "description": "Budget pacing status per channel and campaign"
+    },
+    {
+      "table_id": "campaign_attribution",
+      "table_type": "TABLE",
+      "num_rows": 7300,
+      "num_bytes": 524288,
+      "description": "Backend-attributed conversions per campaign per day"
+    }
+  ]
+}
