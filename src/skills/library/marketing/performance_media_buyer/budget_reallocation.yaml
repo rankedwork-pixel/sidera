@@ -1,0 +1,100 @@
+id: budget_reallocation
+name: Cross-Platform Budget Reallocation
+version: "1.0"
+description: Analyze marginal efficiency across Google Ads and Meta to recommend budget reallocations that maximize ROAS within the monthly budget cap
+category: budget
+platforms: [google_ads, meta, bigquery]
+tags: [budget, reallocation, cross-platform, optimization, spend, efficiency, roas, cpa, google, meta]
+
+tools_required:
+  - get_google_ads_campaigns
+  - get_google_ads_performance
+  - get_meta_campaigns
+  - get_meta_performance
+  - get_backend_performance
+  - get_campaign_attribution
+  - get_budget_pacing
+  - get_business_goals
+  - create_google_doc
+  - manage_google_sheets
+  - update_google_ads_campaign
+  - update_meta_campaign
+
+model: sonnet
+max_turns: 20
+
+system_supplement: |
+  For this analysis you are focused on cross-platform budget allocation
+  efficiency. Your goal is to identify where each marginal dollar produces
+  the best return, and recommend budget shifts accordingly.
+
+  ## Budget Reallocation Framework
+  1. Pull campaign structure and performance from both Google Ads and Meta.
+  2. Cross-reference with BigQuery backend data — platform-reported
+     conversions are inflated by attribution overlap.
+  3. Calculate marginal efficiency for each campaign:
+     - Backend CPA (cost / backend conversions)
+     - Backend ROAS (backend revenue / cost)
+     - Incremental CPA trend (is the campaign getting more or less efficient?)
+  4. Rank all campaigns across both platforms by backend ROAS descending.
+  5. Identify budget-constrained winners: campaigns with high ROAS that
+     are limited by daily budget (impression share lost to budget > 10%).
+  6. Identify budget-wasting losers: campaigns with ROAS below target
+     that are spending significant budget.
+  7. Check pacing: is the total monthly budget on track? Over-pacing or
+     under-pacing requires different reallocation strategies.
+  8. Model the impact: for each proposed reallocation, estimate the
+     expected change in conversions and revenue using the campaign's
+     recent efficiency curve.
+
+prompt_template: |
+  Run a cross-platform budget reallocation analysis.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Analyze the last {lookback_days} days of performance data across all
+  connected platforms. Cross-reference with BigQuery backend data.
+  Identify where budget should be shifted to maximize overall ROAS
+  within the monthly budget cap.
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: Is the current allocation efficient? How much improvement
+  is possible through reallocation?
+
+  ## Current Allocation vs Efficiency
+  Table: Platform | Campaign | Daily Budget | Actual Spend (7d avg) |
+  Backend CPA | Backend ROAS | Impression Share Lost to Budget
+
+  ## Reallocation Proposal
+  Table: From (Campaign) | To (Campaign) | Amount | Expected ROAS Lift |
+  Expected Additional Conversions
+
+  ## Pacing Check
+  Current month spend vs budget cap. Days remaining. Projected end-of-month
+  spend at current rate. Recommendation (maintain / increase / decrease pace).
+
+  ## Risk Assessment
+  For each proposed reallocation:
+  - What could go wrong
+  - Minimum test period before evaluating
+  - Rollback criteria
+
+business_guidance: |
+  - Never reallocate more than 20% of a campaign's budget in a single change
+  - Minimum 14-day lookback for reallocation decisions
+  - Always maintain at least 30% of budget on each platform (diversification)
+  - Prioritize campaigns with statistical significance (>100 conversions in period)
+  - If a campaign is in learning phase, do not reduce its budget
+  - Backend ROAS is the primary decision metric, not platform-reported ROAS
+  - Flag any campaign where platform reports >30% more conversions than backend
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: confidential
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

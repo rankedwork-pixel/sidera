@@ -1,0 +1,192 @@
+id: landing_page_analysis
+name: Landing Page Performance Analysis
+version: "1.0"
+description: Connect conversion paths to landing pages across platforms, identify top and bottom performing pages, and recommend optimization priorities
+category: analysis
+platforms: [google_ads, meta, bigquery]
+tags: [landing-page, conversion-rate, page-performance, url, bounce-rate, funnel, optimization, website, cro, user-experience]
+
+tools_required:
+  - get_google_ads_performance
+  - get_google_ads_campaigns
+  - get_meta_performance
+  - get_meta_campaigns
+  - get_backend_performance
+  - get_campaign_attribution
+  - create_google_doc
+  - manage_google_sheets
+  - update_google_ads_campaign
+  - update_meta_campaign
+
+model: sonnet
+max_turns: 15
+
+system_supplement: |
+  For this analysis you are focused on landing page performance across all
+  advertising platforms. Your goal is to connect paid traffic to specific
+  destination URLs, measure each page's true contribution to business
+  outcomes using backend data, and identify which pages are driving value
+  versus wasting budget.
+
+  ## Landing Page Analysis Framework
+  1. Map every active campaign and ad to its destination URL across both
+     Google Ads and Meta. Normalize URLs by:
+     - Stripping tracking parameters (utm_*, fbclid, gclid, etc.)
+     - Normalizing protocol (treat http and https as the same)
+     - Normalizing trailing slashes
+     - Grouping URL variants that resolve to the same page
+  2. Aggregate performance metrics by normalized landing page URL:
+     - Total clicks / visits from each platform
+     - Total spend driving traffic to each page
+     - Platform-reported conversions per page
+     - Backend-attributed conversions per page (from BigQuery)
+     - Backend revenue per page
+  3. Calculate per-page performance metrics:
+     - Backend conversion rate (backend conversions / clicks)
+     - Backend CPA (spend / backend conversions)
+     - Backend ROAS (backend revenue / spend)
+     - Click-to-conversion ratio as a proxy for engagement quality
+       (lower ratios suggest high bounce or poor page experience)
+     - Attribution inflation per page: ratio of platform-reported to
+       backend conversions. Pages with high inflation may have attribution
+       leakage (e.g., cross-domain tracking issues)
+  4. Identify the advertiser's landing page portfolio health:
+     - How many unique landing pages are in use?
+     - What % of spend goes to the top 3 pages? (concentration risk)
+     - Are there pages receiving significant spend with zero backend
+       conversions? (potential tracking or page issues)
+  5. Rank pages into performance tiers:
+     - **Top Performers:** Backend ROAS above target, consistent volume.
+       Analyze what makes them work (messaging alignment, page speed,
+       form simplicity, offer clarity).
+     - **Underperformers:** Backend ROAS below target with significant
+       spend. Diagnose likely issues (message mismatch between ad and
+       page, slow load times, complex forms, poor mobile experience).
+     - **Insufficient Data:** Pages with fewer than 500 clicks — too
+       early to judge, flag for continued monitoring.
+  6. Compare the same landing page's performance across platforms.
+     If a page converts well from Google Ads traffic but poorly from
+     Meta traffic (or vice versa), the issue is likely audience-message
+     fit rather than the page itself.
+  7. Check for landing page attribution hotspots: pages where the gap
+     between platform-reported and backend conversions is unusually large.
+     This often indicates tracking implementation issues (missing pixels,
+     broken thank-you page tags, cross-domain tracking gaps).
+
+prompt_template: |
+  Run a landing page performance analysis across all connected accounts.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Pull the last {lookback_days} days of campaign and performance data
+  from all platforms. Map campaigns to their destination URLs, aggregate
+  metrics by landing page, and cross-reference with BigQuery backend
+  attribution.
+
+  Identify which landing pages are driving the best business outcomes,
+  which are underperforming, and where there may be tracking or page
+  experience issues.
+
+  Create a Google Sheets export with the full landing page scorecard
+  and a Google Doc with the analysis and optimization recommendations.
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: How many landing pages are in the portfolio? What is
+  the overall conversion efficiency? Are there significant page-level
+  problems dragging down account performance?
+
+  ## Landing Page Scorecard
+  Table: Landing Page URL | Platforms | Total Clicks | Total Spend |
+  Backend Conv Rate | Backend CPA | Backend ROAS | Platform Conv Rate |
+  Attribution Inflation | Verdict (Top / Underperform / Insufficient Data)
+
+  Sort by total spend descending.
+
+  ## Top Performers
+  For each top-performing page:
+  - URL and which campaigns drive traffic to it
+  - Key metrics (backend CPA, ROAS, conversion rate)
+  - Why it works: specific observations about messaging alignment,
+    page design, offer clarity, or audience fit
+  - Opportunity: can more traffic be directed here?
+
+  ## Bottom Performers
+  For each underperforming page:
+  - URL and which campaigns drive traffic to it
+  - Key metrics showing underperformance
+  - Likely diagnosis: message mismatch, page speed, form friction,
+    mobile issues, tracking problems, or audience-page misalignment
+  - Recommended fix with expected impact
+  - Priority level (fix now / test alternative / monitor)
+
+  ## Optimization Priorities
+  Ranked list of the highest-impact changes, combining page fixes and
+  traffic routing changes:
+  1. [Action] — [Expected impact on CPA/ROAS] — [Effort level]
+  2. ...
+
+  ## Platform Comparison per Page
+  For pages receiving traffic from both Google Ads and Meta, side-by-side
+  comparison: same page, different traffic source, how do the metrics
+  differ? Identify pages that work well for one platform but not the other.
+
+  ## Attribution Health Check
+  Table: Landing Page URL | Platform Conversions | Backend Conversions |
+  Inflation Ratio | Assessment
+
+  Flag pages where the inflation ratio exceeds 1.5x — these likely have
+  tracking implementation issues that should be investigated.
+
+  ## Deliverables Created
+  - Google Sheets: [link] — full landing page scorecard with all metrics
+  - Google Doc: [link] — analysis narrative with recommendations
+
+business_guidance: |
+  - Minimum 500 clicks to a landing page before making performance
+    judgments. Pages below this threshold should be categorized as
+    "Insufficient Data" and flagged for continued monitoring, not
+    for optimization action.
+  - Backend conversion data always takes precedence over platform-reported
+    conversions. If backend shows a page converting at 2% but the platform
+    says 5%, the page is a 2% converter — investigate the tracking gap.
+  - Do not recommend killing a landing page that is the only destination
+    URL for an active campaign. Instead, recommend testing an alternative
+    page alongside it. Pausing a page without an alternative means pausing
+    the campaign entirely.
+  - Group URL variants when analyzing. URLs that differ only by query
+    parameters (tracking tags, session IDs, A/B test parameters) should
+    be aggregated as a single page unless the parameters reflect genuinely
+    different page content.
+  - When a page performs well on one platform but poorly on another,
+    the likely cause is audience-message fit, not the page itself. The
+    recommendation should focus on adjusting which audiences are sent
+    to that page, not necessarily changing the page.
+  - Attribution inflation above 1.5x on a specific page (while other pages
+    are at normal levels) strongly suggests a page-level tracking issue:
+    missing conversion pixel, broken redirect, cross-domain handoff
+    failure, or thank-you page tag not firing.
+  - Mobile vs desktop performance differences are critical but not always
+    available at the page level through ad platform data. If the data
+    supports it, break out mobile vs desktop metrics per page. Otherwise,
+    note this as a limitation and recommend dedicated mobile page audits.
+  - Page speed is a major conversion factor but cannot be measured through
+    ad platform data alone. When diagnosing underperforming pages, always
+    recommend a page speed check as part of the investigation even though
+    the agent cannot measure it directly.
+  - For e-commerce advertisers, look at revenue-per-session differences
+    between pages, not just conversion rate. A page with lower conversion
+    rate but higher average order value may be the better performer.
+  - Never recommend more than 5 page changes simultaneously. Prioritize
+    the highest-impact change and recommend a phased approach to avoid
+    confounding test results.
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

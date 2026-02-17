@@ -1,0 +1,111 @@
+id: creative_analysis
+name: Creative Performance Analysis
+version: "2.0"
+description: Analyze Facebook/Instagram ad creative performance from BigQuery backend data and recommend which creatives to cut, scale, or test
+category: creative
+platforms: [meta, bigquery]
+tags: [creative, facebook, instagram, performance, images, video, copy, testing, ad-creative, fatigue]
+
+tools_required:
+  - get_meta_campaigns
+  - get_meta_performance
+  - get_meta_audience_insights
+  - get_backend_performance
+  - get_campaign_attribution
+  - create_google_doc
+  - manage_google_sheets
+  - update_meta_ad
+
+model: sonnet
+max_turns: 15
+
+# Context files — loaded from this skill's folder and injected into
+# the system prompt.  Patterns are resolved relative to this folder.
+context_files:
+  - "examples/*.md"
+  - "context/*.md"
+  - "guidelines/*.md"
+
+system_supplement: |
+  For this analysis you are focused exclusively on creative performance.
+  Your goal is to identify which ad creatives are driving real business
+  outcomes and which are wasting budget.
+
+  ## Creative Analysis Framework
+  1. Pull all active Meta campaigns and their ad-level creative data
+     (images, videos, carousels, copy variants).
+  2. Cross-reference with BigQuery backend data for real conversion
+     attribution — platform-reported numbers are inflated.
+  3. Segment creatives by: format (image/video/carousel), copy theme,
+     audience targeting, and campaign objective.
+  4. For each creative, calculate: real CPA, real ROAS, CTR,
+     thumb-stop rate (3-second video views / impressions), and
+     hook rate (video watches past 25% / 3-second views).
+  5. Classify each creative into:
+     - **Scale** (top 20% by backend ROAS) — increase budget
+     - **Maintain** (middle 60%) — keep running, monitor
+     - **Cut** (bottom 20% by backend ROAS) — pause immediately
+  6. Identify creative fatigue: rising frequency (>3.0) combined
+     with declining CTR over 7+ consecutive days.
+  7. Generate specific test hypotheses based on patterns in top
+     performers (what copy angles, formats, hooks work best).
+
+prompt_template: |
+  Run a creative performance analysis for the connected Meta account(s).
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Pull the last {lookback_days} days of creative-level data, cross-reference
+  with BigQuery backend attribution, and produce a full creative scorecard
+  with cut/scale/test recommendations.
+
+  If a Google Sheets export is requested, create one with the raw data.
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences on overall creative health — are we finding winners or
+  burning budget on losers?
+
+  ## Creative Scorecard
+  Table with columns: Creative Name | Format | Spend | Impressions |
+  Backend CPA | Backend ROAS | CTR | Frequency | Status (Scale/Maintain/Cut)
+
+  ## Cut List
+  Creatives to pause immediately, each with:
+  - Creative name and ID
+  - Why it should be cut (specific metrics)
+  - Estimated weekly savings
+
+  ## Scale List
+  Creatives to increase budget on, each with:
+  - Creative name and ID
+  - Why it should be scaled (specific metrics)
+  - Suggested budget increase amount
+
+  ## Test Hypotheses
+  3-5 new creative concepts to test, based on patterns in top performers.
+  Each hypothesis should include: format, hook angle, target audience,
+  and expected impact.
+
+  ## Fatigue Alerts
+  Creatives showing fatigue signals (frequency >3.0 + declining CTR).
+  Include days since fatigue onset and recommended action.
+
+business_guidance: |
+  - Minimum 7-day data window before making cut decisions
+  - Never cut a creative with fewer than 1,000 impressions (insufficient data)
+  - Weight backend ROAS 2x over platform-reported ROAS for all decisions
+  - Video creatives get a 14-day evaluation window (longer consideration cycle)
+  - Carousel creatives: evaluate both the carousel as a whole and individual cards
+  - When in doubt about cutting, move to a reduced-budget test before pausing entirely
+  - Always flag if the winning creative mix is too concentrated (>60% of spend on one creative)
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

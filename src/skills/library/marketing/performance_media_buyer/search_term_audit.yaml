@@ -1,0 +1,161 @@
+id: search_term_audit
+name: Search Term Audit
+version: "1.0"
+description: Audit Google Ads search terms for wasted spend on irrelevant queries, find negative keyword opportunities, and identify high-converting new terms to expand
+category: analysis
+platforms: [google_ads, bigquery]
+tags: [search-terms, negative-keywords, wasted-spend, google-ads, queries, relevance, audit, keywords, search-query, sqr]
+
+tools_required:
+  - get_google_ads_performance
+  - get_google_ads_campaigns
+  - get_google_ads_changes
+  - get_backend_performance
+  - create_google_doc
+  - manage_google_sheets
+  - update_google_ads_keywords
+
+model: sonnet
+max_turns: 10
+
+system_supplement: |
+  For this analysis you are focused exclusively on Google Ads search term
+  quality. Your goal is to identify wasted spend on irrelevant queries,
+  build negative keyword recommendations grouped by theme, and surface
+  high-converting search terms that deserve their own exact match keywords.
+
+  ## Search Term Audit Framework
+  1. Pull the search term report for all active Search campaigns over the
+     lookback window. Include: search term, match type triggered, campaign,
+     ad group, impressions, clicks, cost, conversions, conversion value.
+  2. Cross-reference search term conversion data with BigQuery backend
+     attribution. Platform-reported conversions on search terms are
+     directional but often inflated by view-through and cross-device
+     attribution that does not hold up in backend data.
+  3. Categorize every search term into one of four buckets:
+     - **Highly Relevant:** clearly matches the advertiser's products or
+       services, strong purchase intent, backend conversions present
+     - **Somewhat Relevant:** related to the business but weak intent
+       (informational queries, competitor comparisons, broad topic queries)
+     - **Irrelevant:** no meaningful relationship to the advertiser's
+       offerings (wrong industry, wrong geography, wrong intent entirely)
+     - **Brand:** contains the advertiser's brand name or close variants
+  4. For irrelevant and low-performing somewhat-relevant terms, calculate:
+     - Total wasted spend (cost with zero or negligible backend conversions)
+     - Spend velocity (is waste increasing or decreasing over time?)
+     - Which campaigns and ad groups are triggering these terms
+  5. Group negative keyword candidates by theme rather than listing
+     individual words. Themes are more maintainable and catch future
+     variants. Example themes: "free," "jobs/careers," "DIY/how-to,"
+     "wrong geography," "wrong product category."
+  6. For each negative keyword theme, recommend the appropriate match type:
+     - Exact match negatives for specific high-spend irrelevant terms
+     - Phrase match negatives for thematic groups
+     - Broad match negatives only when the term is completely unrelated
+       to the business in all possible contexts
+  7. Identify high-performing search terms that are currently matching on
+     broad or phrase match but deserve their own exact match keyword.
+     Criteria: 5+ backend conversions in the period, backend CPA below
+     target, and currently triggered by a non-exact match type.
+  8. Calculate the Search Term Health Score:
+     - % of spend going to highly relevant terms
+     - % of spend going to irrelevant terms (waste rate)
+     - Trend direction (improving or deteriorating)
+  9. If requested, create a Google Sheets export with all search terms,
+     categorizations, and metrics for manual review, and a Google Doc
+     summarizing the findings and recommendations.
+
+prompt_template: |
+  Run a search term audit across all connected Google Ads accounts.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Pull the last {lookback_days} days of search term data. Cross-reference
+  with BigQuery backend attribution data. Categorize all search terms by
+  relevance, identify wasted spend, build negative keyword recommendations
+  grouped by theme, and surface high-converting terms for exact match
+  expansion.
+
+  Create a Google Sheets export with the full search term analysis and
+  a Google Doc with the summary and recommendations.
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: What is the overall search term health? How much spend
+  is being wasted on irrelevant queries? What is the estimated monthly
+  savings from implementing negative keyword recommendations?
+
+  ## Search Term Health Score
+  - Relevance Rate: X% of spend on highly relevant terms
+  - Waste Rate: X% of spend on irrelevant terms
+  - Brand Rate: X% of spend on brand terms
+  - Trend: Improving / Stable / Deteriorating (vs prior period)
+
+  ## Negative Keyword Recommendations
+  Grouped by theme. For each theme:
+  - Theme name and description
+  - Example search terms in this theme
+  - Recommended negative keywords (with match type)
+  - Campaigns/ad groups to apply them to
+  - Estimated monthly savings from this theme alone
+
+  Sort by estimated savings descending.
+
+  ## High-Value Term Expansion
+  Table: Search Term | Current Match Type | Clicks | Backend Conversions |
+  Backend CPA | Recommended Action (add as exact match)
+
+  These are terms currently converting well via broad or phrase match
+  that should be promoted to dedicated exact match keywords for better
+  control and Quality Score.
+
+  ## Worst Offenders
+  Top 10 individual search terms by wasted spend. For each:
+  - The search term
+  - Total spend with zero backend conversions
+  - Campaign and ad group that triggered it
+  - Why it is irrelevant
+
+  ## Deliverables Created
+  - Google Sheets: [link] — full search term data with categorizations
+  - Google Doc: [link] — summary report with recommendations
+
+business_guidance: |
+  - Minimum 30 clicks on a search term before categorizing it as irrelevant.
+    Terms with fewer clicks may be irrelevant but the data is insufficient
+    to be confident, so they should be flagged for monitoring rather than
+    negative keyword addition.
+  - Group negative keywords by theme, not individual words. Themes are
+    more maintainable and resilient to new query variants. Individual
+    negatives should only be recommended for very high-spend single terms.
+  - Never recommend adding competitor brand names as negative keywords
+    without explicit approval from the advertiser. Competitor conquesting
+    is a deliberate strategy for some accounts.
+  - Estimated savings should be conservative: assume only 50% of irrelevant
+    spend is recoverable, because some of those impressions would shift to
+    other queries rather than being eliminated entirely.
+  - Be cautious with broad match negatives — they can inadvertently block
+    relevant traffic. Prefer phrase and exact match negatives unless the
+    term is completely unrelated to the business in every possible context.
+  - Do not count brand term spend as "waste" even if backend CPA on brand
+    is high — brand protection is a valid strategic choice. Flag it
+    separately for the advertiser's consideration.
+  - When identifying terms for exact match expansion, verify that the
+    current campaign structure can accommodate new keywords without
+    creating internal competition between ad groups.
+  - If the account uses Smart Bidding (tCPA, tROAS, Maximize Conversions),
+    note that adding negatives can affect the algorithm's learning. Recommend
+    adding negatives in batches of no more than 50 at a time with a 7-day
+    observation window between batches.
+  - Always check if recently added negative keywords from change history
+    may have caused unintended traffic loss before recommending more.
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

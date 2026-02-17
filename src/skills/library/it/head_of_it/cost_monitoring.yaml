@@ -1,0 +1,98 @@
+id: cost_monitoring
+name: "LLM Cost Monitoring"
+version: "1.0"
+description: "Monitor LLM spending patterns, detect cost anomalies, and optimize model usage across all agent operations"
+category: operations
+platforms: []
+tags: [cost, spending, budget, llm, tokens, monitoring, optimization, anomaly]
+
+tools_required:
+  - get_cost_summary
+  - get_recent_audit_events
+  - get_system_health
+  - send_slack_alert
+
+model: haiku
+max_turns: 5
+
+system_supplement: |
+  You are monitoring LLM costs for the Sidera platform. Your goal is to
+  detect spending anomalies, identify optimization opportunities, and
+  ensure the system stays within budget.
+
+  ## Cost Monitoring Procedure
+  1. Get the cost summary for the last 7 days
+  2. Compare today's spend to the 7-day daily average
+  3. Break down costs by model to identify which model is driving spend
+  4. Check audit events for unusual patterns (too many tool calls,
+     long conversations, repeated skill runs)
+
+  ## Cost Benchmarks (per operation)
+  - Daily briefing (3-phase): ~$0.52 total
+    - Phase 1 (Haiku data collection): ~$0.02
+    - Phase 2 (Sonnet analysis): ~$0.15
+    - Phase 3 (Opus strategy): ~$0.35
+  - Skill run (single, Sonnet): ~$0.15-0.30
+  - Conversation turn (Sonnet): ~$0.03-0.15
+  - Skill routing (Haiku): ~$0.001
+  - Manager delegation (Sonnet): ~$0.05-0.10
+
+  ## Alert Thresholds
+  - Daily cost > $10: WARNING
+  - Daily cost > $25: CRITICAL
+  - Single operation > $2: WARNING (possible runaway loop)
+  - Day-over-day increase > 100%: WARNING
+
+  ## Optimization Signals
+  - Too many Opus calls → check if volatility skip is working
+  - Many conversation turns → check if conversations are being closed
+  - Repeated skill runs for same account → check scheduler dedup
+  - High token counts → check if prompt caching is effective
+
+prompt_template: |
+  Run an LLM cost analysis for the Sidera platform.
+  Analysis date: {analysis_date}
+
+  Review spending over the last 7 days. Identify any anomalies,
+  optimization opportunities, or budget concerns. Flag anything
+  that needs attention.
+
+output_format: |
+  ## Cost Monitoring Report — {date}
+
+  ### Summary
+  - Period total: $X.XX
+  - Daily average: $X.XX
+  - Today: $X.XX (X% vs average)
+  - Status: NORMAL / ELEVATED / HIGH
+
+  ### Model Breakdown
+  Table: Model | Cost | Runs | Avg Cost/Run
+  Highlight any model that's disproportionately expensive.
+
+  ### Anomalies
+  Any cost spikes, unusual patterns, or budget concerns.
+
+  ### Optimization Recommendations
+  Specific, actionable suggestions to reduce costs.
+
+business_guidance: |
+  - LLM costs are expected to increase with more skills, departments,
+    and conversations. The goal is efficiency, not minimization.
+  - The $10/day circuit breaker is per account. Monitor total across
+    all accounts.
+  - Haiku costs are negligible (~$0.001/call). Focus optimization
+    on Sonnet and Opus usage.
+  - Conversation mode is the biggest variable cost. Long conversations
+    (10+ turns) can cost $1-2. This is acceptable if the conversation
+    is productive.
+  - Don't alert on normal testing activity. During E2E testing,
+    costs will be higher than production steady-state.
+
+schedule: null
+chain_after: null
+requires_approval: false
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

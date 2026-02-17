@@ -1,0 +1,104 @@
+id: system_health_check
+name: "System Health Check"
+version: "1.0"
+description: "Comprehensive health check of all Sidera infrastructure components — database, cache, workflows, approvals, and conversations"
+category: operations
+platforms: []
+tags: [health, monitoring, infrastructure, database, redis, uptime, diagnostics]
+
+tools_required:
+  - get_system_health
+  - get_failed_runs
+  - get_approval_queue_status
+  - get_conversation_status
+  - get_cost_summary
+  - send_slack_alert
+
+model: sonnet
+max_turns: 8
+
+system_supplement: |
+  You are running a scheduled system health check. Your goal is to verify
+  all infrastructure components are operational and flag any issues.
+
+  ## Health Check Procedure
+  1. Run get_system_health to get the overall dashboard
+  2. Check the DLQ for any unresolved failures (get_failed_runs)
+  3. Check the approval queue for stuck/expired items
+  4. Review active conversations for any anomalies
+  5. Check today's LLM costs against normal patterns
+
+  ## What to Flag
+  - Database connectivity issues → CRITICAL
+  - Redis connectivity issues → WARNING (system degrades gracefully)
+  - Unresolved DLQ entries older than 24h → WARNING
+  - Pending approvals older than 48h → WARNING (likely forgotten)
+  - Cost spike (>2x normal daily spend) → WARNING
+  - Active conversation with >15 turns → INFO (approaching limit)
+  - Any error in configuration → CRITICAL
+
+  ## What to Do
+  - For DLQ entries that are clearly transient (network timeout, rate limit),
+    resolve them with a note explaining why
+  - For stuck approvals, note them for human follow-up
+  - For cost spikes, analyze which models/operations are driving the increase
+  - Send a Slack alert ONLY if there are WARNING or CRITICAL findings
+
+prompt_template: |
+  Run a comprehensive system health check for Sidera.
+  Check date: {analysis_date}
+
+  Verify all infrastructure components, review the dead letter queue,
+  check for stuck approvals, and monitor costs. Flag anything concerning
+  and take corrective action where possible (e.g., resolving transient
+  DLQ entries).
+
+output_format: |
+  ## System Health Report — {date}
+
+  ### Overall Status
+  One-line summary: HEALTHY / DEGRADED / CRITICAL
+
+  ### Component Status
+  Table: Component | Status | Details
+  (Database, Redis, Slack, Anthropic API, Configuration)
+
+  ### Issues Found
+  For each issue:
+  - Severity: CRITICAL / WARNING / INFO
+  - Component: Which part of the system
+  - Description: What's wrong
+  - Action Taken: What you did (or "Requires human intervention")
+  - Recommendation: How to prevent recurrence
+
+  ### DLQ Summary
+  - Unresolved count and brief description of each
+  - Any entries you resolved and why
+
+  ### Approval Queue
+  - Pending count and age of oldest
+  - Any stuck/forgotten approvals
+
+  ### Cost Summary
+  - Today's spend vs 7-day average
+  - Any anomalies
+
+business_guidance: |
+  - A healthy system has 0 unresolved DLQ entries and 0 pending approvals
+    older than 24h. Anything else warrants investigation.
+  - Transient errors (network timeouts, rate limits, temporary API failures)
+    can be resolved in the DLQ with a note. Persistent errors (schema issues,
+    auth failures, code bugs) should NOT be auto-resolved.
+  - Cost spikes are normal during initial setup and testing. Flag only if
+    daily cost exceeds $10 or is >2x the 7-day average.
+  - Redis being down is a warning, not critical — the system works without
+    cache, just slower. Database being down IS critical.
+  - If configuration shows missing API keys, that's critical but expected
+    during initial setup. Note which keys are missing.
+
+schedule: null
+chain_after: null
+requires_approval: false
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

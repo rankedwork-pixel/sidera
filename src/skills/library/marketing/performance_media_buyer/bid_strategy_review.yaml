@@ -1,0 +1,167 @@
+id: bid_strategy_review
+name: Bid Strategy Review
+version: "1.0"
+description: Evaluate Google Ads automated bid strategies (tCPA, tROAS, Maximize) against actual backend performance and recommend strategy changes or target adjustments
+category: bidding
+platforms: [google_ads, bigquery]
+tags: [bidding, bid-strategy, tcpa, troas, maximize, automated-bidding, google-ads, smart-bidding, target-cpa, target-roas, manual-cpc, enhanced-cpc]
+
+tools_required:
+  - get_google_ads_campaigns
+  - get_google_ads_performance
+  - get_google_ads_changes
+  - get_google_ads_recommendations
+  - get_backend_performance
+  - get_campaign_attribution
+  - get_business_goals
+  - create_google_doc
+  - update_google_ads_campaign
+
+model: sonnet
+max_turns: 15
+
+system_supplement: |
+  For this analysis you are focused on evaluating Google Ads automated
+  bid strategies against actual backend business outcomes. Google's
+  Smart Bidding optimizes for Google-attributed conversions, which are
+  systematically inflated. Your job is to expose the gap and recommend
+  targets calibrated to real performance.
+
+  ## Bid Strategy Review Framework
+  1. Pull campaign-level configuration from Google Ads: bid strategy type,
+     target CPA or target ROAS, daily budget, campaign status, and
+     learning status for each campaign.
+  2. Pull performance data across three time windows: 14 days, 30 days,
+     and 60 days. This reveals whether efficiency is improving, stable,
+     or degrading over time.
+  3. Cross-reference with BigQuery backend data for every campaign.
+     Calculate the "inflation ratio" — platform-reported conversions
+     divided by backend-attributed conversions. This ratio exposes how
+     much Google is over-counting.
+  4. For each campaign, compare target vs actual:
+     - tCPA campaigns: compare target CPA against actual backend CPA.
+       If target is $50 but backend CPA is $85, Google is hitting its
+       target only because it over-counts conversions.
+     - tROAS campaigns: compare target ROAS against actual backend ROAS.
+       If target is 400% but backend ROAS is 250%, the target is
+       dangerously misleading.
+     - Maximize Conversions / Maximize Conversion Value campaigns:
+       calculate the effective backend CPA and ROAS that the algorithm
+       is actually delivering.
+  5. Check for learning phase: campaigns that recently changed bid
+     strategy or target need at least 14 days before evaluation.
+     Flag these but do not recommend further changes.
+  6. Pull recent change history via get_google_ads_changes to identify
+     any strategy changes in the last 60 days. For each change,
+     compare performance in the 14 days before vs 14 days after
+     (if enough data exists).
+  7. Pull Google's own recommendations via get_google_ads_recommendations.
+     Evaluate each recommendation skeptically — Google often recommends
+     raising targets or switching to Maximize strategies because it
+     benefits Google's revenue, not the advertiser's.
+  8. Propose corrected targets: if backend CPA is $85 and the advertiser
+     goal is $70, the tCPA target should be set so that Google's inflated
+     reporting lands at the backend reality. Use the inflation ratio to
+     back-calculate: corrected_target = desired_backend_CPA / inflation_ratio.
+  9. Identify campaigns where the bid strategy type itself is wrong —
+     e.g., a campaign with enough conversion volume for tROAS that is
+     still on manual CPC or enhanced CPC.
+
+prompt_template: |
+  Run a bid strategy review for the connected Google Ads account(s).
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Pull the last {lookback_days} days of campaign performance data, plus
+  extended 60-day windows where needed for trend analysis. Cross-reference
+  all metrics with BigQuery backend data. Review change history for any
+  bid strategy modifications in the last 60 days and assess their impact.
+
+  For each campaign, evaluate whether the current bid strategy and target
+  are calibrated to real backend performance, and recommend adjustments
+  where there is a meaningful gap.
+
+  Also review Google's own recommendations for bid strategy changes and
+  flag any that appear self-serving or misaligned with the advertiser's
+  backend metrics.
+
+  {extra_instructions}
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: Are bid strategies properly calibrated? How large is the
+  gap between platform-reported and backend performance? What is the
+  estimated revenue impact of correcting misaligned targets?
+
+  ## Bid Strategy Audit Table
+  Table with columns: Campaign | Bid Strategy | Target (CPA/ROAS) |
+  Platform CPA (30d) | Backend CPA (30d) | Platform ROAS (30d) |
+  Backend ROAS (30d) | Inflation Ratio | Learning Status | Recommendation
+
+  ## Strategy Change Proposals
+  For each campaign where a change is recommended:
+  - Campaign name and ID
+  - Current strategy and target
+  - Proposed strategy and/or target
+  - Rationale (with specific backend metrics)
+  - Expected impact on backend CPA/ROAS
+  - Suggested evaluation period after change
+
+  ## Learning Period Watch List
+  Campaigns currently in learning phase or that recently changed strategy:
+  - Campaign name
+  - Date of last change
+  - Days since change
+  - Current learning status
+  - Recommendation (wait / escalate / revert)
+
+  ## Historical Impact of Recent Changes
+  For each bid strategy change made in the last 60 days:
+  - Campaign name
+  - What changed (old strategy → new strategy)
+  - Date of change
+  - Performance comparison (14d before vs 14d after, backend metrics)
+  - Verdict (improvement / neutral / degradation)
+
+  ## Google Recommendations Review
+  For each relevant Google recommendation:
+  - Recommendation description
+  - Google's estimated impact
+  - Our assessment (agree / disagree / needs more data)
+  - Reasoning (especially where Google's incentives conflict)
+
+business_guidance: |
+  - Never recommend switching bid strategies during peak shopping periods
+    (Black Friday week, holiday season, major sale events) — the risk of
+    learning phase disruption outweighs potential gains.
+  - Allow a minimum 14-day evaluation window after any strategy change
+    before recommending further changes. Campaigns need time to exit
+    learning phase and stabilize.
+  - Backend metrics are the source of truth. If the platform reports ROAS
+    of 5.0 but backend shows 3.0, all target adjustments must be
+    calibrated to the backend number using the inflation ratio.
+  - Do not recommend changing more than 3 bid strategies simultaneously
+    across the account. Stagger changes so that performance impact can
+    be isolated per campaign.
+  - Flag any campaign currently in learning phase with a clear "DO NOT
+    TOUCH" label. Changing a campaign in learning resets the learning
+    period and wastes the data already collected.
+  - For campaigns with fewer than 30 backend conversions in 30 days,
+    note that the data is thin and recommendations carry higher
+    uncertainty. Prefer tCPA over tROAS for low-volume campaigns.
+  - When recommending a switch from manual CPC to Smart Bidding, ensure
+    the campaign has at least 15 conversions in the last 30 days (Google's
+    minimum for tCPA, though 30+ is strongly preferred).
+  - Be skeptical of Google's recommendations to "raise your target CPA"
+    or "switch to Maximize Conversions" — these often serve Google's
+    revenue goals by encouraging higher bids and more spend.
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

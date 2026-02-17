@@ -1,0 +1,178 @@
+id: dayparting_analysis
+name: Dayparting Analysis
+version: "1.0"
+description: Analyze performance by hour-of-day and day-of-week across Google Ads and Meta to identify optimal ad scheduling windows and recommend dayparting strategies
+category: optimization
+platforms: [google_ads, meta, bigquery]
+tags: [dayparting, scheduling, hour-of-day, day-of-week, time, ad-schedule, peak-hours, off-hours, time-optimization, when-to-run]
+
+tools_required:
+  - get_google_ads_performance
+  - get_google_ads_campaigns
+  - get_meta_performance
+  - get_meta_campaigns
+  - get_backend_performance
+  - create_google_doc
+  - manage_google_sheets
+  - update_google_ads_campaign
+
+model: sonnet
+max_turns: 15
+
+system_supplement: |
+  For this analysis you are focused on temporal performance patterns —
+  how campaign efficiency varies by hour of day and day of week. The
+  goal is to identify windows where spend delivers outsized returns
+  and windows where spend is wasted, then recommend scheduling
+  adjustments to shift budget toward high-performing time slots.
+
+  ## Dayparting Analysis Framework
+  1. Pull hourly and daily segmented performance data from Google Ads
+     for each active campaign. Google Ads supports hour-of-day and
+     day-of-week segmentation directly in performance queries.
+  2. Pull daily segmented performance data from Meta. Meta provides
+     day-level breakdowns; hourly data can be approximated from the
+     hourly field in insights if available, otherwise work with
+     day-of-week patterns only for Meta.
+  3. Cross-reference with BigQuery backend data to get true
+     conversion timing. This is critical because a click at 11pm
+     may not convert until 2am the next day — platform-reported
+     "conversion hour" is often click-time, not actual purchase time.
+     If backend data has conversion timestamps, use those to build a
+     click-to-conversion delay distribution.
+  4. For each hour slot (0-23) and each day of week (Mon-Sun),
+     calculate:
+     - Spend and impression volume
+     - Backend CPA and backend ROAS
+     - Click-through rate (CTR)
+     - Conversion rate (backend conversions / clicks)
+     - Cost per click (CPC) — bidding competition varies by hour
+  5. Apply statistical rigor: for each time slot, calculate the
+     coefficient of variation and confidence interval. A slot with
+     3 conversions is not statistically different from a slot with
+     5 conversions. Look for slots with meaningful volume AND
+     meaningfully different efficiency (>20% deviation from the
+     campaign average with >95% confidence).
+  6. Identify distinct patterns:
+     - **Peak efficiency windows**: slots where backend CPA is >20%
+       below average with sufficient volume. These deserve more budget.
+     - **Waste windows**: slots where backend CPA is >30% above average
+       consistently. These are candidates for bid reductions.
+     - **Weekend vs weekday**: many B2B advertisers waste money on
+       weekends; many B2C advertisers see weekend spikes. Identify
+       the pattern for this specific advertiser.
+     - **Late night / early morning**: often low competition (low CPC)
+       but also low intent. Evaluate whether the cheap clicks actually
+       convert at a reasonable rate.
+  7. Compare patterns across platforms: if Google Ads performs best
+     from 8am-2pm and Meta performs best from 6pm-10pm, this suggests
+     different user intent patterns that should inform platform-level
+     scheduling decisions.
+  8. Account for the advertiser's time zone. All hour-of-day analysis
+     must be presented in the account's configured time zone, not UTC.
+  9. Model the estimated savings: if we reduce bids by 30% during the
+     worst 6 hours, how much spend is saved and how many conversions
+     are likely lost? Use the time-slot efficiency data to estimate
+     net CPA improvement.
+
+prompt_template: |
+  Run a dayparting analysis across all connected ad platforms.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Pull the last {lookback_days} days of performance data segmented by
+  hour-of-day and day-of-week from Google Ads. Pull daily performance
+  data from Meta segmented by day-of-week (and hourly if available).
+  Cross-reference with BigQuery backend conversion data for true
+  conversion timing.
+
+  Identify the strongest and weakest time windows on each platform,
+  assess statistical significance, and recommend specific ad scheduling
+  or bid adjustment strategies. If a Google Sheets export is requested,
+  include the raw hourly data for the advertiser's reference.
+
+  {extra_instructions}
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: Are there significant time-based performance patterns?
+  How much efficiency could be gained through dayparting? Are the patterns
+  consistent across platforms?
+
+  ## Hourly Performance Heatmap
+  Descriptive representation of performance by hour (0-23) for each
+  platform. For each hour, show: relative spend share, backend CPA
+  indexed to average (100 = average), and a rating (peak / normal / waste).
+  Group hours into natural blocks: overnight (12am-6am), morning (6am-12pm),
+  afternoon (12pm-6pm), evening (6pm-12am).
+
+  ## Day-of-Week Performance Table
+  Table with columns: Day | Spend | Backend Conversions | Backend CPA |
+  Backend ROAS | CPA vs Weekly Avg | Confidence Level
+  Include both Google Ads and Meta rows per day.
+
+  ## Optimal Windows per Platform
+  For each platform, list:
+  - Top 3 hour blocks by backend efficiency
+  - Bottom 3 hour blocks by backend efficiency
+  - Best performing day(s) of week
+  - Worst performing day(s) of week
+
+  ## Schedule Recommendations
+  Specific, actionable dayparting recommendations:
+  - Google Ads: ad schedule bid adjustments per hour block and day
+    (e.g., "Mon-Fri 6am-9am: +15%, Sat-Sun 12am-6am: -40%")
+  - Meta: budget allocation guidance by day (Meta does not support
+    hourly bid adjustments, so recommend daily budget shifting or
+    campaign scheduling strategies)
+
+  ## Estimated Savings from Dayparting
+  Model the impact: if all recommendations are implemented,
+  estimate the weekly savings in spend, the reduction in wasted
+  conversions, and the projected improvement in blended CPA.
+
+  ## Implementation Guide
+  Step-by-step instructions for applying the recommended schedules
+  in Google Ads (via ad schedule bid adjustments) and Meta (via
+  campaign budget optimization or manual budget shifting).
+
+business_guidance: |
+  - Require a minimum of 30 days of data for dayparting recommendations.
+    Hourly slots need sufficient sample size — with a 30-day window, each
+    hour slot has roughly 30 data points per campaign.
+  - Do not recommend dayparting for campaigns with fewer than 10 backend
+    conversions per week. The data is too sparse to identify statistically
+    meaningful time-based patterns at that volume.
+  - Account for conversion delay. A click at 11pm may convert at 2am the
+    next day, or even 48 hours later for considered purchases. If the
+    backend data includes conversion timestamps, calculate the average
+    click-to-conversion lag and adjust the hourly attribution accordingly.
+    Without this adjustment, late-night hours may appear artificially bad.
+  - Never recommend completely turning off any time slot. Even the worst
+    hours can produce some conversions. Reduce bids by a maximum of 50%
+    for underperforming slots (Google Ads supports -90%, but going that
+    aggressive risks missing real opportunities).
+  - Weekend patterns may differ fundamentally from weekday patterns for
+    many advertisers. Present them separately and do not average them
+    together when making recommendations.
+  - B2B advertisers typically see sharp drop-offs on weekends and after
+    business hours. B2C and e-commerce advertisers often see strong
+    evening and weekend performance. Identify the advertiser's category
+    and flag if the data contradicts expected patterns.
+  - Consider external factors: if a 30-day window included a major
+    holiday or sale event, those days may skew the hourly patterns.
+    Note any obvious anomalies.
+  - For Meta, since hourly bid adjustments are not natively supported,
+    recommend practical alternatives: campaign budget allocation by
+    daypart (run separate campaigns for peak vs off-peak), or use
+    automated rules to increase/decrease budgets on specific days.
+
+schedule: null
+chain_after: null
+requires_approval: true
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

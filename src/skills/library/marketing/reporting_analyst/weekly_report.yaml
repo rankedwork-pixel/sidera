@@ -1,0 +1,99 @@
+id: weekly_report
+name: Weekly Performance Report
+version: "1.0"
+description: Generate a comprehensive weekly performance report across all platforms with Google Doc report, Sheets data export, and optional Slides deck
+category: reporting
+platforms: [google_ads, meta, bigquery, google_drive]
+tags: [weekly, report, summary, performance, document, spreadsheet, presentation, overview]
+
+tools_required:
+  - get_google_ads_campaigns
+  - get_google_ads_performance
+  - get_meta_campaigns
+  - get_meta_performance
+  - get_backend_performance
+  - get_campaign_attribution
+  - get_budget_pacing
+  - get_business_goals
+  - create_google_doc
+  - manage_google_sheets
+  - manage_google_slides
+  - search_google_drive
+  - manage_drive_folders
+
+model: sonnet
+max_turns: 25
+
+system_supplement: |
+  For this task you are generating a comprehensive weekly performance report.
+  Your goal is to produce publication-ready deliverables that a marketing
+  manager can share with stakeholders without editing.
+
+  ## Weekly Report Framework
+  1. Pull 7-day and 30-day performance data from all connected platforms.
+  2. Cross-reference with BigQuery backend for real conversion numbers.
+  3. Calculate week-over-week changes for all key metrics.
+  4. Identify the top 3 wins and top 3 concerns for the week.
+  5. Check goal attainment: how are we tracking against targets?
+  6. Create deliverables:
+     a. Google Doc — formatted narrative report with analysis
+     b. Google Sheets — raw data export with pivot-ready tables
+     c. Google Slides (if requested) — executive summary deck (5-7 slides)
+  7. Organize deliverables in a weekly folder on Google Drive.
+
+  ## Writing Style for Reports
+  - Professional but accessible — avoid jargon without explanation
+  - Lead with insights, not data dumps
+  - Every number should have context (vs last week, vs target, vs benchmark)
+  - Use bold for key takeaways
+  - Tables for data, prose for insights
+
+prompt_template: |
+  Generate the weekly performance report.
+  Report period: 7 days ending {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Create the following deliverables:
+  1. Google Doc with the full narrative report
+  2. Google Sheets with raw performance data
+  {extra_instructions}
+
+  Organize all files in a "Weekly Reports" folder on Google Drive.
+
+output_format: |
+  ## Report Summary
+  Brief summary of what was generated and links to all deliverables.
+
+  ## Key Highlights
+  - Top 3 wins this week
+  - Top 3 concerns this week
+  - Goal attainment status (on track / at risk / off track)
+
+  ## Deliverables Created
+  - Google Doc: [link]
+  - Google Sheets: [link]
+  - Google Slides: [link] (if created)
+  - Folder: [link]
+
+  ## Next Week Outlook
+  What to watch for in the coming week based on current trends.
+
+business_guidance: |
+  - Always compare this week vs last week AND vs 4-week average
+  - Include both platform-reported and backend-verified numbers side by side
+  - Highlight any metric that moved more than 15% week-over-week
+  - Use the advertiser's target ROAS and target CPA as benchmarks
+  - File naming convention: "Weekly Report — YYYY-MM-DD" for docs
+  - Sheet naming convention: "Weekly Data — YYYY-MM-DD"
+  - Never overwrite previous reports — always create new files
+  - If backend data is unavailable, clearly mark platform-only sections
+
+schedule: "0 9 * * MON"
+chain_after: null
+requires_approval: false
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

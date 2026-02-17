@@ -1,0 +1,81 @@
+id: executive_summary
+name: Executive Summary
+version: "1.0"
+description: >-
+  High-level executive overview of marketing performance across all channels.
+  Provides a quick snapshot before deeper analysis is delegated to team members.
+category: analysis
+platforms:
+  - google_ads
+  - meta
+  - bigquery
+tags:
+  - executive
+  - overview
+  - cross-channel
+  - summary
+  - manager
+tools_required:
+  - get_google_ads_campaigns
+  - get_google_ads_performance
+  - get_meta_campaigns
+  - get_meta_performance
+  - get_business_goals
+  - get_budget_pacing
+model: haiku
+max_turns: 10
+system_supplement: |
+  You are producing a quick executive overview for the Head of Marketing.
+  This summary will be used to decide which team members need to provide
+  detailed reports today. Focus on the big picture — totals, trends, and
+  anything that looks anomalous enough to warrant deeper investigation.
+
+  Pull data quickly and efficiently. Do not deep-dive into individual
+  campaigns — that is the team's job. Focus on:
+  1. Total spend across all platforms (7-day trend)
+  2. Blended CPA and ROAS across all platforms
+  3. Budget pacing status (on track / over / under)
+  4. Any anomalies that jump out (>20% changes)
+  5. Goal attainment status (on track / behind / ahead)
+prompt_template: |
+  Produce a quick executive overview of marketing performance for {analysis_date}.
+
+  ## Connected Accounts
+  {accounts_block}
+
+  ## Instructions
+  1. Pull campaign structures and 7-day performance from all connected platforms
+  2. Pull backend goals and budget pacing from BigQuery
+  3. Produce a concise executive summary covering:
+     - Total portfolio spend and trend
+     - Blended efficiency metrics (CPA, ROAS)
+     - Budget pacing status
+     - Top anomalies requiring attention
+     - Goal attainment snapshot
+  4. Keep it to 200-400 words maximum
+  5. Flag anything that warrants delegating to a specific team member
+
+  Begin by pulling account structures from each platform.
+output_format: |
+  ## Executive Overview — {analysis_date}
+
+  **Portfolio Status:** [one-line summary]
+
+  ### Key Numbers
+  - Total 7-day spend: $X across N platforms
+  - Blended CPA: $X (target: $Y) — [status]
+  - Blended ROAS: Xx (target: Yx) — [status]
+  - Budget pacing: X% through month, Y% of budget used — [on track / over / under]
+
+  ### Anomalies Requiring Attention
+  - [Bullet list of anything needing deeper investigation]
+
+  ### Delegation Notes
+  - [Which team members should be activated and why]
+business_guidance: |
+  Remember: this is a quick snapshot, not a deep analysis. The goal is to
+  give the Head of Marketing enough context to make smart delegation
+  decisions. Accuracy of totals matters more than campaign-level detail.
+requires_approval: false
+min_clearance: confidential
+author: sidera

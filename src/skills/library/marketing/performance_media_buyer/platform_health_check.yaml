@@ -1,0 +1,174 @@
+id: platform_health_check
+name: Platform Health Check
+version: "1.0"
+description: Quick diagnostic of platform connectivity, data freshness, account status, and system health across all connected services
+category: monitoring
+platforms: [google_ads, meta, bigquery]
+tags: [health, status, diagnostic, connectivity, data-freshness, token, api, system-check, uptime, account-status, troubleshooting]
+
+tools_required:
+  - list_google_ads_accounts
+  - list_meta_ad_accounts
+  - check_slack_connection
+  - discover_bigquery_tables
+  - get_google_ads_performance
+  - get_meta_performance
+
+model: haiku
+max_turns: 5
+
+system_supplement: |
+  You are running a quick platform health diagnostic. This is a lightweight
+  connectivity and data freshness check — not a performance analysis. Your
+  job is to verify that all connected services are reachable, that data is
+  flowing, and that the data is recent enough to trust. Do not pull detailed
+  performance data beyond what is needed to verify freshness.
+
+  ## Platform Health Check Framework
+  1. **Google Ads connectivity:**
+     - Call list_google_ads_accounts to verify the API connection works and
+       the OAuth token is valid. If this call fails, the token may be
+       expired or revoked.
+     - Call get_google_ads_performance with a 1-day lookback (yesterday only)
+       to verify that data is flowing. Check whether the returned data
+       includes yesterday's date. If yesterday's data is missing, the data
+       pipeline may be delayed.
+     - Record: connection status (connected/error), number of accessible
+       accounts, latest data date, any error messages.
+
+  2. **Meta connectivity:**
+     - Call list_meta_ad_accounts to verify the API connection works and
+       the access token is valid. Meta tokens have a 60-day expiry for
+       long-lived tokens — note if the connection works but the token
+       type is short-lived.
+     - Call get_meta_performance with a 1-day lookback to verify data
+       freshness. Meta data can lag 3-6 hours behind real time.
+     - Record: connection status, number of accessible ad accounts,
+       latest data date, any error messages.
+
+  3. **BigQuery connectivity:**
+     - Call discover_bigquery_tables to verify the service account
+       connection works and the dataset is accessible.
+     - Check that all expected tables exist: goals, budget_pacing,
+       backend_metrics, campaign_attribution, and any other tables
+       referenced in the configuration.
+     - Note any missing tables that would block other skills from running.
+     - Record: connection status, number of tables found, list of any
+       missing expected tables.
+
+  4. **Slack connectivity:**
+     - Call check_slack_connection to verify the bot token is valid and
+       the configured channel is accessible.
+     - Record: connection status, channel name, any permission issues.
+
+  5. **Data freshness assessment:**
+     - For each data source, determine the timestamp of the most recent
+       data available.
+     - Classify freshness:
+       - **Fresh (green):** data is from today or yesterday. Normal
+         operating state — platform data typically updates overnight.
+       - **Stale (yellow):** data is 24-48 hours old. Something may be
+         delayed. Monitor but not yet critical.
+       - **Very stale (red):** data is more than 48 hours old. This is
+         abnormal and means analyses are running on outdated data. Flag
+         for immediate investigation.
+     - Note that Google Ads data is typically available by 3-4 AM PST
+       the following day, and Meta data by 6-8 AM PST.
+
+  6. **Overall health classification:**
+     - **All Healthy:** every service is connected and data is fresh.
+     - **Warnings:** at least one service has stale data or a non-critical
+       issue (e.g., a table is missing but not blocking core workflows).
+     - **Issues Detected:** at least one service is unreachable, a token
+       is expired, or data is very stale. Core workflows may be affected.
+
+prompt_template: |
+  Run a platform health check across all connected services.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Verify that every configured service (Google Ads, Meta, BigQuery, Slack)
+  is reachable, that OAuth tokens are valid, and that data is fresh. Report
+  any issues or warnings.
+
+  {extra_instructions}
+
+output_format: |
+  ## Overall Status
+  One-line summary using status indicators:
+  - All Healthy: every service connected, all data fresh, no issues.
+  - Warnings: one or more services have non-critical issues. Details below.
+  - Issues Detected: one or more services are down or data is critically
+    stale. Immediate attention needed.
+
+  ## Service Status Table
+  Table with columns: Service | Connection Status | Last Data Date |
+  Freshness | Accounts/Tables Found | Notes
+
+  Services to include: Google Ads, Meta, BigQuery, Slack.
+  Connection Status: Connected / Error / Degraded
+  Freshness: Fresh / Stale / Very Stale
+
+  ## Data Freshness Report
+  For each platform, note:
+  - The most recent data date available
+  - Expected data availability time (e.g., Google Ads by 3-4 AM PST)
+  - Whether current freshness is normal for this time of day
+  - If data is stale, estimated time since last successful data load
+
+  ## Issues Found
+  If any issues were detected, list each one with:
+  - Service affected
+  - Issue description (connection failed, token expired, data stale, etc.)
+  - Impact on Sidera workflows (which skills or workflows are blocked)
+  - Suggested remediation (re-authenticate, check service account, etc.)
+
+  If no issues were found, state: "No issues detected. All systems
+  operational."
+
+  ## Quick Summary
+  One-paragraph summary suitable for a Slack notification: which services
+  are up, which have issues, and whether the daily briefing can run
+  successfully with current data.
+
+business_guidance: |
+  - This is a connectivity and freshness check, not a performance analysis.
+    Do not pull more data than the minimum needed to verify that each service
+    is reachable and has recent data. One day of performance data per
+    platform is sufficient.
+  - Do NOT expose actual token values, API keys, or credentials anywhere
+    in the output. Only report token status: valid, expiring soon, or
+    expired. If a token appears in an error message, redact it before
+    including the error in the output.
+  - Data older than 24 hours should be flagged as stale. Data older than
+    48 hours should be flagged as very stale. These thresholds account for
+    normal overnight data processing delays on Google Ads and Meta.
+  - Time-of-day matters for freshness assessment. If this check runs at
+    6 AM PST and yesterday's Google Ads data is not yet available, that is
+    normal (Google Ads data arrives 3-4 AM PST but can be delayed). If it
+    runs at noon PST and yesterday's data is missing, that is a real issue.
+  - If a service returns an authentication error, the most common cause is
+    an expired OAuth token. The remediation is to re-run the OAuth flow
+    for that service. Provide the specific OAuth endpoint URL if possible.
+  - BigQuery connectivity failures are often caused by service account
+    permission changes or dataset access revocations. Note that BigQuery
+    uses a service account key, not OAuth tokens, so "re-authenticate"
+    means checking the service account permissions, not running an OAuth
+    flow.
+  - Slack connectivity is less critical than ad platform connectivity.
+    A Slack outage prevents notifications but does not block analysis.
+    Classify Slack issues as warnings, not critical issues, unless the
+    user specifically depends on Slack for approval workflows.
+  - If ALL services fail simultaneously, the most likely cause is a
+    network issue on the Sidera side (server can't reach external APIs),
+    not simultaneous failures across Google, Meta, and GCP. Note this
+    pattern explicitly if observed.
+
+schedule: null
+chain_after: null
+requires_approval: false
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

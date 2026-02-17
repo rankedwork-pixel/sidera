@@ -1,0 +1,218 @@
+id: monthly_report
+name: Monthly Performance Report
+version: "1.0"
+description: Generate a comprehensive month-end performance report with executive summary, full metrics breakdown, Google Doc narrative, Sheets data export, and Slides presentation deck
+category: reporting
+platforms: [google_ads, meta, bigquery, google_drive]
+tags: [monthly, report, month-end, comprehensive, executive, summary, presentation, deck, document, spreadsheet, review, wrap-up]
+
+tools_required:
+  - get_google_ads_campaigns
+  - get_google_ads_performance
+  - get_google_ads_changes
+  - get_meta_campaigns
+  - get_meta_performance
+  - get_meta_account_activity
+  - get_backend_performance
+  - get_campaign_attribution
+  - get_budget_pacing
+  - get_business_goals
+  - create_google_doc
+  - manage_google_sheets
+  - manage_google_slides
+  - search_google_drive
+  - manage_drive_folders
+
+model: sonnet
+max_turns: 25
+
+system_supplement: |
+  For this task you are generating the comprehensive monthly performance
+  report. This is the most important deliverable of the month — it goes
+  directly to stakeholders including executives, clients, or leadership.
+  Quality, accuracy, and presentation matter more than speed.
+
+  ## Monthly Report Framework
+  1. Pull full-month performance data from all connected platforms.
+     Use the entire calendar month as the reporting period. Gather every
+     available metric: cost, impressions, clicks, conversions, revenue,
+     CPA, ROAS, CTR, CVR, impression share, average position, CPM, and
+     any platform-specific metrics of note.
+  2. Cross-reference all conversion and revenue data with BigQuery backend
+     for real, backend-attributed numbers. Calculate the inflation ratio
+     (platform-reported conversions / backend conversions) for each
+     platform and flag any ratio above 1.3 for deeper investigation.
+  3. Calculate month-over-month changes for all key metrics. If prior month
+     data is available, compute the delta and percentage change. If this is
+     the first month of data, skip MoM comparisons gracefully and note that
+     baseline is being established.
+  4. Calculate year-over-year changes if 12+ months of historical data
+     exist in BigQuery. YoY context is especially valuable for seasonal
+     businesses.
+  5. Compare actual performance against monthly goals and targets from
+     BigQuery business_goals. For each KPI, show target vs. actual and
+     the attainment percentage. Color-code: green (>= 95% of target),
+     yellow (80-95%), red (< 80%).
+  6. Summarize all significant changes made during the month: bid strategy
+     changes, budget adjustments, new campaigns launched, campaigns paused,
+     creative refreshes, audience changes. Pull from Google Ads change
+     history and Meta account activity.
+  7. Identify the top 5 wins and top 5 challenges of the month with
+     supporting data for each.
+  8. Create three deliverables:
+     a. Google Doc — full narrative report with deep analysis. Target
+        8-12 pages. Structure: executive summary, goal attainment,
+        platform deep dives, cross-platform analysis, changes log,
+        outlook. Include inline data tables and charts descriptions.
+     b. Google Sheets — complete data export with multiple tabs:
+        - Summary (key metrics with MoM and target comparison)
+        - Google Ads Detail (campaign-level, daily granularity)
+        - Meta Detail (campaign-level, daily granularity)
+        - Backend Reconciliation (platform vs backend side-by-side)
+        - Budget Tracking (daily spend vs pacing target)
+        Tables should be pivot-ready with consistent column headers.
+     c. Google Slides — executive summary deck, 8-12 slides:
+        Slide 1: Title slide with month, account name, date range
+        Slide 2: Executive summary (3-5 key takeaways)
+        Slide 3: KPI dashboard (target vs actual for top 5 KPIs)
+        Slide 4-5: Google Ads performance deep dive
+        Slide 6-7: Meta performance deep dive
+        Slide 8: Cross-platform comparison and attribution
+        Slide 9: Budget summary (planned vs actual vs efficiency)
+        Slide 10: Changes and optimizations made this month
+        Slide 11: Key learnings and recommendations
+        Slide 12: Next month outlook and planned actions
+  9. Organize all deliverables in a monthly reports folder on Google Drive.
+     Create the folder if it does not exist. Use the naming convention
+     "Monthly Reports / YYYY-MM".
+
+  ## Writing Style for Monthly Reports
+  - Executive-friendly above all. Lead with business impact, not technical
+    metrics. "Revenue grew 12% to $142K, exceeding the $130K target" beats
+    "ROAS improved from 3.2 to 3.6 across campaigns."
+  - Every number needs context: vs. last month, vs. target, vs. same month
+    last year if available.
+  - Use month-over-month trends to tell a narrative arc. What changed, why,
+    and what it means going forward.
+  - Highlight wins prominently — stakeholders need to see the value being
+    delivered.
+  - Frame challenges with solutions already identified. Never present a
+    problem without a proposed path forward.
+  - The Slides deck must be presentation-ready — no editing needed. Assume
+    it will be projected in a meeting. Keep text concise, use bullet points,
+    and ensure data is visually clear.
+
+prompt_template: |
+  Generate the monthly performance report for the month ending {analysis_date}.
+
+  Connected Accounts:
+  {accounts_block}
+
+  Create the full deliverables suite:
+  1. Google Doc — comprehensive narrative report (8-12 pages)
+  2. Google Sheets — complete data export with pivot-ready tables
+  3. Google Slides — executive presentation deck (8-12 slides)
+
+  Organize all deliverables in a "Monthly Reports / YYYY-MM" folder on
+  Google Drive. Cross-reference all metrics with BigQuery backend data.
+  Include month-over-month comparisons and goal attainment analysis.
+
+  {extra_instructions}
+
+output_format: |
+  ## Report Summary
+  Brief summary of what was generated, the reporting period, and links
+  to all deliverables created.
+
+  ## Month in Review
+  Top 5 bullet points capturing the most important things that happened
+  this month. Each bullet should be a complete insight with a number
+  attached (e.g., "Search ROAS improved 18% MoM to 4.2x, driven by
+  bid strategy change on Aug 12").
+
+  ## Goal Attainment
+  Table: KPI | Monthly Target | Actual | Attainment % | Status
+  Status values: Exceeded (>105%), Met (95-105%), Missed (80-95%),
+  Significantly Missed (<80%)
+
+  ## Platform Performance Summary
+  Side-by-side comparison:
+  Table: Metric | Google Ads | Meta | Combined | MoM Change
+  Key metrics: Spend, Impressions, Clicks, CTR, Conversions (platform),
+  Conversions (backend), CPA (backend), Revenue (backend), ROAS (backend)
+
+  ## Top Wins This Month
+  5 specific wins with data. For each: what happened, the impact in
+  numbers, and what drove the improvement.
+
+  ## Key Challenges & Mitigations
+  5 specific challenges with data. For each: what happened, the impact,
+  root cause analysis, and the mitigation plan (either already executed
+  or proposed for next month).
+
+  ## Budget Summary
+  Table: Platform | Planned Budget | Actual Spend | Variance |
+  Efficiency (Backend Revenue / Spend)
+  Overall budget utilization and whether pacing was appropriate.
+
+  ## Changes & Optimizations Log
+  Chronological list of significant changes made during the month,
+  sourced from Google Ads change history and Meta account activity.
+  For each: date, what changed, and observed impact if measurable.
+
+  ## Deliverables Created
+  - Google Doc: [link] — "Monthly Report — YYYY-MM"
+  - Google Sheets: [link] — "Monthly Data — YYYY-MM"
+  - Google Slides: [link] — "Monthly Review — YYYY-MM"
+  - Folder: [link] — "Monthly Reports / YYYY-MM"
+
+  ## Outlook for Next Month
+  What to expect, what to watch, and what actions are planned.
+  Include any upcoming seasonality, planned budget changes, or
+  scheduled optimizations.
+
+business_guidance: |
+  - This is a stakeholder-facing report — prioritize quality over speed.
+    Double-check every number. Cross-reference platform data against
+    backend data. If numbers do not reconcile, investigate before
+    presenting and note the discrepancy explicitly.
+  - Always use backend-verified numbers as the primary metrics in
+    headlines, executive summaries, and KPI tables. Include both
+    platform-reported and backend numbers side by side with the inflation
+    ratio so stakeholders understand the gap.
+  - Use the advertiser's target ROAS and target CPA from BigQuery
+    business_goals as the primary benchmarks for success. Industry
+    benchmarks are secondary context.
+  - File naming conventions (strict):
+    - Google Doc: "Monthly Report — YYYY-MM"
+    - Google Sheets: "Monthly Data — YYYY-MM"
+    - Google Slides: "Monthly Review — YYYY-MM"
+    - Folder: "Monthly Reports / YYYY-MM"
+  - Never overwrite previous months' reports. Always create new files.
+    If a report for the same month already exists, append a version
+    suffix (e.g., "Monthly Report — 2025-01 v2").
+  - If this is the first month of data, skip month-over-month comparisons
+    gracefully. Say "Baseline month — MoM comparisons will begin next
+    month" rather than showing 0% or N/A everywhere.
+  - Year-over-year comparisons are only meaningful if 12+ months of
+    historical data exist. Do not fabricate or estimate YoY numbers.
+  - The Slides deck structure is prescriptive: title, executive summary,
+    KPI dashboard, Google Ads deep dive (1-2 slides), Meta deep dive
+    (1-2 slides), cross-platform comparison, budget vs actual, changes
+    and optimizations, key learnings, next month outlook. Do not deviate
+    from this structure without explicit user instruction.
+  - When reporting conversion data, always specify the attribution window
+    used by each platform and how it differs from the backend attribution
+    methodology. This prevents stakeholder confusion.
+  - If any platform API returns incomplete data (e.g., Meta delayed
+    attribution), note the data freshness explicitly: "Meta data as of
+    [date] — final numbers may shift by 5-10% as delayed conversions
+    are attributed."
+
+schedule: "0 9 1 * *"
+chain_after: null
+requires_approval: false
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

@@ -1,0 +1,136 @@
+id: creative_fatigue_check
+name: Creative Fatigue Check
+version: "1.0"
+description: Quick check for ad creative fatigue signals — rising frequency combined with declining CTR or rising CPA across Meta campaigns
+category: monitoring
+platforms: [meta]
+tags: [creative, fatigue, frequency, ctr, declining, stale, ad-wear-out, refresh, tired-ads, meta, facebook, instagram]
+
+tools_required:
+  - get_meta_campaigns
+  - get_meta_performance
+
+model: haiku
+max_turns: 5
+
+system_supplement: |
+  You are running a quick creative fatigue diagnostic. This is a lightweight
+  monitoring check — not a full creative analysis. Your job is to scan for
+  fatigue signals and flag them, not to make deep strategic recommendations.
+
+  ## Creative Fatigue Detection Framework
+  1. Pull the last 14 days of ad-level performance from Meta for all active
+     campaigns. You need: ad name, ad ID, daily impressions, daily reach,
+     daily frequency, daily clicks, daily CTR, daily spend, and daily CPA.
+  2. For each active ad, calculate the following diagnostic metrics:
+     - **Average daily frequency** over the 14-day window
+     - **7-day frequency trend:** compare the last 7 days average frequency
+       against the prior 7 days. Classify as rising (>10% increase),
+       flat (within ±10%), or falling (>10% decrease).
+     - **7-day CTR trend:** compare last 7 days average CTR against prior
+       7 days. Classify as rising, flat, or falling using the same ±10%
+       thresholds.
+     - **7-day CPA trend:** same calculation for cost per acquisition.
+     - **Consecutive CTR decline days:** count how many of the most recent
+       consecutive days show day-over-day CTR decline.
+  3. Apply fatigue detection rules to flag ads:
+     - **Flag condition A:** frequency > 2.5 AND CTR has declined for 3 or
+       more consecutive days.
+     - **Flag condition B:** frequency > 3.5 regardless of CTR trend (the
+       audience is oversaturated at this level in most verticals).
+     - **Flag condition C:** frequency > 2.0 AND CPA has increased >25%
+       compared to the first 7 days of the window.
+  4. Classify each flagged ad into a fatigue severity level:
+     - **Early (yellow):** frequency 2.5-3.0 with a slight CTR dip (<15%
+       decline from peak). The ad is showing first signs of wear but still
+       has some runway left.
+     - **Moderate (orange):** frequency 3.0-4.0 with a clear CTR decline
+       (15-30% from peak), OR frequency 2.5+ with CPA rising >25%. The ad
+       is actively losing efficiency.
+     - **Severe (red):** frequency > 4.0, OR CTR has dropped >30% from its
+       peak in the window. The ad is actively wasting budget and should be
+       addressed urgently.
+  5. Calculate estimated daily waste for each fatigued ad: compare current
+     CPA against the ad's CPA during its first 7 days. Multiply the CPA
+     difference by daily conversion volume to estimate wasted spend.
+  6. Exclude new ads (<7 days old) from fatigue analysis entirely — they
+     do not have enough data to evaluate frequency-based wear patterns.
+
+prompt_template: |
+  Run a quick creative fatigue scan for the connected Meta account(s).
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Check the last {lookback_days} days of Meta ad-level data for creative
+  fatigue signals. Focus on frequency trends combined with CTR or CPA
+  degradation.
+
+  {extra_instructions}
+
+output_format: |
+  ## Fatigue Status
+  One-line summary using status indicators:
+  - No fatigue detected: all ads are performing within healthy frequency
+    and engagement ranges.
+  - Early fatigue signals: some ads are beginning to show wear — monitor
+    closely over the next 3-5 days.
+  - Severe fatigue detected: multiple ads are significantly oversaturated
+    and actively wasting budget.
+
+  ## Fatigue Table
+  Table with columns: Ad Name | Campaign | Avg Frequency | Freq Trend |
+  CTR (current vs peak) | CTR Trend | CPA Trend | Fatigue Level
+  (Early/Moderate/Severe)
+
+  Sort by fatigue severity descending, then by spend descending within
+  each severity tier.
+
+  ## Summary Stats
+  - Total active ads scanned: X
+  - Ads showing fatigue signals: Y of X (Z%)
+  - Estimated daily waste from fatigued ads: $XX
+  - Most fatigued campaign: [name]
+
+  ## Quick Recommendations
+  Brief, actionable next steps. Do NOT recommend specific cut/pause
+  actions — that is the job of the creative_analysis skill. Instead:
+  - Flag which ads need immediate attention
+  - Suggest running the creative_analysis skill for deep analysis
+  - Note if the overall creative portfolio is too concentrated
+    (too few active ads carrying too much spend)
+
+business_guidance: |
+  - This is a quick scan, not a full creative analysis. Do not make
+    cut or pause recommendations — just identify and flag fatigue signals.
+    Direct users to the creative_analysis skill for strategic decisions.
+  - Frequency thresholds vary by industry and audience size. The defaults
+    (2.5 early, 3.0 moderate, 4.0 severe) are conservative baselines
+    appropriate for most B2C verticals. B2B accounts with smaller audiences
+    may tolerate higher frequency before true fatigue sets in.
+  - New ads with fewer than 7 days of data must be excluded from the
+    fatigue check — they have not had time to build meaningful frequency
+    trends and will produce false positives.
+  - A rising frequency alone is not fatigue. Fatigue requires rising
+    frequency COMBINED with engagement decline (CTR drop or CPA rise).
+    High-frequency ads with stable CTR and CPA are performing fine.
+  - When calculating CTR trends, use percentage change (not absolute
+    change) to normalize across ads with very different baseline CTRs.
+  - Estimated daily waste calculations should be conservative. Use the
+    difference between current CPA and the ad's own historical best CPA
+    in the window, not an idealized target CPA.
+  - If all ads in an account show fatigue simultaneously, the issue is
+    likely audience saturation at the account level, not individual
+    creative wear. Flag this pattern explicitly.
+  - Weekend and weekday performance patterns can mimic fatigue signals.
+    Be cautious about flagging ads whose "decline" aligns with a
+    day-of-week cycle rather than a sustained trend.
+
+schedule: null
+chain_after: creative_analysis
+requires_approval: false
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

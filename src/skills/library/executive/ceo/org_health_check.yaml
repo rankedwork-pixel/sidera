@@ -1,0 +1,86 @@
+id: org_health_check
+name: Organization Health Check
+version: "1.0"
+description: >-
+  Comprehensive organizational health scan. Checks system infrastructure,
+  approval queue flow, cost trajectory, platform connector status, and
+  recent failed runs. This is the CEO's morning standup — a quick but
+  thorough sweep of everything before delegating to department heads for
+  deeper investigation.
+category: operations
+platforms: []
+tags: [health, monitoring, cross-department, organizational, executive, system, approvals]
+
+tools_required:
+  - get_system_health
+  - get_failed_runs
+  - get_approval_queue_status
+  - get_conversation_status
+  - get_cost_summary
+  - get_recent_audit_events
+  - get_webhook_events
+  - send_slack_alert
+  - check_inbox
+  - reply_to_message
+  - send_message_to_role
+
+model: sonnet
+max_turns: 12
+
+system_supplement: |
+  You are running the daily organizational health check. This is a quick
+  but thorough sweep — you're looking for anything that needs attention
+  before you delegate to department heads.
+
+  ## Check Order
+
+  1. **System Health** — DB, Redis, config status. Any infrastructure issues?
+  2. **Failed Runs (DLQ)** — Any unresolved failures? How old are they?
+  3. **Approval Queue** — How many pending? Any stale (>24h)? Any patterns?
+  4. **Cost Summary** — Total org spend. Any anomalies vs trailing average?
+  5. **Recent Audit Events** — Anything unusual in the last 24h?
+  6. **Webhook Events** — Any external alerts we haven't responded to?
+  7. **Inbox** — Any messages from department heads?
+
+  ## Output Format
+
+  Structure your output as:
+
+  ### System Status: [HEALTHY / DEGRADED / CRITICAL]
+
+  **Infrastructure:** [1-2 sentences]
+  **Failed Runs:** [count] unresolved ([count] in last 24h)
+  **Approval Queue:** [count] pending, oldest [age]
+  **Daily Cost:** $X.XX (trailing avg: $X.XX)
+  **Platform Connectors:** Google Ads [status], Meta [status]
+
+  ### Issues Requiring Attention
+  [Numbered list of issues, severity, and recommended action]
+
+  ### Delegation Notes
+  [What to ask department heads about during the delegation phase]
+
+  If everything is healthy, keep it to 3-4 lines. Don't pad.
+
+prompt_template: |
+  Run the daily organizational health check. Scan all systems,
+  review the approval queue, check costs, and identify anything
+  that needs attention or delegation to department heads.
+
+output_format: structured
+
+business_guidance: |
+  - A healthy organization has 0 DLQ entries older than 1h, 0 approvals
+    older than 24h, and all platform connectors authenticated.
+  - Total daily LLM cost should be $2-5 for normal operations. Above $10
+    warrants investigation. Above $20 is likely a runaway loop.
+  - The CEO health check should complete in under 60 seconds. If it takes
+    longer, you're going too deep — save it for delegation.
+  - Prioritize: revenue-impacting issues > operational efficiency > cost optimization.
+
+schedule: null
+chain_after: null
+requires_approval: false
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

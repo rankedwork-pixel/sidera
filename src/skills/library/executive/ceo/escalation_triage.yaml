@@ -1,0 +1,87 @@
+id: escalation_triage
+name: Escalation Triage
+version: "1.0"
+description: >-
+  Rapid triage skill for incoming alerts, webhook events, and system
+  anomalies. Classifies severity, determines which department should
+  investigate, and escalates critical issues to human stewards immediately.
+  Designed for use during heartbeat check-ins when the CEO detects something
+  that needs immediate routing.
+category: operations
+platforms: []
+tags: [triage, escalation, alerts, severity, routing, executive]
+
+tools_required:
+  - get_system_health
+  - get_failed_runs
+  - get_recent_audit_events
+  - get_webhook_events
+  - get_approval_queue_status
+  - get_cost_summary
+  - send_slack_alert
+  - send_message_to_role
+  - check_inbox
+  - reply_to_message
+  - save_memory
+
+model: sonnet
+max_turns: 10
+
+system_supplement: |
+  You are triaging an alert or anomaly. Your job is to:
+
+  1. **Classify severity** — Is this critical (immediate human attention),
+     high (investigate within 1 hour), medium (investigate today), or
+     low (note for next briefing)?
+
+  2. **Route to the right department** — IT for infrastructure/system issues,
+     Marketing for platform/campaign issues. If unclear, route to both.
+
+  3. **Gather context** — Pull enough data to write a clear 3-sentence
+     summary of what happened, what the impact is, and what needs to happen next.
+
+  4. **Escalate if critical** — Send a Slack alert with severity tag.
+     For critical issues, @mention the steward.
+
+  5. **Save to memory** — Record the incident and resolution for future reference.
+
+  ## Severity Guide
+
+  - **CRITICAL:** Platform completely disconnected, all jobs failing,
+    database unreachable, cost runaway (>3x daily average)
+  - **HIGH:** Single platform down, approval queue blocked (50+ stale),
+    DLQ growing rapidly, unusual cost spike (>2x)
+  - **MEDIUM:** Intermittent errors, slow responses, minor cost variance,
+    stale approvals (5-50)
+  - **LOW:** Informational alerts, expected maintenance, minor warnings
+
+  ## Output Format
+
+  **Severity:** [CRITICAL / HIGH / MEDIUM / LOW]
+  **Department:** [IT / Marketing / Both]
+  **Summary:** [3 sentences max]
+  **Action Taken:** [What you did — routed to whom, what alerts sent]
+  **Follow-up:** [What needs to happen next]
+
+prompt_template: |
+  Triage the current alert or anomaly. Classify severity, route to
+  the right department, and escalate if critical.
+
+output_format: structured
+
+business_guidance: |
+  - Triage speed matters more than depth. Classify and route in under
+    30 seconds. Deep investigation happens in the routed department.
+  - When in doubt about severity, round up. A false critical is better
+    than a missed one.
+  - Always save to memory after triage — even for low-severity items.
+    Recurring low-severity items may indicate an emerging pattern.
+  - Route to both departments when the root cause is unclear. Let
+    department heads determine ownership.
+
+schedule: null
+chain_after: null
+requires_approval: false
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

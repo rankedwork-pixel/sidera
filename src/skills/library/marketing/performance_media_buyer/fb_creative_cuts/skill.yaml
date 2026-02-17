@@ -1,0 +1,122 @@
+id: fb_creative_cuts
+name: FB Creative Cuts (Code-Backed)
+version: "1.0"
+description: >-
+  Executes calibrated Python analysis to identify underperforming Meta ad
+  creatives that should be cut or watched. Uses on-platform CPBC, CPL
+  fallback, and cross-ad-set pattern detection. Produces CSV scorecard
+  and Word doc matching the daily standup format.
+category: creative
+platforms: [meta]
+tags:
+  - creative
+  - meta
+  - facebook
+  - cuts
+  - performance
+  - cpbc
+  - cpl
+  - ad-creative
+  - code-backed
+  - standup
+
+# --- Code-backed execution ---
+skill_type: code_backed
+code_entrypoint: code/run.py
+code_timeout_seconds: 120
+code_output_patterns:
+  - "output/*.csv"
+  - "output/*.docx"
+
+tools_required:
+  - run_skill_code
+  - send_slack_alert
+  - create_google_doc
+  - edit_google_doc
+  - manage_google_sheets
+
+model: sonnet
+max_turns: 5
+
+context_files:
+  - "context/*.md"
+
+system_supplement: |
+  You are executing a **code-backed skill** — your job is to run the
+  calibrated Python analysis code, read the output, and present the
+  findings clearly.
+
+  ## How This Skill Works
+
+  The Python code in code/run.py is a two-step pipeline:
+  1. **creative_cuts.py** — Loads a Tableau/Meta CSV export, classifies
+     each ad by ad set (State + Gender + Language), computes on-platform
+     CPBC and CPL metrics, applies calibrated thresholds, and outputs a
+     CSV scorecard with CUT/WATCH/N/C recommendations.
+  2. **generate_cuts_doc.py** — Takes the CSV output and generates a
+     Word doc matching the daily standup briefing format.
+
+  ## Key Analysis Logic (calibrated against real human decisions)
+  - Primary metric: On-Platform CPBC (cost per backend conversion)
+  - CUT threshold: 50% above ad set average CPBC
+  - WATCH threshold: 20% above ad set average CPBC
+  - CPL Shield: Ads in the top 20% of CPL in their ad set are protected
+    from CPBC-only cuts (they're generating leads even if CPBC is high)
+  - Minimum 14 days in market before evaluation
+  - Max 3 CUT + 3 WATCH recommendations per ad set
+  - Cross-ad-set flagging: if a creative is bad in 3+ ad sets, flag globally
+
+  ## Your Workflow
+  1. Call run_skill_code to execute the analysis
+  2. Read the output CSV to understand the findings
+  3. Summarize: how many CUTs, how many WATCHes, any cross-ad-set patterns
+  4. If requested, push the CSV data to a Google Sheet or create a Google Doc
+  5. Present findings ready for a Slack briefing
+
+prompt_template: |
+  Run the FB Creative Cuts analysis using the run_skill_code tool.
+  After execution completes, read the output CSV and Word doc results.
+
+  Summarize the key findings:
+  - How many ads were flagged for CUT vs WATCH
+  - Which ad sets have the most cuts
+  - Any cross-ad-set patterns (same creative bad everywhere)
+  - Estimated weekly waste from recommended cuts
+
+  Present the findings in a format ready for a Slack daily briefing.
+  Keep it concise and actionable — lead with the cut list.
+
+output_format: |
+  ## Creative Cuts Summary
+  Quick stats: X cuts, Y watches across Z ad sets.
+
+  ## Cut List
+  - Ad Set: [name]
+    - CUT: [creative names] — [reason with metrics]
+
+  ## Watch List
+  - Ad Set: [name]
+    - WATCH: [creative names] — [reason with metrics]
+
+  ## Cross-Ad-Set Flags
+  Creatives flagged as globally underperforming.
+
+  ## Estimated Impact
+  Weekly waste reduction from recommended cuts.
+
+business_guidance: |
+  - The Python code is calibrated against real human cut decisions and
+    should be trusted — do not second-guess its recommendations
+  - Focus on presenting the results clearly, not re-analyzing the data
+  - Always show the actual CPBC and CPL numbers, not just "above average"
+  - If the code fails or produces empty output, report the error clearly
+    and suggest checking the input CSV file in data/
+  - Cross-ad-set flags are high-priority — these creatives are bad everywhere
+
+schedule: null
+chain_after: null
+requires_approval: false
+min_clearance: internal
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

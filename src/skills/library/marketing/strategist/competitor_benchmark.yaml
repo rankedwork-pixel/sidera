@@ -1,0 +1,158 @@
+id: competitor_benchmark
+name: Competitor Benchmark Report
+version: "1.0"
+description: Compare campaign CPAs and ROAS against industry vertical averages from BigQuery benchmark data to identify where performance leads or lags the market
+category: reporting
+platforms: [google_ads, meta, bigquery]
+tags: [competitor, benchmark, industry, comparison, vertical, average, percentile, market, competitive, performance-gap, industry-standard]
+
+tools_required:
+  - get_backend_performance
+  - get_business_goals
+  - get_google_ads_performance
+  - get_google_ads_campaigns
+  - get_meta_performance
+  - get_meta_campaigns
+  - get_campaign_attribution
+  - create_google_doc
+  - manage_google_sheets
+
+model: sonnet
+max_turns: 15
+
+system_supplement: |
+  For this task you are generating a competitor benchmark report that
+  compares the advertiser's performance against industry vertical averages.
+  The goal is to clearly show where the advertiser leads the market and
+  where they trail, so budget and optimization decisions can be informed
+  by competitive context — not just internal trends.
+
+  ## Benchmarking Framework
+  1. Pull the advertiser's performance metrics across all connected platforms
+     for the specified lookback period. Gather cost, conversions, revenue,
+     impressions, clicks, CPA, ROAS, CTR, and CVR at the campaign level.
+  2. Query BigQuery for industry vertical benchmark data. Look for tables
+     containing benchmark averages by vertical and campaign type (search,
+     shopping, display, social/paid social). Typical benchmark fields:
+     average CPA, median CPA, average ROAS, median ROAS, average CTR,
+     average CVR, and sample size / confidence indicator.
+  3. Segment the comparison by campaign type. Search campaign benchmarks
+     are fundamentally different from display or social benchmarks — never
+     compare across types. Use the campaign type or objective to determine
+     the correct benchmark segment.
+  4. For each metric and campaign type, calculate:
+     - Advertiser's value vs. industry average (absolute difference)
+     - Advertiser's value vs. industry median (absolute difference)
+     - Percentile ranking where distribution data is available
+     - Direction of trend (is the gap widening or narrowing over time?)
+  5. Classify each metric into one of three buckets:
+     - Competitive advantage: advertiser outperforms median by >10%
+     - Competitive parity: within +/- 10% of median
+     - Competitive gap: advertiser underperforms median by >10%
+  6. For competitive gaps, provide specific hypotheses about root causes
+     and actionable next steps to close the gap.
+  7. For competitive advantages, identify what the advertiser is doing well
+     and whether the advantage is sustainable or at risk of erosion.
+  8. Create a Google Doc with the full narrative analysis and a Google Sheets
+     workbook with the raw comparison data for further exploration.
+
+  ## Writing Style
+  - Data-driven but accessible — every comparison needs plain-language context
+  - Use tables for side-by-side comparisons, prose for interpretation
+  - Be honest about benchmark limitations: benchmarks are aggregated
+    across many advertisers with different business models, margins, and
+    conversion definitions
+  - Avoid false precision — say "roughly in line" rather than quoting tiny
+    differences as meaningful
+
+prompt_template: |
+  Generate a competitor benchmark report.
+  Analysis date: {analysis_date}
+
+  Connected Accounts:
+  {accounts_block}
+
+  Compare the last {lookback_days} days of performance data against
+  industry benchmarks available in BigQuery. Segment the analysis by
+  campaign type (search, shopping, display, social) and compare CPA,
+  ROAS, CTR, and CVR against vertical averages.
+
+  Create a Google Doc with the narrative analysis and a Google Sheets
+  workbook with the raw benchmark comparison data.
+
+  {extra_instructions}
+
+output_format: |
+  ## Executive Summary
+  2-3 sentences: overall competitive position. Are we leaders, laggards,
+  or mixed? What is the single biggest opportunity based on benchmarks?
+
+  ## Benchmark Comparison Table
+  For each campaign type:
+  Table: Metric | Your Value | Industry Avg | Industry Median |
+  Your Percentile | Status (Leading / Parity / Lagging)
+
+  ## Competitive Advantages
+  Where the advertiser outperforms the market. For each advantage:
+  - Which metric, which campaign type, by how much
+  - Why — what is the advertiser doing that drives this edge
+  - Is it sustainable? Any risks to the advantage eroding?
+
+  ## Competitive Gaps
+  Where the advertiser trails the market. For each gap:
+  - Which metric, which campaign type, by how much
+  - Hypothesis for the root cause
+  - Recommended action to close the gap with estimated impact
+
+  ## Platform-Specific Breakdown
+  Separate sections for Google Ads and Meta showing how each platform's
+  campaigns compare to their respective benchmarks.
+
+  ## Trend vs Benchmarks
+  Are the gaps widening or narrowing over time? Show directional trend
+  for the most important metrics over the last 3-4 periods if data allows.
+
+  ## Caveats and Methodology Notes
+  - Data sources and time periods for benchmarks
+  - Sample sizes and confidence levels where available
+  - Known limitations (vertical approximation, platform-reported vs backend, etc.)
+
+  ## Deliverables Created
+  - Google Doc: [link]
+  - Google Sheets: [link]
+
+business_guidance: |
+  - Benchmarks are directional, not precise targets. They reflect
+    aggregated data across many advertisers with different business models,
+    margins, and conversion definitions. Never present them as gospel.
+  - Always cite the data source and time period for benchmark data. If the
+    benchmark data is more than 90 days old, note that it may be stale.
+  - If BigQuery does not have benchmark data for the advertiser's exact
+    vertical, use the closest available vertical and explicitly note the
+    approximation (e.g., "Using 'Health & Wellness' benchmarks as a proxy
+    for 'Fitness Equipment' — actual vertical benchmarks unavailable").
+  - Never compare search campaign metrics against display or social
+    benchmarks. Always segment by campaign type. Search CTR of 5% is
+    normal; display CTR of 5% would be extraordinary.
+  - Backend-attributed metrics are the advertiser's truth. Industry
+    benchmarks are typically based on platform-reported numbers. Note this
+    discrepancy explicitly: "Your backend CPA is $45 vs. industry average
+    platform-reported CPA of $38 — the gap may be smaller after adjusting
+    for attribution differences."
+  - Focus on actionable gaps, not just numbers. A 5% CTR gap matters less
+    than a 30% CPA gap. Prioritize by business impact.
+  - If the advertiser is in the top quartile on a metric, do not recommend
+    chasing further improvement — there are diminishing returns. Focus
+    optimization effort on metrics where the advertiser is below median.
+  - File naming convention: "Benchmark Report — YYYY-MM-DD" for docs,
+    "Benchmark Data — YYYY-MM-DD" for sheets.
+  - Never overwrite previous benchmark reports — always create new files
+    so historical comparisons remain accessible.
+
+schedule: null
+chain_after: null
+requires_approval: false
+min_clearance: confidential
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"

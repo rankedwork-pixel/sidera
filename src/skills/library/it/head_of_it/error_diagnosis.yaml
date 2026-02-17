@@ -1,0 +1,113 @@
+id: error_diagnosis
+name: "Error Diagnosis & Triage"
+version: "1.0"
+description: "Investigate and diagnose system errors, workflow failures, and unexpected behavior using audit logs, DLQ, and system state"
+category: operations
+platforms: []
+tags: [error, diagnosis, troubleshooting, debug, failure, investigation, triage, fix]
+
+tools_required:
+  - get_system_health
+  - get_failed_runs
+  - resolve_failed_run
+  - get_recent_audit_events
+  - get_approval_queue_status
+  - get_conversation_status
+  - send_slack_thread_reply
+
+model: sonnet
+max_turns: 12
+
+system_supplement: |
+  You are diagnosing a system issue. A user has reported a problem or you've
+  been triggered by an automated alert. Your job is to find the root cause,
+  explain it clearly, and either fix it or recommend the fix.
+
+  ## Diagnostic Methodology
+  1. **Gather context:** What is the reported symptom? When did it start?
+     Which component is affected?
+  2. **Check system health:** Use get_system_health for the big picture
+  3. **Timeline analysis:** Use get_recent_audit_events to reconstruct
+     what happened in the relevant timeframe
+  4. **Check DLQ:** Use get_failed_runs to see if the issue caused
+     workflow failures
+  5. **Cross-reference:** Check approval queue and conversation status
+     for related issues
+  6. **Root cause:** Based on evidence, determine the most likely cause
+  7. **Resolution:** Take action if possible (resolve DLQ entries,
+     send alerts) or recommend human intervention
+
+  ## Common Issues and Their Signatures
+  - **Briefing didn't run:** Check DLQ for `daily_briefing_workflow` failures
+  - **Conversation not responding:** Check DLQ for `conversation_turn_workflow`,
+    verify thread in conversation_threads table
+  - **Approval stuck:** Check approval_queue for old pending items,
+    verify Slack buttons were posted
+  - **Skill run failed:** Check DLQ for `skill_runner_workflow`,
+    look at audit events for the skill_id
+  - **High costs:** Check cost_summary, identify which model/operation
+    is driving the increase
+  - **API errors:** Check audit events for error type events, look for
+    connector failure patterns (Google Ads, Meta, BigQuery)
+
+  ## What You Can Fix
+  - Resolve transient DLQ entries (network errors, rate limits)
+  - Post diagnostic findings to Slack threads
+  - Identify stuck workflows and recommend restart
+
+  ## What Requires Human Intervention
+  - Code bugs (suggest which file/function to investigate)
+  - OAuth token expiry (direct user to re-authenticate)
+  - Configuration changes (tell them what to change in .env)
+  - Database schema issues (suggest migration needed)
+
+prompt_template: |
+  Investigate and diagnose the following issue:
+  {user_query}
+
+  Start with a system health check, then drill into the specific area
+  of concern using audit logs, DLQ, and other diagnostic tools.
+  Determine the root cause and either resolve it or provide clear
+  next steps.
+
+output_format: |
+  ## Diagnosis Report
+
+  ### Symptom
+  One-line description of the reported issue.
+
+  ### Investigation
+  Step-by-step account of what you checked and what you found.
+  Include specific timestamps, error messages, and data from tools.
+
+  ### Root Cause
+  Clear explanation of what went wrong and why.
+
+  ### Resolution
+  What was done to fix it, or what needs to be done:
+  - Actions taken (DLQ entries resolved, alerts sent)
+  - Recommended actions (for human operators)
+  - Configuration changes needed
+
+  ### Prevention
+  How to prevent this issue from recurring.
+
+business_guidance: |
+  - Always start broad (system health) then narrow down. Don't jump to
+    conclusions based on a single data point.
+  - When reporting to users, be clear and actionable. Avoid jargon.
+    "The daily briefing workflow failed because the Google Ads API returned
+    a rate limit error. This was a transient issue. I've cleared it from
+    the error queue and the next scheduled run should work normally."
+  - If you can't determine the root cause with available tools, say so.
+    "I've ruled out X, Y, and Z. The issue might be in the application
+    code at [specific location]. A developer should investigate."
+  - For recurring issues (same workflow failing repeatedly), escalate
+    rather than just resolving each occurrence.
+
+schedule: null
+chain_after: null
+requires_approval: false
+author: sidera
+created_at: "2025-01-01"
+updated_at: "2025-01-01"
