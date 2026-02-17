@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "sidera": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-m", "src.mcp_stdio"],
+      "cwd": "/Users/michaelzola/Desktop/Build an Agent"
+    }
+  }
+}
