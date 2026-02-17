@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Sidera Agent Framework (FastAPI + Inngest worker)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://sidera:sidera_dev@postgres:5432/sidera
+      - REDIS_URL=redis://redis:6379/0
+      - INNGEST_DEV=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sidera-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL (Supabase-compatible)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sidera
+      POSTGRES_PASSWORD: sidera_dev
+      POSTGRES_DB: sidera
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sidera"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sidera-net
+
+  # ---------------------------------------------------------------------------
+  # Redis (Upstash-compatible for local dev)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sidera-net
+
+  # ---------------------------------------------------------------------------
+  # Streamlit Dashboard
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      streamlit run dashboard/app.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://sidera:sidera_dev@postgres:5432/sidera
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sidera-net
+
+  # ---------------------------------------------------------------------------
+  # Inngest Dev Server
+  # ---------------------------------------------------------------------------
+  inngest:
+    image: inngest/inngest:latest
+    ports:
+      - "8288:8288"
+    environment:
+      - INNGEST_DEV=1
+    networks:
+      - sidera-net
+
+volumes:
+  postgres_data:
+
+networks:
+  sidera-net:
+    driver: bridge

@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Sidera — Pitch Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #12121a;
+    --bg-card-hover: #1a1a2e;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #08756c;
+    --accent-light: #0aa89b;
+    --accent-glow: rgba(8, 117, 108, 0.3);
+    --red: #e74c5e;
+    --orange: #f0973b;
+    --blue: #4a9eff;
+    --green: #34d399;
+    --purple: #a78bfa;
+    --teal-dark: #065a53;
+    --teal-mid: #08756c;
+    --teal-light: #0aa89b;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* Slide container */
+  .deck {
+    width: 100%; height: 100%;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 100px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 3.5rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 24px;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 20px;
+    letter-spacing: -0.02em;
+  }
+
+  h3 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  p, li {
+    font-size: 1.35rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+
+  .big-text {
+    font-size: 2rem;
+    line-height: 1.5;
+    color: var(--text-dim);
+    max-width: 900px;
+    text-align: center;
+  }
+
+  .accent { color: var(--accent-light); }
+  .red { color: var(--red); }
+  .orange { color: var(--orange); }
+  .blue { color: var(--blue); }
+  .green { color: var(--green); }
+  .purple { color: var(--purple); }
+  .dim { color: var(--text-dim); }
+  .bold { font-weight: 700; color: var(--text); }
+
+  /* Layout helpers */
+  .center { text-align: center; }
+  .left { text-align: left; align-items: flex-start; }
+  .gap-40 { gap: 40px; }
+  .gap-24 { gap: 24px; }
+  .gap-16 { gap: 16px; }
+  .max-900 { max-width: 900px; }
+  .max-1100 { max-width: 1100px; }
+  .max-1200 { max-width: 1200px; }
+  .w-full { width: 100%; }
+
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+    width: 100%;
+  }
+
+  .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    width: 100%;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    width: 100%;
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    width: 100%;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card h3 {
+    font-size: 1.3rem;
+    margin-bottom: 4px;
+  }
+
+  .card p {
+    font-size: 1.1rem;
+    line-height: 1.5;
+  }
+
+  .card-accent {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px var(--accent-glow);
+  }
+
+  .card-sm {
+    padding: 20px;
+    gap: 8px;
+  }
+
+  .card-sm h3 { font-size: 1.1rem; }
+  .card-sm p { font-size: 0.95rem; }
+
+  /* Badges / Tags */
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .badge-accent { background: rgba(8,117,108,0.2); color: var(--accent-light); }
+  .badge-red { background: rgba(231,76,94,0.2); color: var(--red); }
+  .badge-blue { background: rgba(74,158,255,0.2); color: var(--blue); }
+  .badge-orange { background: rgba(240,151,59,0.2); color: var(--orange); }
+  .badge-green { background: rgba(52,211,153,0.2); color: var(--green); }
+  .badge-purple { background: rgba(167,139,250,0.2); color: var(--purple); }
+
+  /* Code */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,0.06);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+
+  /* Divider */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: 8px 0 16px;
+  }
+
+  /* Step flow */
+  .step-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 1000px;
+  }
+
+  .step-box {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 24px 20px;
+    text-align: center;
+  }
+
+  .step-box h3 { font-size: 1.2rem; margin-bottom: 8px; }
+  .step-box p { font-size: 1rem; }
+
+  .step-arrow {
+    font-size: 1.5rem;
+    color: var(--accent-light);
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* Org chart */
+  .org-chart { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .org-line { width: 2px; height: 20px; background: var(--accent); opacity: 0.4; }
+  .org-branch {
+    display: flex;
+    gap: 20px;
+    position: relative;
+  }
+  .org-branch::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 120px);
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.3;
+  }
+
+  .org-node {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 14px 20px;
+    text-align: center;
+    min-width: 160px;
+  }
+
+  .org-node.manager {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  .org-node h4 { font-size: 1rem; font-weight: 600; margin-bottom: 2px; }
+  .org-node p { font-size: 0.8rem; color: var(--text-dim); }
+
+  /* Demo break slide */
+  .demo-break {
+    background: linear-gradient(135deg, rgba(8,117,108,0.15) 0%, var(--bg) 100%);
+  }
+
+  .demo-tag {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent-light);
+    margin-bottom: 16px;
+  }
+
+  /* Section divider */
+  .section-divider {
+    background: linear-gradient(135deg, rgba(167,139,250,0.1) 0%, var(--bg) 100%);
+  }
+
+  /* Number highlight */
+  .num {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--accent-light);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  /* List */
+  ul { list-style: none; padding: 0; }
+  ul li {
+    padding: 8px 0;
+    padding-left: 24px;
+    position: relative;
+  }
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 17px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    bottom: 30px;
+    right: 40px;
+    display: flex;
+    gap: 12px;
+    z-index: 100;
+  }
+
+  .nav button {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .nav button:hover {
+    border-color: var(--accent);
+    background: var(--bg-card-hover);
+  }
+
+  /* Progress bar */
+  .progress {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: var(--accent);
+    transition: width 0.4s ease;
+    z-index: 100;
+  }
+
+  /* Slide counter */
+  .counter {
+    position: fixed;
+    bottom: 38px;
+    left: 40px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    z-index: 100;
+  }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 1.05rem;
+  }
+  th {
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td { color: var(--text); }
+
+  /* Approval mockup */
+  .approval-mock {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .approval-mock .msg {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    color: var(--text);
+  }
+
+  .btn-row { display: flex; gap: 12px; }
+
+  .btn-approve {
+    padding: 10px 28px;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--green);
+    color: #000;
+  }
+
+  .btn-reject {
+    padding: 10px 28px;
+    border-radius: 8px;
+    border: 1px solid var(--red);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--red);
+  }
+
+  /* Watermark */
+  .watermark {
+    position: fixed;
+    top: 30px;
+    left: 40px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.15);
+    letter-spacing: 0.05em;
+    z-index: 100;
+  }
+
+  /* Animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide.active .fade-in { animation: fadeInUp 0.6s ease forwards; }
+  .slide.active .fade-in-d1 { animation: fadeInUp 0.6s 0.15s ease forwards; opacity: 0; }
+  .slide.active .fade-in-d2 { animation: fadeInUp 0.6s 0.3s ease forwards; opacity: 0; }
+  .slide.active .fade-in-d3 { animation: fadeInUp 0.6s 0.45s ease forwards; opacity: 0; }
+  .slide.active .fade-in-d4 { animation: fadeInUp 0.6s 0.6s ease forwards; opacity: 0; }
+
+  /* Cost table */
+  .cost-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .cost-row span:first-child { color: var(--text-dim); }
+  .cost-row span:last-child { font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  /* Timeline */
+  .timeline-item {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 12px 0;
+  }
+  .timeline-marker {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 6px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .timeline-marker::after {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 5px;
+    width: 2px;
+    height: 36px;
+    background: rgba(10, 168, 155, 0.2);
+  }
+  .timeline-item:last-child .timeline-marker::after { display: none; }
+</style>
+</head>
+<body>
+
+<div class="watermark"><img src="../SLACK IMAGE_square.png" alt="Sidera" style="width: 32px; height: 32px; border-radius: 6px; vertical-align: middle; opacity: 0.4; margin-right: 8px;">PROJECT SIDERA</div>
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 1: Title -->
+  <!-- ============================================================ -->
+  <div class="slide active center">
+    <div class="fade-in">
+      <img src="../SLACK IMAGE_square.png" alt="Project Sidera" style="width: 180px; height: 180px; border-radius: 28px; margin-bottom: 28px; box-shadow: 0 0 60px rgba(8, 117, 108, 0.4), 0 0 120px rgba(8, 117, 108, 0.15);">
+    </div>
+    <h1 class="fade-in-d1">Project <span class="accent">Sidera</span></h1>
+    <p class="big-text fade-in-d2" style="font-size:1.5rem;">
+      AI employees that learn your business,<br>work in Slack, and only act with your approval.
+    </p>
+    <p class="fade-in-d3" style="font-size:1rem; color: var(--text-dim); margin-top: 40px;">
+      Confidential &mdash; February 2026
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 2: The Problem -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Expertise Problem at Scale</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+    <div class="grid-3 max-1100 fade-in-d1">
+      <div class="card">
+        <h3 class="red">Tribal Knowledge</h3>
+        <p>Critical expertise lives in people's heads. When someone leaves, changes roles, or goes on vacation &mdash; their knowledge goes with them.</p>
+      </div>
+      <div class="card">
+        <h3 class="orange">Inconsistent Execution</h3>
+        <p>The same process gets done differently by different people. Quality depends on who's working that day, not on what the company knows.</p>
+      </div>
+      <div class="card">
+        <h3 class="red">Operational Drag</h3>
+        <p>Your best people spend hours on routine analysis and reporting instead of the strategic work that actually moves the business forward.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 3: The Vision -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in" style="font-size: 3rem;">
+      What if your organization had<br>
+      <span class="accent">AI employees</span><br>
+      that never leave, never forget, and get<br>
+      smarter every day?
+    </h2>
+    <p class="big-text fade-in-d1" style="margin-top: 32px; font-size: 1.3rem;">
+      Each one has a defined role, domain expertise, memory, and decision-making principles.<br>
+      They analyze your data, surface insights, and recommend actions.<br>
+      <span class="bold">Nothing happens without your approval.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 4: How It Works -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">How It Works</h2>
+    <div class="divider fade-in" style="margin: 8px auto 40px;"></div>
+    <div class="step-flow fade-in-d1">
+      <div class="step-box">
+        <h3 class="accent">1. Connect</h3>
+        <p>Your data sources &mdash; APIs, databases, SaaS platforms, internal tools</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="accent">2. Analyze</h3>
+        <p>AI roles run domain-specific skills on schedule, pulling live data every day</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="accent">3. Recommend</h3>
+        <p>Insights and actions delivered to Slack with full context and reasoning</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box" style="border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow);">
+        <h3 class="accent">4. You Decide</h3>
+        <p>Approve or Reject &mdash; every action is gated by a human</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 5: The Org Chart -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">It Mirrors Your Organization</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <p class="big-text fade-in-d1" style="font-size: 1.2rem; margin-bottom: 28px;">
+      Departments &rarr; Managers &rarr; Specialists. Each with its own expertise, memory, and principles.
+    </p>
+
+    <div class="row max-1200 fade-in-d2" style="gap: 40px; justify-content: center;">
+      <!-- Dept 1 -->
+      <div class="col" style="align-items: center; flex: 1;">
+        <span class="badge badge-accent" style="margin-bottom: 16px;">Marketing</span>
+        <div class="org-chart">
+          <div class="org-node manager">
+            <h4>Department Head</h4>
+            <p>Delegates &amp; synthesizes</p>
+          </div>
+          <div class="org-line"></div>
+          <div class="org-branch">
+            <div class="org-node"><h4>Analyst</h4><p>Reporting</p></div>
+            <div class="org-node"><h4>Specialist</h4><p>Execution</p></div>
+            <div class="org-node"><h4>Strategist</h4><p>Planning</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dept 2 -->
+      <div class="col" style="align-items: center; flex: 1;">
+        <span class="badge badge-blue" style="margin-bottom: 16px;">Finance</span>
+        <div class="org-chart">
+          <div class="org-node manager">
+            <h4>Department Head</h4>
+            <p>Delegates &amp; synthesizes</p>
+          </div>
+          <div class="org-line"></div>
+          <div class="org-branch">
+            <div class="org-node"><h4>Controller</h4><p>Compliance</p></div>
+            <div class="org-node"><h4>Analyst</h4><p>Forecasting</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dept 3 -->
+      <div class="col" style="align-items: center; flex: 1;">
+        <span class="badge badge-purple" style="margin-bottom: 16px;">Operations</span>
+        <div class="org-chart">
+          <div class="org-node manager">
+            <h4>Department Head</h4>
+            <p>Delegates &amp; synthesizes</p>
+          </div>
+          <div class="org-line"></div>
+          <div class="org-branch">
+            <div class="org-node"><h4>Coordinator</h4><p>Logistics</p></div>
+            <div class="org-node"><h4>Analyst</h4><p>Optimization</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="fade-in-d3" style="margin-top: 28px; font-size: 1.05rem;">
+      <span class="dim">Managers delegate, specialists execute, results synthesize upward. Just like a real organization.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 6: The Approval Gate -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">Nothing Happens Without You</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="approval-mock fade-in-d1">
+      <div class="msg">
+        <strong>Operations Analyst</strong> recommends:<br><br>
+        Adjust reorder point for <strong>SKU-4482</strong> from 500 to 350 units<br>
+        Reason: Average daily demand dropped 28% over last 30 days. Current safety stock covers 14 days vs. 7-day target.<br>
+        <span class="dim" style="font-size: 0.95rem;">Risk: Low &mdash; 90-day trend is consistent, supplier lead time unchanged</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn-approve">Approve</button>
+        <button class="btn-reject">Reject</button>
+      </div>
+    </div>
+
+    <p class="fade-in-d2" style="margin-top: 28px; font-size: 1.15rem; max-width: 700px;">
+      Every write operation &mdash; parameter changes, status updates, process modifications &mdash;<br>
+      requires <span class="bold">explicit human approval</span> before execution.<br>
+      <span class="dim" style="font-size: 1rem;">As trust builds, you can enable auto-approval rules for low-risk, routine actions.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 7: Conversational Mode -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">Talk to Any Role, Anytime</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-2 max-1100 fade-in-d1">
+      <div class="card">
+        <h3 class="accent">Natural Conversation</h3>
+        <p>Every AI role is both <span class="bold">autonomous</span> (runs on schedule) and <span class="bold">conversational</span> (responds in Slack threads).</p>
+        <p style="margin-top: 12px;"><code>@Sidera talk to the finance analyst</code></p>
+        <p style="margin-top: 8px;">Ask questions, request analysis, follow up in the thread. The agent responds in character with full access to its tools and data.</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Actions in Context</h3>
+        <p>When a conversation leads to an action, the agent proposes it right in the thread with an Approve/Reject button.</p>
+        <p style="margin-top: 12px;">No context switching. No separate dashboards. The conversation <em>is</em> the interface.</p>
+        <p style="margin-top: 8px;"><span class="dim">Manager roles can delegate to sub-roles mid-conversation.</span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 8: It Learns -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">It Gets Smarter Every Day</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-3 max-1100 fade-in-d1">
+      <div class="card">
+        <h3 class="accent">Decisions</h3>
+        <p>Remembers every approval and rejection. Learns what <em>your organization</em> actually values, not what a textbook says.</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Lessons</h3>
+        <p>"I tried X, it failed because Y." After each run, the agent reflects on what it learned and saves it permanently.</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Self-Improvement</h3>
+        <p>When friction recurs, agents propose changes to their own skills. You approve the evolution. They never repeat the same mistake.</p>
+      </div>
+    </div>
+
+    <p class="fade-in-d2" style="margin-top: 28px; font-size: 1.1rem;">
+      <span class="dim">This isn't a static tool. It's an employee that gets better at its job every single day &mdash; and its knowledge never walks out the door.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 9: The Compounding Effect -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Compounding Effect</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="max-900 fade-in-d1" style="width: 100%;">
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div>
+          <p style="color: var(--text);"><span class="bold">Week 1:</span> Agents pull data, spot obvious issues, deliver daily briefings to the right people.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div>
+          <p style="color: var(--text);"><span class="bold">Month 1:</span> Memory accumulates. Agents know your business rhythms, seasonal patterns, which decisions you favor.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div>
+          <p style="color: var(--text);"><span class="bold">Month 3:</span> Auto-approval rules dialed in for routine actions. Your team only sees things that need real judgment.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div>
+          <p style="color: var(--text);"><span class="bold">Month 6:</span> Agents have refined their own skills through the evolution pipeline. Institutional knowledge is captured permanently.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div>
+          <p style="color: var(--text);"><span class="bold">Year 1:</span> A new hire reads the agent's accumulated memory and gets 12 months of institutional expertise on day one.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 10: The Daily Briefing -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Daily Briefing</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <p class="big-text fade-in-d1" style="margin-bottom: 32px;">
+      Every day, each department head:
+    </p>
+
+    <div class="grid-4 max-1200 fade-in-d2">
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="blue">1</h3>
+        <p>Runs its own executive analysis</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="blue">2</h3>
+        <p>Decides which specialists to activate</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="blue">3</h3>
+        <p>Collects their analyses</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="blue">4</h3>
+        <p>Synthesizes one unified briefing</p>
+      </div>
+    </div>
+
+    <p class="fade-in-d3" style="margin-top: 24px; font-size: 1.05rem;">
+      <span class="dim">Cross-functional insights. Anomalies flagged. Actions prioritized. Delivered before your team starts their day.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 11: Source of Truth -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">Your Data. Your Truth.</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="row max-1100 fade-in-d1" style="align-items: center;">
+      <div class="col" style="flex: 1;">
+        <div class="card card-accent">
+          <h3>Your Backend Data</h3>
+          <p>Your own warehouse, your own attribution, your own metrics. The agent optimizes for <em>your</em> business outcomes.</p>
+          <span class="badge badge-green" style="align-self: flex-start; margin-top: 8px;">Source of Truth</span>
+        </div>
+      </div>
+      <div style="font-size: 2rem; color: var(--text-dim);">vs.</div>
+      <div class="col" style="flex: 1;">
+        <div class="card">
+          <h3>Platform-Reported</h3>
+          <p>Third-party platforms self-report metrics that serve <em>their</em> interests. Your agent cross-references everything.</p>
+          <span class="badge badge-orange" style="align-self: flex-start; margin-top: 8px;">Cross-Referenced</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="fade-in-d2" style="margin-top: 28px; font-size: 1.1rem;">
+      <span class="dim">Agents connect to your data warehouse as the single source of truth. Decisions based on reality, not vendor dashboards.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 12: Why This Is Strategic -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">This Is a Strategic Investment</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-2 max-1100 fade-in-d1">
+      <div class="card">
+        <h3 class="accent">What You're Building</h3>
+        <ul>
+          <li><span class="bold">Institutional memory</span> that never leaves with an employee</li>
+          <li><span class="bold">Operational consistency</span> &mdash; same quality, every day, across every team</li>
+          <li><span class="bold">Scalable expertise</span> &mdash; add roles without headcount</li>
+          <li><span class="bold">Faster onboarding</span> &mdash; new hires inherit accumulated knowledge</li>
+          <li><span class="bold">Complete audit trail</span> &mdash; every decision logged and traceable</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">What It Costs</h3>
+        <div class="cost-row"><span>Daily briefing (per department)</span><span class="accent">~$0.52</span></div>
+        <div class="cost-row"><span>Per conversation turn</span><span>~$0.03-0.15</span></div>
+        <div class="cost-row"><span>Monthly (5 roles, active use)</span><span>~$30-80</span></div>
+        <div class="cost-row" style="border-bottom: 2px solid var(--accent);"><span class="bold" style="color: var(--text);">Annual estimate (per dept)</span><span class="accent">~$400-1,000</span></div>
+        <p style="margin-top: 12px; font-size: 0.95rem;" class="dim">Compare: one FTE doing this work is $60-120K/year fully loaded</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 13: Scales Across Departments -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">Deploy Anywhere in the Organization</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <p class="big-text fade-in-d1" style="margin-bottom: 36px;">
+      Same framework, any department. <span class="bold">Connect data sources. Define skills in YAML. Deploy to Slack.</span>
+    </p>
+
+    <div class="grid-4 max-1200 fade-in-d2">
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="accent">Marketing</h3>
+        <p>Campaign optimization, spend analysis, creative performance</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="blue">Finance</h3>
+        <p>Budget pacing, variance analysis, AP/AR, forecasting</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="purple">Sales</h3>
+        <p>Pipeline health, lead scoring, deal velocity, CRM hygiene</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="green">Operations</h3>
+        <p>Inventory optimization, vendor management, logistics coordination</p>
+      </div>
+    </div>
+
+    <div class="grid-4 max-1200 fade-in-d3" style="margin-top: 16px;">
+      <div class="card card-sm" style="text-align: center;">
+        <h3 class="orange">HR</h3>
+        <p>Recruiting pipeline, retention signals, compliance tracking</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3>Customer Success</h3>
+        <p>Health scoring, churn prediction, renewal readiness</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3>IT</h3>
+        <p>System health, error diagnosis, cost monitoring, incident response</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <h3>Legal &amp; Compliance</h3>
+        <p>Contract review, regulatory tracking, risk assessment</p>
+      </div>
+    </div>
+
+    <p class="fade-in-d4" style="margin-top: 20px; font-size: 1.05rem;">
+      <span class="dim">Same approval pipeline. Same memory system. Same human oversight. Different connectors and skills.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 14: Safety & Governance -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">Enterprise-Grade Governance</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-3 max-1100 fade-in-d1">
+      <div class="card">
+        <h3 class="accent">Human Stewardship</h3>
+        <p>Every AI role has a designated human steward &mdash; personally accountable for that agent's behavior, outputs, and evolution. Approval routing, escalation, and performance review all flow through the steward.</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Information Security</h3>
+        <p>Four clearance levels control what data each agent can access. Skills gated by minimum clearance. Inter-agent data filtered. Full RBAC for human users.</p>
+        <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+          <span class="badge badge-green" style="font-size:0.7rem;">PUBLIC</span>
+          <span class="badge badge-blue" style="font-size:0.7rem;">INTERNAL</span>
+          <span class="badge badge-orange" style="font-size:0.7rem;">CONFIDENTIAL</span>
+          <span class="badge badge-red" style="font-size:0.7rem;">RESTRICTED</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="accent">Audit Everything</h3>
+        <p>Every agent action, every approval, every rejection, every cost &mdash; logged with full context. Steward attribution at time of action. Immutable audit trail for compliance.</p>
+      </div>
+    </div>
+
+    <p class="fade-in-d2" style="margin-top: 24px; font-size: 1.05rem;">
+      <span class="dim">Agents <span class="bold red">cannot</span> modify their own safety controls, their own steward, or bypass the approval pipeline.</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 15: The Long Game -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Long-Term Vision</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-3 max-1100 fade-in-d1">
+      <div class="card" style="border-top: 3px solid var(--green);">
+        <h3 class="green">Phase 1: Prove</h3>
+        <p>Start with one department. Low-risk, repetitive analysis tasks. Build trust through daily use. Let the system demonstrate value over 30&ndash;60 days.</p>
+        <span class="badge badge-green" style="align-self: flex-start; margin-top: auto;">Months 1&ndash;2</span>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--blue);">
+        <h3 class="blue">Phase 2: Expand</h3>
+        <p>Add complexity within the first department. Enable auto-approval for proven patterns. Deploy a second and third department. Cross-department collaboration begins.</p>
+        <span class="badge badge-blue" style="align-self: flex-start; margin-top: auto;">Months 3&ndash;6</span>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--purple);">
+        <h3 class="purple">Phase 3: Transform</h3>
+        <p>AI employees across the organization. Agents collaborate, share context, propose improvements. Living institutional knowledge that compounds every day.</p>
+        <span class="badge badge-purple" style="align-self: flex-start; margin-top: auto;">Month 6+</span>
+      </div>
+    </div>
+
+    <p class="fade-in-d2" style="margin-top: 28px; font-size: 1.1rem; max-width: 800px;">
+      <span class="dim">Every day the system runs, it accumulates more expertise. The advantage over organizations without this <span class="bold">compounds over time.</span></span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 16: What's Already Built -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">This Isn't a Concept &mdash; It's Built</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="grid-3 max-1100 fade-in-d1">
+      <div class="card card-sm" style="text-align: center;">
+        <div class="num">55</div>
+        <p>MCP Tools wired</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <div class="num">15</div>
+        <p>Durable workflows</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <div class="num">3,100+</div>
+        <p>Automated tests</p>
+      </div>
+    </div>
+
+    <div class="grid-2 max-1100 fade-in-d2" style="margin-top: 20px;">
+      <div class="card card-sm">
+        <h3 class="accent">Platform Capabilities</h3>
+        <ul style="font-size: 1rem;">
+          <li>Pluggable connector architecture &mdash; any API, any data source</li>
+          <li>Daily briefings with three-model cost optimization</li>
+          <li>Conversational mode &mdash; talk to any role in Slack threads</li>
+          <li>Approval pipeline with graduated trust (auto-execute rules)</li>
+          <li>Persistent memory + post-run reflection + skill evolution</li>
+          <li>Listen-only meeting bot (joins calls, captures transcripts, summarizes)</li>
+          <li>Human stewardship &mdash; accountability for every agent</li>
+        </ul>
+      </div>
+      <div class="card card-sm">
+        <h3 class="accent">Safety &amp; Trust</h3>
+        <ul style="font-size: 1rem;">
+          <li>Configurable safety caps on all write operations</li>
+          <li>Every action audit-logged with full attribution</li>
+          <li>Double-execution prevention</li>
+          <li>Agents <span class="red">cannot</span> modify their own safety controls</li>
+          <li>Skill proposals always require human review</li>
+          <li>Information security &mdash; 4 clearance levels + RBAC</li>
+          <li>Pre-action checks against accumulated lessons</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 17: The Ask -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Path Forward</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <div class="max-900 fade-in-d1" style="width: 100%;">
+      <div class="grid-2" style="margin-bottom: 32px;">
+        <div class="card">
+          <h3 class="accent">Start Small</h3>
+          <p>Pick one department. Identify the repetitive, time-consuming analysis your team does every day. Deploy AI roles for those tasks. Measure time saved, insights surfaced, and decisions improved over 30 days.</p>
+        </div>
+        <div class="card">
+          <h3 class="accent">Scale With Confidence</h3>
+          <p>As trust builds, expand scope. Enable auto-approval for proven patterns. Add departments. Each day the system runs, it knows more about your business than it did the day before.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="big-text fade-in-d2" style="font-size: 1.4rem; margin-top: 16px;">
+      The question isn't whether AI employees are coming.<br>
+      It's whether we build our <span class="accent bold">institutional advantage</span> now<br>
+      or play catch-up later.
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SLIDE 18: Thank You -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <div class="fade-in">
+      <img src="../SLACK IMAGE_square.png" alt="Project Sidera" style="width: 140px; height: 140px; border-radius: 24px; margin-bottom: 24px; box-shadow: 0 0 60px rgba(8, 117, 108, 0.4);">
+    </div>
+    <h1 class="fade-in-d1">Thank You</h1>
+    <p class="big-text fade-in-d2" style="font-size: 1.3rem; margin-top: 16px;">
+      Questions?
+    </p>
+    <p class="fade-in-d3" style="font-size: 1rem; color: var(--text-dim); margin-top: 60px;">
+      <span style="color: rgba(255,255,255,0.25);">&#9660; Technical deep-dive follows &#9660;</span>
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX: SECTION DIVIDER -->
+  <!-- ============================================================ -->
+  <div class="slide section-divider center">
+    <img src="../SLACK IMAGE_square.png" alt="Sidera" class="fade-in" style="width: 80px; height: 80px; border-radius: 16px; margin-bottom: 20px; opacity: 0.6;">
+    <span class="badge badge-purple fade-in" style="margin-bottom: 16px;">Appendix</span>
+    <h1 class="fade-in-d1">Technical <span class="purple">Deep Dive</span></h1>
+    <p class="big-text fade-in-d2" style="font-size: 1.2rem;">
+      Architecture, systems, and the decisions behind them.
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 1: System Architecture -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">System Architecture</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 16px;">
+      <div class="card">
+        <h3 class="accent">Core Stack</h3>
+        <ul>
+          <li><span class="bold">Agent:</span> Anthropic Claude API (Python SDK)</li>
+          <li><span class="bold">Orchestration:</span> Inngest durable functions</li>
+          <li><span class="bold">Database:</span> PostgreSQL (Supabase)</li>
+          <li><span class="bold">Cache:</span> Redis (Upstash)</li>
+          <li><span class="bold">API:</span> FastAPI</li>
+          <li><span class="bold">Notifications:</span> Slack Bolt SDK</li>
+          <li><span class="bold">Deploy:</span> Railway</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">By the Numbers</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <div><div class="num">6</div><p>API Connectors</p></div>
+          <div><div class="num">55</div><p>MCP Tools</p></div>
+          <div><div class="num">19</div><p>YAML Skills</p></div>
+          <div><div class="num">15</div><p>Inngest Workflows</p></div>
+          <div><div class="num">105</div><p>DB Methods</p></div>
+          <div><div class="num">3100+</div><p>Tests</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 2: Model Routing & Cost -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Intelligent Model Routing</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 24px;">Each daily briefing uses three AI models, each optimized for its job. Total cost: ~$0.52 vs. $1.50-3.00 single-model.</p>
+
+    <div class="grid-3 w-full fade-in-d1">
+      <div class="card" style="border-top: 3px solid var(--green);">
+        <span class="badge badge-green">Phase 1</span>
+        <h3>Haiku</h3>
+        <p>Data collection. Pulls raw numbers from connected systems via tool calls.</p>
+        <p style="margin-top: auto; font-family: 'JetBrains Mono'; font-size: 0.95rem; color: var(--green);">~$0.02</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--blue);">
+        <span class="badge badge-blue">Phase 2</span>
+        <h3>Sonnet</h3>
+        <p>Tactical analysis. Identifies anomalies, trends, and actionable recommendations.</p>
+        <p style="margin-top: auto; font-family: 'JetBrains Mono'; font-size: 0.95rem; color: var(--blue);">~$0.15</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--purple);">
+        <span class="badge badge-purple">Phase 3</span>
+        <h3>Opus</h3>
+        <p>Strategic layer. Cross-functional insights, portfolio thinking. <em>Skipped on stable days.</em></p>
+        <p style="margin-top: auto; font-family: 'JetBrains Mono'; font-size: 0.95rem; color: var(--purple);">~$0.35</p>
+      </div>
+    </div>
+
+    <p class="fade-in-d2 dim" style="margin-top: 16px; font-size: 0.95rem;">
+      Opus auto-skips when volatility &lt; 10%. Haiku failure falls back to cached data with a warning banner. Future: hybrid routing to cheaper models for structured tasks.
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 3: Skill System -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in" style="font-size: 2.2rem;">The Skill System</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 12px; font-size: 1.1rem;">Skills are YAML files &mdash; version controlled, human-readable, and composable.</p>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 8px;">
+      <div class="card" style="padding: 20px; gap: 8px;">
+        <h3 class="accent" style="font-size: 1.1rem;">Three-Level Hierarchy</h3>
+        <ul style="font-size: 0.95rem;">
+          <li style="padding: 4px 0;"><span class="bold">Department</span> &rarr; shared context, vocabulary</li>
+          <li style="padding: 4px 0;"><span class="bold">Role</span> &rarr; persona, principles, schedule</li>
+          <li style="padding: 4px 0;"><span class="bold">Skill</span> &rarr; specific task definition</li>
+        </ul>
+        <p class="dim" style="font-size: 0.85rem; margin-top: 4px;">Context flows down: dept + role + skill compose into one prompt.</p>
+      </div>
+      <div class="card" style="padding: 20px; gap: 8px;">
+        <h3 class="accent" style="font-size: 1.1rem;">Example: One Role, 11 Skills</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px;">
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Anomaly Detector</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Performance Analysis</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Budget Reallocation</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Budget Pacing</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Trend Detection</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Strategy Review</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Data Quality Audit</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Time-of-Day Analysis</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Segment Performance</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">Benchmark Analysis</span>
+          <span class="badge badge-accent" style="font-size: 0.75rem;">System Health Check</span>
+        </div>
+        <p class="dim" style="font-size: 0.85rem; margin-top: 4px;">Each skill is a YAML file. No code changes needed to add new capabilities.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 4: Manager Delegation -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Manager Delegation Pipeline</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 24px;">A manager is just a role with a <code>manages</code> field. No new tables, no new abstractions.</p>
+
+    <div class="step-flow fade-in-d1" style="max-width: 100%;">
+      <div class="step-box">
+        <h3 class="blue">Own Skills</h3>
+        <p>Runs its own briefing skills first</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue">Delegation</h3>
+        <p>LLM decides which sub-roles to activate</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue">Sub-Role Execution</h3>
+        <p>Each sub-role runs with full tool access</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue">Synthesis</h3>
+        <p>LLM combines all outputs into unified briefing</p>
+      </div>
+    </div>
+
+    <div class="grid-2 w-full fade-in-d2" style="margin-top: 24px;">
+      <div class="card card-sm">
+        <h3>Delegation Fallback</h3>
+        <p>If the delegation LLM call fails, activates <em>all</em> sub-roles. Safe default &mdash; never loses data.</p>
+      </div>
+      <div class="card card-sm">
+        <h3>Recursive Managers</h3>
+        <p>Managers can manage other managers. Depth limit of 3 prevents runaway chains. Mirrors real org hierarchy.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 5: Approval & Safety -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Safety Architecture</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div class="card">
+        <h3 class="accent">Write Operation Safety</h3>
+        <ul>
+          <li><span class="bold">Configurable safety caps</span> &mdash; limit the scope of any single action</li>
+          <li><span class="bold">Double-execution prevention</span> &mdash; <code>executed_at</code> field blocks re-runs</li>
+          <li><span class="bold">Previous values stored</span> &mdash; every change is rollback-ready</li>
+          <li><span class="bold">Approval-gated</span> &mdash; every write needs explicit human approval or matching auto-rule</li>
+          <li><span class="bold">Pre-action lesson check</span> &mdash; blocks execution when past lessons contradict</li>
+          <li><span class="bold">Evidence snapshots</span> &mdash; pre-action metrics captured for audit</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">Graduated Trust (Auto-Execute)</h3>
+        <ul>
+          <li>YAML rules per role define what <em>can</em> auto-execute</li>
+          <li>10 condition operators (less_than, between, equals, etc.)</li>
+          <li>Constraints: daily limits, cooldown periods, platform restrictions</li>
+          <li>Global kill switch (default: OFF)</li>
+          <li><span class="bold red">Skill proposals NEVER auto-execute</span> &mdash; hard block</li>
+          <li>Human steward accountable for each agent's behavior</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card fade-in-d2 w-full" style="margin-top: 16px;">
+      <h3 class="accent">Information Security</h3>
+      <p>Four clearance levels: <span class="badge badge-green" style="font-size:0.7rem;">PUBLIC</span> <span class="badge badge-blue" style="font-size:0.7rem;">INTERNAL</span> <span class="badge badge-orange" style="font-size:0.7rem;">CONFIDENTIAL</span> <span class="badge badge-red" style="font-size:0.7rem;">RESTRICTED</span> &mdash; Skills gated by minimum clearance. Roles have clearance levels. Inter-agent data filtered by clearance.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 6: Conversational Mode -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Conversational Mode</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 20px;">Every role is dual-mode: <span class="bold">autonomous</span> (scheduled briefings) and <span class="bold">conversational</span> (Slack threads).</p>
+
+    <div class="grid-2 w-full fade-in-d1">
+      <div class="card">
+        <h3 class="accent">How It Works</h3>
+        <ul>
+          <li><code>@Sidera talk to the [role name]</code> starts a thread</li>
+          <li>RoleRouter identifies the role (regex + semantic fallback)</li>
+          <li>Thread pinned to one role via DB (thread_ts &rarr; role_id)</li>
+          <li>Each reply triggers a new agent turn with full tool access</li>
+          <li>Automatic memory extraction after every turn</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">Write Ops in Conversations</h3>
+        <ul>
+          <li>Agent generates recommendations in response</li>
+          <li>System extracts them, posts Approve/Reject buttons in-thread</li>
+          <li>On approval, executes via connector and posts result</li>
+          <li>Manager roles can delegate to sub-roles mid-conversation</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-3 w-full fade-in-d2" style="margin-top: 16px;">
+      <div class="card card-sm" style="text-align: center;">
+        <p class="num" style="font-size: 2rem;">20</p>
+        <p>Max turns per thread</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <p class="num" style="font-size: 2rem;">24h</p>
+        <p>Thread timeout</p>
+      </div>
+      <div class="card card-sm" style="text-align: center;">
+        <p class="num" style="font-size: 2rem;">$5</p>
+        <p>Cost cap per thread</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 7: Memory System -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Memory System</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div class="card">
+        <h3 class="accent">Tiered Architecture</h3>
+        <ul>
+          <li><span class="bold green">Hot memories</span> (&le; 90 days) &mdash; auto-injected into every role run, capped at 2000 tokens</li>
+          <li><span class="bold blue">Cold archive</span> (&gt; 90 days) &mdash; never deleted, searchable via MCP tool</li>
+          <li><span class="bold">Weekly consolidation</span> &mdash; merges similar memories, prevents bloat</li>
+          <li><span class="bold">Memory index</span> &mdash; when >20 memories, compact index with on-demand loading</li>
+          <li><span class="bold">Memory versioning</span> &mdash; supersedes_id chains track evolution</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">Memory Types (8)</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+          <span class="badge badge-accent">Decision</span>
+          <span class="badge badge-orange">Anomaly</span>
+          <span class="badge badge-blue">Pattern</span>
+          <span class="badge badge-purple">Insight</span>
+          <span class="badge badge-green">Lesson</span>
+          <span class="badge badge-red">Commitment</span>
+          <span class="badge" style="background: rgba(255,255,255,0.08); color: var(--text-dim);">Relationship</span>
+          <span class="badge" style="background: rgba(240,151,59,0.15); color: var(--orange);">Steward Note</span>
+        </div>
+        <p style="margin-top: 16px;">Steward notes: highest priority, injected first, only humans can create. Decisions from approvals. Lessons from reflection. Commitments from conversations.</p>
+      </div>
+    </div>
+
+    <div class="card fade-in-d2 w-full" style="margin-top: 16px;">
+      <h3 class="accent">Post-Run Reflection + Lesson-Principle Linking</h3>
+      <p>After every role run, the agent asks: "What was hard? What data was missing?" Answers saved as lesson memories. Each lesson linked to the role's decision-making principles. Compounding value &mdash; agents learn from every single run.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 8: Skill & Role Evolution -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Self-Improving Agents</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div class="card">
+        <h3 class="accent">Skill Evolution</h3>
+        <p>Agents propose changes to their own skill definitions via MCP tool. Same approval pipeline as any other action:</p>
+        <div style="margin-top: 12px;">
+          <p style="font-size: 1rem;">Agent proposes &rarr; Approval queue &rarr; Human reviews diff &rarr; Approve/Reject &rarr; Written to DB</p>
+        </div>
+        <p style="margin-top: 12px;">Graduated evidence thresholds: 3 lessons &rarr; guidance only, 5 &rarr; +supplements, 7 &rarr; +prompts/model.</p>
+        <p style="margin-top: 8px;"><span class="bold red">FORBIDDEN FIELDS:</span> <code>requires_approval</code>, <code>manages</code>, <code>is_active</code></p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Role Evolution</h3>
+        <p>Department heads can propose new roles or modify existing ones:</p>
+        <ul>
+          <li>Only managers can propose</li>
+          <li>Department-scoped &mdash; can't create roles outside their dept</li>
+          <li>New roles auto-added to manager's <code>manages</code> list</li>
+          <li>NEVER auto-executes</li>
+        </ul>
+        <p style="margin-top: 12px;">Reflection &rarr; skill evolution pipeline: recurring friction (3+ lessons) auto-generates improvement proposals.</p>
+      </div>
+    </div>
+
+    <div class="card fade-in-d2 w-full" style="margin-top: 16px;">
+      <h3 class="accent">Dynamic Org Chart</h3>
+      <p>YAML on disk is seed data. Database is the override layer. Slack commands + REST API for runtime management. All mutations audit-logged. Soft delete. Graceful DB fallback to disk-only.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 9: Connectors & Integrations -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Connectors &amp; Integrations</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div>
+        <h3 style="font-size: 1.1rem; margin-bottom: 12px;">Pluggable Connector Architecture</h3>
+        <table>
+          <tr><td><span class="bold">Google Ads</span></td><td>13 methods (read + write)</td></tr>
+          <tr><td><span class="bold">Meta Ads</span></td><td>13 methods (read + write)</td></tr>
+          <tr><td><span class="bold">BigQuery</span></td><td>7 methods (data warehouse)</td></tr>
+          <tr><td><span class="bold">Google Drive</span></td><td>13 methods (Docs, Sheets, Slides)</td></tr>
+          <tr><td><span class="bold">Slack</span></td><td>16 methods (messaging &amp; approvals)</td></tr>
+          <tr><td><span class="bold">Recall.ai</span></td><td>Meeting bot + transcript capture</td></tr>
+        </table>
+        <p class="dim" style="font-size: 0.9rem; margin-top: 12px;">New connectors follow a template pattern. Salesforce, Jira, Stripe, HubSpot, Shopify &mdash; any system with an API.</p>
+      </div>
+      <div>
+        <h3 style="font-size: 1.1rem; margin-bottom: 12px;">Production Hardening</h3>
+        <ul>
+          <li><span class="bold">Retry with backoff</span> &mdash; exponential + jitter, 3 retries, all connectors</li>
+          <li><span class="bold">Token encryption</span> &mdash; Fernet symmetric, <code>enc:</code> prefix convention</li>
+          <li><span class="bold">Dead letter queue</span> &mdash; <code>failed_runs</code> table for replay</li>
+          <li><span class="bold">Proactive token refresh</span> &mdash; scheduled cron, 7-day lookahead</li>
+          <li><span class="bold">Sentry</span> &mdash; error monitoring in all workflows + connectors</li>
+          <li><span class="bold">Rate limiting</span> &mdash; API-level throttling</li>
+          <li><span class="bold">Redis caching</span> &mdash; <code>@cached</code> decorator, configurable TTL</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 10: Listen-Only Meetings -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Listen-Only Meeting Participation</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 20px;">Manager roles can join live video calls as listen-only participants via Recall.ai bot.</p>
+
+    <div class="step-flow fade-in-d1" style="max-width: 100%;">
+      <div class="step-box">
+        <h3 class="blue" style="font-size: 1rem;">Recall.ai</h3>
+        <p style="font-size: 0.85rem;">Bot joins meeting via URL</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue" style="font-size: 1rem;">Webhooks</h3>
+        <p style="font-size: 0.85rem;">Real-time transcript capture</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue" style="font-size: 1rem;">Claude</h3>
+        <p style="font-size: 0.85rem;">Post-call summary &amp; analysis</p>
+      </div>
+      <div class="step-arrow">&rarr;</div>
+      <div class="step-box">
+        <h3 class="blue" style="font-size: 1rem;">Manager</h3>
+        <p style="font-size: 0.85rem;">Delegation pipeline &amp; action items</p>
+      </div>
+    </div>
+
+    <div class="grid-2 w-full fade-in-d2" style="margin-top: 20px;">
+      <div class="card card-sm">
+        <h3>Post-Call Pipeline</h3>
+        <p>Transcript summary &rarr; action item extraction &rarr; manager delegation pipeline. Automatic follow-up via normal Slack approval flow. Meeting context fed into next briefing.</p>
+      </div>
+      <div class="card card-sm">
+        <h3>Control</h3>
+        <p>Slack commands: <code>/sidera meeting join &lt;url&gt;</code>, <code>meeting status</code>, <code>meeting leave &lt;bot_id&gt;</code>. Limits: 2h max, $10/session cost cap. Full session tracking in DB.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 11: Stewardship -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Human Stewardship</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 16px;">Every AI role has a designated human steward &mdash; accountable for that agent's behavior, outputs, and evolution.</p>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 8px;">
+      <div class="card">
+        <h3 class="accent">What Stewards Do</h3>
+        <ul>
+          <li><span class="bold">Approval routing</span> &mdash; steward notified first on recommendations</li>
+          <li><span class="bold">Skill evolution gating</span> &mdash; only steward can approve agent self-improvement</li>
+          <li><span class="bold">Memory curation</span> &mdash; inject steward notes (highest priority, agent can't override)</li>
+          <li><span class="bold">Escalation target</span> &mdash; notified on errors, cost spikes, repeated rejections</li>
+          <li><span class="bold">Principles ownership</span> &mdash; steward controls agent's decision heuristics</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">Controls</h3>
+        <ul>
+          <li>Slack: <code>/sidera steward list|show|assign|release|note</code></li>
+          <li>REST API: 6 endpoints on <code>/api/stewardship/</code></li>
+          <li>Agents CANNOT modify their own steward</li>
+          <li>Full audit trail of all stewardship transfers</li>
+          <li><code>steward_user_id</code> on approval_queue + audit_log</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 12: Workflow Engine -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Workflow Engine</h2>
+    <div class="divider fade-in"></div>
+    <p class="fade-in" style="margin-bottom: 16px;">Inngest durable functions &mdash; not always-on processes. Cron triggers, checkpointed steps, async human approval.</p>
+
+    <div class="grid-3 w-full fade-in-d1" style="margin-top: 8px;">
+      <div class="card card-sm">
+        <h3 class="accent">Scheduled</h3>
+        <p>Daily briefing cron<br>Skill scheduler<br>Token refresh<br>Data retention<br>Heartbeat runner</p>
+      </div>
+      <div class="card card-sm">
+        <h3 class="accent">Event-Driven</h3>
+        <p>Skill runner<br>Role runner<br>Department runner<br>Manager runner<br>Conversation turn</p>
+      </div>
+      <div class="card card-sm">
+        <h3 class="accent">Specialized</h3>
+        <p>Meeting join<br>Meeting end<br>Cost monitor<br>Memory consolidation<br>Approval execution</p>
+      </div>
+    </div>
+
+    <div class="card fade-in-d2 w-full" style="margin-top: 16px;">
+      <h3>Why Inngest, Not Celery?</h3>
+      <p>Durable by default &mdash; steps are checkpointed and retried. No broker to manage. Async human approval is a first-class pattern (pause workflow, resume on event). Dead letter queue for failures. Visual dashboard for debugging. Serverless-compatible.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 13: Cost Architecture -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Cost Architecture</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div class="card">
+        <h3 class="accent">Daily Briefing Cost</h3>
+        <div class="cost-row"><span>Phase 1 (Haiku &mdash; data collection)</span><span>~$0.02</span></div>
+        <div class="cost-row"><span>Phase 2 (Sonnet &mdash; analysis)</span><span>~$0.15</span></div>
+        <div class="cost-row"><span>Phase 3 (Opus &mdash; strategy)</span><span>~$0.35</span></div>
+        <div class="cost-row"><span>Manager overhead (delegation + synthesis)</span><span>~$0.28</span></div>
+        <div class="cost-row"><span>Post-run reflection</span><span>~$0.01</span></div>
+        <div class="cost-row" style="border-bottom: 2px solid var(--accent);"><span class="bold" style="color: var(--text);">Total per briefing</span><span class="accent">~$0.81</span></div>
+        <p style="margin-top: 12px; font-size: 0.95rem;" class="dim">Opus skipped on stable days (&lt; 10% volatility) saves $0.35</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">Other Costs</h3>
+        <div class="cost-row"><span>Conversation turn (Sonnet)</span><span>~$0.03-0.15</span></div>
+        <div class="cost-row"><span>Skill routing (Haiku)</span><span>~$0.001</span></div>
+        <div class="cost-row"><span>Role routing (Haiku)</span><span>~$0.001</span></div>
+        <div class="cost-row"><span>Heartbeat turn</span><span>~$0.03-0.10</span></div>
+        <div class="cost-row"><span>Memory consolidation (weekly)</span><span>~$0.05</span></div>
+        <div style="margin-top: 16px;">
+          <h3 style="font-size: 1rem;">Cost Controls</h3>
+          <ul>
+            <li>$10/day per account hard cap</li>
+            <li>$5/thread conversation cap</li>
+            <li>$0.50/heartbeat turn cap</li>
+            <li>$10/meeting session cap</li>
+            <li>20 tool calls/cycle circuit breaker</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 14: Autonomous Behaviors -->
+  <!-- ============================================================ -->
+  <div class="slide left">
+    <h2 class="fade-in">Autonomous Behaviors</h2>
+    <div class="divider fade-in"></div>
+
+    <div class="grid-2 w-full fade-in-d1" style="margin-top: 12px;">
+      <div class="card">
+        <h3 class="accent">Proactive Heartbeats</h3>
+        <p>Roles wake up on configurable cron schedules and freely investigate their domain.</p>
+        <ul>
+          <li>Configurable per role (every 15 min, hourly, business hours only, etc.)</li>
+          <li>Open-ended investigation &mdash; no pre-defined task</li>
+          <li>Findings posted to Slack automatically</li>
+          <li>Cooldown prevents rapid-fire runs</li>
+          <li>Global kill switch for safety</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="accent">Peer-to-Peer Messaging</h3>
+        <p>Roles communicate asynchronously without manager mediation.</p>
+        <ul>
+          <li>MCP tools: <code>send_message_to_role</code>, <code>check_inbox</code>, <code>reply_to_message</code></li>
+          <li>Messages injected into context on next run</li>
+          <li>Anti-loop: max 3 messages/run, max 5 chain depth</li>
+          <li>Self-messaging blocked</li>
+          <li>Stale message expiry via data retention workflow</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APPENDIX 15: The Big Picture -->
+  <!-- ============================================================ -->
+  <div class="slide center">
+    <h2 class="fade-in">The Big Picture</h2>
+    <div class="divider fade-in" style="margin: 8px auto 32px;"></div>
+
+    <p class="big-text fade-in-d1" style="max-width: 1000px;">
+      Sidera is not a chatbot. It's a <span class="bold">framework for building AI workforces</span> &mdash;
+      teams of specialized agents with roles, memory, principles, and safety controls,
+      orchestrated through durable workflows and gated by human approval.
+    </p>
+
+    <p class="fade-in-d2" style="margin-top: 40px; font-size: 1.1rem; color: var(--text-dim);">
+      The accumulated expertise in each skill &mdash; the context, examples, guidelines, and learned memories &mdash;<br>
+      is the product. The framework just runs it.
+    </p>
+
+    <p class="fade-in-d3" style="margin-top: 60px; font-size: 0.9rem; color: rgba(255,255,255,0.2);">
+      55 tools &bull; 15 workflows &bull; 6 connectors &bull; 105 DB methods &bull; 3100+ tests
+    </p>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prev()" title="Previous (&#8592;)">&#8592;</button>
+  <button onclick="next()" title="Next (&#8594;)">&#8594;</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  let current = 0;
+
+  function show(n) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(n, slides.length - 1));
+    slides[current].classList.add('active');
+    progress.style.width = ((current + 1) / slides.length * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+  }
+
+  function next() { show(current + 1); }
+  function prev() { show(current - 1); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+    if (e.key === 'Home') { e.preventDefault(); show(0); }
+    if (e.key === 'End') { e.preventDefault(); show(slides.length - 1); }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+  });
+
+  show(0);
+</script>
+
+</body>
+</html>

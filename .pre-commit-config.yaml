@@ -1,0 +1,49 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Sidera — Pre-commit Hooks
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Install:  pip install pre-commit && pre-commit install
+# Run all:  pre-commit run --all-files
+# Skip:     git commit --no-verify  (emergency only)
+# ──────────────────────────────────────────────────────────────────────────────
+
+repos:
+  # ── Ruff (lint + format) ──────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        types_or: [python, pyi]
+
+  # ── Standard pre-commit hooks ─────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: debug-statements
+      - id: detect-private-key
+
+  # ── Doc sync (fast mode — AST counting, no pytest) ───────────────────────
+  - repo: local
+    hooks:
+      - id: doc-sync
+        name: doc sync check
+        entry: python scripts/doc_sync.py --skip-pytest --check-only
+        language: python
+        pass_filenames: false
+        always_run: true
+        # Only run when source files change (not on README-only edits to avoid loops)
+        files: \.(py|yaml)$
