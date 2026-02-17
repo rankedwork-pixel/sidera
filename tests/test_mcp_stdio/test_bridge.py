@@ -23,8 +23,8 @@ import src.mcp_servers.meeting  # noqa: F401
 import src.mcp_servers.memory  # noqa: F401
 import src.mcp_servers.messaging  # noqa: F401
 import src.mcp_servers.meta  # noqa: F401
-import src.mcp_servers.slack  # noqa: F401
 import src.mcp_servers.skill_runner  # noqa: F401
+import src.mcp_servers.slack  # noqa: F401
 import src.mcp_servers.system  # noqa: F401
 from src.agent.tool_registry import get_global_registry
 from src.mcp_stdio.bridge import (

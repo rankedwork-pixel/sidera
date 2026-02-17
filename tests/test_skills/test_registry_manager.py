@@ -7,12 +7,42 @@ of ``manages`` references, and circular reference detection.
 
 from __future__ import annotations
 
+import io
+import re
 import textwrap
 from pathlib import Path
 
 import pytest
+import structlog
 
 from src.skills.registry import SkillRegistry
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+@pytest.fixture()
+def log_output():
+    """Capture structlog output to a StringIO buffer.
+
+    Structlog's PrintLoggerFactory caches the file reference at config time,
+    which defeats both capsys and capfd after the MCP stdio server module
+    reconfigures structlog globally.  This fixture creates a fresh buffer
+    and reconfigures structlog to write to it.
+    """
+    buf = io.StringIO()
+    structlog.reset_defaults()
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(file=buf),
+        cache_logger_on_first_use=False,
+    )
+    yield buf
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -264,7 +294,7 @@ class TestCrossValidation:
     def test_warns_on_missing_managed_role(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         _make_dept(tmp_path)
         _make_role(
@@ -278,13 +308,13 @@ class TestCrossValidation:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "managed_role_not_found" in output
 
     def test_warns_on_self_reference(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         _make_dept(tmp_path)
         _make_role(
@@ -298,13 +328,13 @@ class TestCrossValidation:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "self_reference" in output
 
     def test_warns_on_circular_reference(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         _make_dept(tmp_path)
         _make_role(
@@ -325,13 +355,13 @@ class TestCrossValidation:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "circular_reference" in output
 
     def test_no_warning_for_valid_references(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         _make_dept(tmp_path)
         _make_role(tmp_path, "marketing", "buyer", briefing_skills=["s1"])
@@ -347,7 +377,7 @@ class TestCrossValidation:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "managed_role_not_found" not in output
         assert "self_reference" not in output
         assert "circular_reference" not in output
@@ -360,7 +390,7 @@ class TestDepthLimit:
     def test_warns_on_deep_nesting(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         """5 levels of management (depth > 3) triggers depth_exceeded."""
         _make_dept(tmp_path)
@@ -382,13 +412,13 @@ class TestDepthLimit:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "depth_exceeded" in output
 
     def test_three_levels_ok(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         """3 levels of management is within limits (no depth warning)."""
         _make_dept(tmp_path)
@@ -405,7 +435,7 @@ class TestDepthLimit:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "depth_exceeded" not in output
 
 
@@ -484,7 +514,7 @@ class TestLoadAllLogging:
     def test_log_includes_managers_count(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        log_output: io.StringIO,
     ) -> None:
         _make_dept(tmp_path)
         _make_role(tmp_path, "marketing", "buyer", briefing_skills=["s1"])
@@ -495,6 +525,6 @@ class TestLoadAllLogging:
         reg = SkillRegistry(skills_dir=tmp_path)
         reg.load_all()
 
-        output = capsys.readouterr().out
+        output = _ANSI_RE.sub("", log_output.getvalue())
         assert "registry.loaded" in output
         assert "managers=1" in output

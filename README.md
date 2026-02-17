@@ -178,7 +178,7 @@ src/
   db/           — Async SQLAlchemy session + 115-method CRUD service
   meetings/     — Listen-only meeting session manager, transcript capture
   middleware/   — Sentry, rate limiting, structured request logging, API auth, RBAC
-  mcp_servers/  — MCP tools for the Claude agent (61 tools — extensible)
+  mcp_servers/  — MCP tools for the Claude agent (62 tools — extensible)
   mcp_stdio/    — MCP stdio server for Claude Code (bridge, meta-tools)
   models/       — Database schema, cross-platform metric normalization
   workflows/    — Inngest durable functions (15 workflows)

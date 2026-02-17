@@ -62,7 +62,7 @@ async def test_list_accounts_happy_path(mock_connector):
     text = result["content"][0]["text"]
 
     assert "is_error" not in result
-    assert "2 Google Ads account(s)" in text
+    assert "2 accessible account(s)" in text
     assert "My Brand Account" in text
     assert "1234567890" in text
     assert "USD" in text
@@ -91,7 +91,7 @@ async def test_list_accounts_no_account_info(mock_connector):
     result = await list_google_ads_accounts.handler({})
     text = result["content"][0]["text"]
 
-    assert "Account ID: 1111111111" in text
+    assert "Manager Account / MCC (ID: 1111111111)" in text
 
 
 @pytest.mark.asyncio

@@ -132,7 +132,7 @@ class SlackConnector:
     """
 
     def __init__(self, credentials: dict[str, str] | None = None) -> None:
-        creds = credentials or self._credentials_from_settings()
+        creds = credentials if credentials is not None else self._credentials_from_settings()
         self._bot_token = creds.get("bot_token", "")
         self._default_channel_id = creds.get("channel_id", "")
         self._client = WebClient(token=self._bot_token)

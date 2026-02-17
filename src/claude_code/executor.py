@@ -270,8 +270,8 @@ class ClaudeCodeExecutor:
         import src.mcp_servers.google_ads  # noqa: F401
         import src.mcp_servers.google_drive  # noqa: F401
         import src.mcp_servers.meta  # noqa: F401
-        import src.mcp_servers.slack  # noqa: F401
         import src.mcp_servers.skill_runner  # noqa: F401
+        import src.mcp_servers.slack  # noqa: F401
         import src.mcp_servers.system  # noqa: F401
 
         if include_context_tools:

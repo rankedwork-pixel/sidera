@@ -7,7 +7,10 @@ and ``test_skill_workflows.py``.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # =====================================================================
 # Constants
@@ -69,3 +72,23 @@ def _make_mock_context(
     ctx.step.send_event = AsyncMock(return_value=["event-id-1"])
 
     return ctx
+
+
+@pytest.fixture(autouse=True)
+def _no_real_db():
+    """Prevent workflow tests from hitting the real database.
+
+    The workflow ``load_accounts()`` inner functions import ``get_db_session``
+    at call time.  When a real DATABASE_URL is set in the environment (e.g.
+    from ``.env``), the DB query succeeds but returns unexpected data, making
+    tests flaky.  This fixture makes the DB path raise so that every workflow
+    falls back to the event-data path.
+    """
+
+    @asynccontextmanager
+    async def _mock_session():
+        raise RuntimeError("DB disabled in tests")
+        yield  # pragma: no cover — never reached, keeps it a generator
+
+    with patch("src.db.session.get_db_session", side_effect=_mock_session):
+        yield

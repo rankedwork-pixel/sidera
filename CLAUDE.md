@@ -168,7 +168,7 @@ src/
   agent/        — Core agent loop, analysis engine, prompts (BASE + SUPPLEMENT + three-phase)
   llm/          — Provider abstraction: LLMProvider protocol, TaskType enum, AnthropicProvider, OpenAICompatibleProvider, hybrid router with fallback
   skills/       — Skill system: schema, registry, router, role router, executor, manager executor, portability (export/import), YAML library (dept/role/skill hierarchy)
-  mcp_servers/  — MCP tools for agent (Google Ads, Meta, BigQuery, Google Drive, Slack, System, Evolution, Meeting, Context, Delegation, Messaging, Orchestration, Code Execution + write_safety) — 61 tools total
+  mcp_servers/  — MCP tools for agent (Google Ads, Meta, BigQuery, Google Drive, Slack, System, Evolution, Meeting, Context, Delegation, Messaging, Orchestration, Code Execution + write_safety) — 62 tools total
   meetings/     — Listen-only meeting session manager, transcript capture
   mcp_stdio/    — MCP stdio server for Claude Code (server, bridge, meta-tools)
   workflows/    — Inngest durable functions (17 workflows: daily briefing, cost monitor, skill/role/dept/manager runners, scheduler, token refresh, conversation turn, meeting join/end, data retention, heartbeat runner, event reactor, working group)
