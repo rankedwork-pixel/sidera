@@ -37,7 +37,7 @@ def registry() -> SkillRegistry:
 
 
 class TestTopLevelCounts:
-    """Verify the registry discovers exactly 3 departments, 6 roles, 23 skills."""
+    """Verify the registry discovers exactly 3 departments, 6 roles, 10 skills."""
 
     def test_department_count(self, registry: SkillRegistry) -> None:
         assert registry.department_count == 3, (
@@ -52,8 +52,8 @@ class TestTopLevelCounts:
         )
 
     def test_skill_count(self, registry: SkillRegistry) -> None:
-        assert registry.count == 23, (
-            f"Expected 23 skills, got {registry.count}. "
+        assert registry.count == 10, (
+            f"Expected 10 skills, got {registry.count}. "
             f"Loaded: {sorted(s.id for s in registry.list_all())}"
         )
 
@@ -170,29 +170,19 @@ class TestRoleDepartmentAssignment:
 class TestRoleBriefingSkills:
     """Verify each role declares the correct briefing_skills."""
 
-    # performance_media_buyer: 12 briefing skills
+    # performance_media_buyer: 3 briefing skills
     EXPECTED_PMB_BRIEFING = sorted(
         [
             "anomaly_detector",
             "creative_analysis",
-            "budget_reallocation",
-            "budget_pacing_check",
-            "creative_fatigue_check",
-            "bid_strategy_review",
-            "search_term_audit",
-            "dayparting_analysis",
-            "geo_performance",
-            "landing_page_analysis",
-            "platform_health_check",
             "fb_creative_cuts",
         ]
     )
 
-    # reporting_analyst: 2 briefing skills
+    # reporting_analyst: 1 briefing skill
     EXPECTED_RA_BRIEFING = sorted(
         [
             "weekly_report",
-            "monthly_report",
         ]
     )
 
@@ -210,10 +200,9 @@ class TestRoleBriefingSkills:
         ]
     )
 
-    # strategist: 2 briefing skills
+    # strategist: 1 briefing skill
     EXPECTED_STRAT_BRIEFING = sorted(
         [
-            "audience_overlap",
             "competitor_benchmark",
         ]
     )
@@ -257,8 +246,8 @@ class TestRoleBriefingSkills:
         registry: SkillRegistry,
     ) -> None:
         role = registry.get_role("performance_media_buyer")
-        assert len(role.briefing_skills) == 12, (
-            f"Expected 12 briefing_skills, got {len(role.briefing_skills)}: "
+        assert len(role.briefing_skills) == 3, (
+            f"Expected 3 briefing_skills, got {len(role.briefing_skills)}: "
             f"{list(role.briefing_skills)}"
         )
 
@@ -274,8 +263,8 @@ class TestRoleBriefingSkills:
         registry: SkillRegistry,
     ) -> None:
         role = registry.get_role("reporting_analyst")
-        assert len(role.briefing_skills) == 2, (
-            f"Expected 2 briefing_skills, got {len(role.briefing_skills)}: "
+        assert len(role.briefing_skills) == 1, (
+            f"Expected 1 briefing_skills, got {len(role.briefing_skills)}: "
             f"{list(role.briefing_skills)}"
         )
 
@@ -291,8 +280,8 @@ class TestRoleBriefingSkills:
         registry: SkillRegistry,
     ) -> None:
         role = registry.get_role("strategist")
-        assert len(role.briefing_skills) == 2, (
-            f"Expected 2 briefing_skills, got {len(role.briefing_skills)}: "
+        assert len(role.briefing_skills) == 1, (
+            f"Expected 1 briefing_skills, got {len(role.briefing_skills)}: "
             f"{list(role.briefing_skills)}"
         )
 
@@ -311,30 +300,17 @@ class TestRoleBriefingSkills:
 
 # Expected mapping: skill_id -> (department_id, role_id)
 SKILL_HIERARCHY = {
-    # ceo (3 skills)
+    # ceo (1 skill)
     "org_health_check": ("executive", "ceo"),
-    "cross_dept_synthesis": ("executive", "ceo"),
-    "escalation_triage": ("executive", "ceo"),
     # head_of_marketing (1 skill)
     "executive_summary": ("marketing", "head_of_marketing"),
-    # performance_media_buyer (12 skills)
+    # performance_media_buyer (3 skills)
     "anomaly_detector": ("marketing", "performance_media_buyer"),
-    "bid_strategy_review": ("marketing", "performance_media_buyer"),
-    "budget_pacing_check": ("marketing", "performance_media_buyer"),
-    "budget_reallocation": ("marketing", "performance_media_buyer"),
     "creative_analysis": ("marketing", "performance_media_buyer"),
-    "creative_fatigue_check": ("marketing", "performance_media_buyer"),
-    "dayparting_analysis": ("marketing", "performance_media_buyer"),
     "fb_creative_cuts": ("marketing", "performance_media_buyer"),
-    "geo_performance": ("marketing", "performance_media_buyer"),
-    "landing_page_analysis": ("marketing", "performance_media_buyer"),
-    "platform_health_check": ("marketing", "performance_media_buyer"),
-    "search_term_audit": ("marketing", "performance_media_buyer"),
-    # reporting_analyst (2 skills)
-    "monthly_report": ("marketing", "reporting_analyst"),
+    # reporting_analyst (1 skill)
     "weekly_report": ("marketing", "reporting_analyst"),
-    # strategist (2 skills)
-    "audience_overlap": ("marketing", "strategist"),
+    # strategist (1 skill)
     "competitor_benchmark": ("marketing", "strategist"),
 }
 
@@ -389,7 +365,7 @@ class TestSkillsPerRole:
         assert ids == expected, (
             f"Missing: {set(expected) - set(ids)}, Extra: {set(ids) - set(expected)}"
         )
-        assert len(skills) == 3
+        assert len(skills) == 1
 
     def test_head_of_marketing_skills(
         self,
@@ -415,7 +391,7 @@ class TestSkillsPerRole:
         assert ids == expected, (
             f"Missing: {set(expected) - set(ids)}, Extra: {set(ids) - set(expected)}"
         )
-        assert len(skills) == 12
+        assert len(skills) == 3
 
     def test_reporting_analyst_skills(
         self,
@@ -425,7 +401,7 @@ class TestSkillsPerRole:
         ids = sorted(s.id for s in skills)
         expected = sorted(k for k, v in SKILL_HIERARCHY.items() if v[1] == "reporting_analyst")
         assert ids == expected
-        assert len(skills) == 2
+        assert len(skills) == 1
 
     def test_strategist_skills(
         self,
@@ -435,15 +411,15 @@ class TestSkillsPerRole:
         ids = sorted(s.id for s in skills)
         expected = sorted(k for k, v in SKILL_HIERARCHY.items() if v[1] == "strategist")
         assert ids == expected
-        assert len(skills) == 2
+        assert len(skills) == 1
 
     def test_all_skills_belong_to_marketing_department(
         self,
         registry: SkillRegistry,
     ) -> None:
         dept_skills = registry.list_skills_for_department("marketing")
-        assert len(dept_skills) == 17, (
-            f"Expected 17 skills in marketing department, got {len(dept_skills)}"
+        assert len(dept_skills) == 6, (
+            f"Expected 6 skills in marketing department, got {len(dept_skills)}"
         )
 
     def test_all_skills_belong_to_executive_department(
@@ -451,8 +427,8 @@ class TestSkillsPerRole:
         registry: SkillRegistry,
     ) -> None:
         dept_skills = registry.list_skills_for_department("executive")
-        assert len(dept_skills) == 3, (
-            f"Expected 3 skills in executive department, got {len(dept_skills)}"
+        assert len(dept_skills) == 1, (
+            f"Expected 1 skill in executive department, got {len(dept_skills)}"
         )
 
 
@@ -661,16 +637,6 @@ class TestCEOSkills:
         assert skill is not None, "Skill 'org_health_check' not found"
         assert skill.model == "sonnet"
 
-    def test_cross_dept_synthesis_model(self, registry: SkillRegistry) -> None:
-        skill = registry.get("cross_dept_synthesis")
-        assert skill is not None, "Skill 'cross_dept_synthesis' not found"
-        assert skill.model == "opus"
-
-    def test_escalation_triage_model(self, registry: SkillRegistry) -> None:
-        skill = registry.get("escalation_triage")
-        assert skill is not None, "Skill 'escalation_triage' not found"
-        assert skill.model == "sonnet"
-
     def test_org_health_check_has_system_tools(self, registry: SkillRegistry) -> None:
         skill = registry.get("org_health_check")
         tools = set(skill.tools_required)
@@ -679,23 +645,11 @@ class TestCEOSkills:
         assert "get_approval_queue_status" in tools
         assert "get_cost_summary" in tools
 
-    def test_escalation_triage_has_messaging(self, registry: SkillRegistry) -> None:
-        skill = registry.get("escalation_triage")
-        tools = set(skill.tools_required)
-        assert "send_message_to_role" in tools
-        assert "send_slack_alert" in tools
-
-    def test_cross_dept_synthesis_has_memory(self, registry: SkillRegistry) -> None:
-        skill = registry.get("cross_dept_synthesis")
-        tools = set(skill.tools_required)
-        assert "save_memory" in tools
-
-    def test_all_ceo_skills_no_approval_required(self, registry: SkillRegistry) -> None:
-        for skill_id in ("org_health_check", "cross_dept_synthesis", "escalation_triage"):
-            skill = registry.get(skill_id)
-            assert not skill.requires_approval, (
-                f"CEO skill '{skill_id}' should not require approval"
-            )
+    def test_org_health_check_no_approval_required(self, registry: SkillRegistry) -> None:
+        skill = registry.get("org_health_check")
+        assert not skill.requires_approval, (
+            "CEO skill 'org_health_check' should not require approval"
+        )
 
 
 class TestCEOContextFiles:

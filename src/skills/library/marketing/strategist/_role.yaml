@@ -27,7 +27,6 @@ connectors:
   - meta
   - bigquery
 briefing_skills:
-  - audience_overlap
   - competitor_benchmark
 context_files: []
 routing_keywords:

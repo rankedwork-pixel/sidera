@@ -32,15 +32,6 @@ connectors:
 briefing_skills:
   - anomaly_detector
   - creative_analysis
-  - budget_reallocation
-  - budget_pacing_check
-  - creative_fatigue_check
-  - bid_strategy_review
-  - search_term_audit
-  - dayparting_analysis
-  - geo_performance
-  - landing_page_analysis
-  - platform_health_check
   - fb_creative_cuts
 schedule: "0 7 * * 1-5"
 context_files: []

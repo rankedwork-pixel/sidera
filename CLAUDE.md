@@ -43,11 +43,11 @@ The core pattern is domain-agnostic: connect data sources → teach skills via Y
   - Hierarchy: Department → Role → Skill (`_department.yaml` + `_role.yaml` config files, context inheritance flows down). Manager roles add a `manages` field to delegate to sub-roles.
   - Folder-based skills — skills can be directories (`skill.yaml` + `context/`, `examples/`, `guidelines/` subdirs) with context files injected into the system prompt
   - Code-backed skills — skills with `skill_type: code_backed` containing executable Python code (`code/` subdirectory). `run_skill_code` MCP tool executes Python in a subprocess; `ClaudeCodeExecutor` agent instance orchestrates execution, interprets results, and pushes outputs to any connector (Google Drive, Slack, BigQuery, etc.). Schema fields: `skill_type`, `code_entrypoint`, `code_timeout_seconds`, `code_output_patterns`. Code-backed fields protected in `FORBIDDEN_FIELDS` (agents cannot modify their own execution settings).
-  - 23 skills in 3 departments (marketing + IT + executive), 6 roles (performance_media_buyer, reporting_analyst, strategist, head_of_marketing as manager, head_of_it, ceo as top-level manager)
+  - 10 skills in 3 departments (marketing + IT + executive), 6 roles (performance_media_buyer, reporting_analyst, strategist, head_of_marketing as manager, head_of_it, ceo as top-level manager). Placeholder skills removed — each role retains 1 example YAML shell + real skills (fb_creative_cuts, creative_analysis). Add real skills as needed.
 - FastAPI app assembly (`src/api/app.py`) — all routes wired, health check, Inngest serve, Sentry, rate limiting, request logging
 - Database session (`src/db/session.py`) — async SQLAlchemy engine + session factory
 - Database service (`src/db/service.py`) — 115 methods (18 original + 3 skill-aware + 3 hierarchy + 5 production hardening + 6 memory + 1 search_role_memories + 2 auto-execute + 4 conversation threads + 15 org chart + 5 user/RBAC + 7 meeting sessions + 13 data retention/misc + 6 peer messaging + 7 stewardship + 5 webhook events)
-- Alembic migrations (`alembic/`) — 26 revisions (initial schema + skill_id + failed_runs DLQ + action types + hierarchy columns + role_memory + auto_execute + conversation_threads + org_chart_tables + skill_evolution + users_rbac + meeting_sessions + lesson_memory_type_and_principles + role_messages + stewardship + vocabulary_and_goals + webhook_events)
+- Alembic migrations (`alembic/`) — 27 revisions (initial schema + skill_id + failed_runs DLQ + action types + hierarchy columns + role_memory + auto_execute + conversation_threads + org_chart_tables + skill_evolution + users_rbac + meeting_sessions + lesson_memory_type_and_principles + role_messages + stewardship + vocabulary_and_goals + webhook_events)
 - Redis caching (`src/cache/`) — async Redis client, service layer, `@cached` decorator, wired into connectors
 - Production middleware (`src/middleware/`) — Sentry error monitoring, rate limiting, structured request logging, API key auth, RBAC (role-based access control for Slack users)
 - Streamlit dashboard (`dashboard/app.py`) — 6-page MVP with live DB or demo mode
@@ -101,7 +101,7 @@ The core pattern is domain-agnostic: connect data sources → teach skills via Y
 - Skill portability & marketplace (`src/skills/portability.py`) — export/import system for sharing skills across organizations. Portable bundles (ZIP or directory) with `manifest.yaml` (provenance, SHA-256 integrity, compatibility), `skill.yaml` (sanitized — org-specific fields stripped), and `context/` files. Export: `export_skill_to_dir()`, `export_skill_to_zip()`, `export_skill_to_bytes()`. Import: `import_skill_from_bundle()` with fork support (new ID, author, department/role targeting, disk install). Validation: `validate_bundle()` checks structure, integrity hash, schema, context references. Discovery: `list_bundles_in_dir()`, `search_bundles()` (by query, category, platform, tags). Bundle format version 1.0. Sanitizes `source_dir`, `context_text`, `department_id`, `role_id` on export. Round-trip tested.
 - Multi-agent working groups (`src/skills/working_group.py`, `src/mcp_servers/working_group.py`) — manager roles can form ad hoc cross-functional working groups around a shared objective. `form_working_group` MCP tool validates the request (coordinator must be a manager, max 10 members, no duplicates/self-inclusion) and queues a proposal. `get_working_group_status` MCP tool queries DB for group progress. `working_group_workflow` Inngest workflow (event `sidera/working_group.run`) orchestrates the full lifecycle: create DB session → coordinator plans task assignments via LLM (PLANNING_PROMPT) → member roles execute in parallel with individual tasks → coordinator synthesizes all outputs (SYNTHESIS_PROMPT) → post results to Slack → audit log. `WorkingGroupSession` DB table tracks status lifecycle (forming → planning → executing → synthesizing → completed | failed), member results JSON, cost tracking, Slack thread. Data structures: `WorkingGroupPlan`, `MemberTaskResult`, `WorkingGroupResult`. Helper functions: `generate_group_id()`, `build_member_descriptions()`, `format_member_outputs()`, `parse_plan()`, `validate_working_group_request()`. 5 DB service methods (create, get, update_status, save_member_result, list). Cost cap enforcement between member executions. Integrated into manager_runner_workflow (dispatches pending groups after turn) and conversation_turn_workflow (managers can form groups conversationally). Alembic migration 026.
 - Company bootstrap pipeline (`src/bootstrap/`) — automated onboarding for new companies. Crawls a Google Drive folder, classifies documents with Haiku (~$0.01/100 docs), extracts org structure + skills + goals + vocabulary + seed memories with Sonnet (3 passes, ~$0.25-0.55 total), assembles a `BootstrapPlan` for human review, then writes to DB on approval. 7 modules: crawler, classifier, extractor, generator, executor, prompts, models. REST API (4 endpoints: start, get, approve, reject). Inngest `bootstrap_workflow` (#18). 104 tests.
-- 3728+ unit + integration tests, ruff lint clean
+- 3685+ unit + integration tests, ruff lint clean
 
 - E2E testing — Google Ads live (test MCC 9433912543 → client 8382412741, 3 campaigns created), Slack bot connected (ngrok tunnel, triple slash command `/sidera` + `/mjz-test-agent` + `/project-sidera`), conversation mode verified with live Claude API calls, inline dev-mode runner (`_run_conversation_turn_inline`) bypasses Inngest for local testing, `_load_dotenv_overrides()` fix for empty shell env vars, protobuf `_pb` compatibility fix for newer google-ads library, ClearanceLevel model fix (Enum→String(20) to match migration)
 
@@ -180,9 +180,9 @@ src/
   middleware/   — Sentry, rate limiting, structured request logging, API key auth, RBAC
   utils/        — Fernet token encryption
   templates/    — Connector, MCP server, and OAuth route templates for adding new domains
-alembic/        — Database migrations (26 revisions)
+alembic/        — Database migrations (27 revisions)
 dashboard/      — Streamlit MVP UI (6 pages)
-tests/          — 3728+ unit + integration tests with mock fixtures
+tests/          — 3685+ unit + integration tests with mock fixtures
 scripts/        — DB setup, manual triggers
 docs/           — Build progress log
 ```
@@ -286,6 +286,28 @@ Ideas explored but not yet planned or built:
 11. **Agent-proposed role creation** — ✅ **BUILT.** Three-stage pipeline: (1) `run_reflection()` now supports `"gap"` observation type — agents report out-of-scope requests with a domain label, stored as `[Gap Detection]` tagged insight memories with `gap_domain` in evidence. (2) `scan_gaps_for_role_proposals()` in `reflection_evolution.py` — loads recent gap observations (60-day lookback), groups by domain, uses Haiku to propose new roles for domains with 3+ observations. Only managers can trigger proposals. (3) `scan-gaps-for-role-proposals` workflow step runs after lesson scanning, merges proposals into approval pipeline with diff view in Slack. On approval, role created via `execute_role_proposal()` + auto-added to manager's `manages` list. Safety: role proposals never auto-execute, minimum evidence threshold required.
 
 12. **Multi-agent planning & ad hoc working groups** — **BUILT.** Manager roles can form ad hoc cross-functional working groups via `form_working_group` MCP tool. `WorkingGroupSession` DB table tracks status lifecycle (forming → planning → executing → synthesizing → completed | failed). `working_group_workflow` Inngest workflow orchestrates: create session → coordinator plans task assignments → members execute with individual tasks → coordinator synthesizes → post to Slack. Validation: coordinator must be a manager, max 10 members, no duplicates/self-inclusion, cost cap enforcement. `get_working_group_status` MCP tool for monitoring. Integrated into manager_runner_workflow and conversation_turn_workflow. Alembic migration 026. 5 DB service methods. 36 tests.
+
+13. **Skill graphs — cross-skill knowledge traversal** — When the skill library scales to 100+ skills, individual skills need to reference each other's domain knowledge during execution. Currently context flows downward (department → role → skill) but not laterally — the media buyer can't pull in the reporting analyst's attribution methodology mid-run. Skill graphs would add a traversable knowledge layer: each skill can reference other skills, and the agent navigates the graph to pull in exactly the context the current situation requires.
+
+   **The problem this solves:** At 10 skills across 6 roles, flat context loading works fine. At 100+ skills, an agent running a campaign optimization skill might need attribution methodology, brand guidelines, and budget pacing context — all owned by different roles. Without cross-references, the agent either gets everything (token-expensive) or nothing (quality loss).
+
+   **Proposed approach (leverages existing infrastructure):**
+
+   - `references` field on `SkillDefinition` — list of skill IDs this skill links to, with optional relationship labels (e.g., `{skill_id: "attribution_analysis", relationship: "methodology", reason: "pull attribution windows when evaluating campaign ROAS"}`)
+   - `load_referenced_skill_context` MCP tool — agent can pull in another skill's context files, guidelines, or examples mid-execution. Uses existing `load_skill_context` patterns but crosses role boundaries.
+   - Traversal budget — max N referenced skills per execution turn (default 3), token cap on loaded cross-references. Prevents rabbit-holing through long reference chains.
+   - Reference discovery in `build_context_manifest()` — when building a skill's manifest, include a "Related Skills" section listing referenced skills with their descriptions. Agent decides whether to load them (same progressive disclosure pattern as context files).
+   - Bidirectional awareness — `SkillRegistry` builds a reverse index so skills know what references them (useful for impact analysis when a skill changes via skill evolution).
+
+   **What this is NOT:**
+
+   - Not a separate markdown/wikilink system — references live in the existing YAML skill definitions
+   - Not automatic injection — agent explicitly decides to load cross-references (same as current `load_skill_context` pattern)
+   - Not unlimited traversal — budget-capped, same philosophy as conversation turn limits and cost caps
+
+   **Prerequisites:** Skill library needs to grow enough that lateral knowledge gaps become a real problem (probably 50+ skills). Current `learning_channels` and peer messaging handle runtime knowledge sharing; this would handle design-time knowledge structure.
+
+   **Inspiration:** [Skill graphs concept](https://github.com/arscontexta) — network of interconnected skill files where links carry semantic meaning. The insight is correct (deep domain knowledge doesn't fit in one file), but Sidera's implementation would use existing YAML + MCP + context loading patterns rather than markdown wikilinks.
 
 ## Known Issues / Blockers
 None currently.

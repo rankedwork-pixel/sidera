@@ -98,10 +98,6 @@ class TestCEOModelRouting:
         skill = registry.get("org_health_check")
         assert skill.model == "sonnet"
 
-    def test_synthesis_skill_is_opus(self, registry: SkillRegistry) -> None:
-        skill = registry.get("cross_dept_synthesis")
-        assert skill.model == "opus"
-
     def test_heartbeat_model_alias_resolves(self) -> None:
         """Verify that 'opus' alias resolves to full model ID via _resolve_model."""
         from src.agent.core import SideraAgent

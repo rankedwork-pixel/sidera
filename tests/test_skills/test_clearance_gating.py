@@ -278,13 +278,13 @@ class TestYAMLClearanceLoading:
                 f"Role {role_id} has invalid clearance_level={role.clearance_level}"
             )
 
-    def test_budget_reallocation_is_confidential(self):
+    def test_competitor_benchmark_is_confidential(self):
         from src.skills.registry import SkillRegistry
 
         registry = SkillRegistry()
         registry.load_all()
 
-        skill = registry.get("budget_reallocation")
+        skill = registry.get("competitor_benchmark")
         assert skill is not None
         assert skill.min_clearance == "confidential"
 

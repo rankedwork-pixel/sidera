@@ -28,7 +28,6 @@ connectors:
   - bigquery
 briefing_skills:
   - weekly_report
-  - monthly_report
 context_files: []
 routing_keywords:
   - reporting analyst

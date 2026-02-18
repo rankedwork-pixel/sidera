@@ -580,13 +580,13 @@ class TestCreativeAnalysisFolder:
         assert len(text) > 1000  # We wrote ~12K chars of context
         assert "# Context:" in text
 
-    def test_all_23_skills_still_load(self):
-        """All 23 skills load (folder-based creative_analysis + fb_creative_cuts included)."""
+    def test_all_skills_still_load(self):
+        """All 10 skills load (folder-based creative_analysis + fb_creative_cuts included)."""
         from src.skills.registry import SkillRegistry
 
         reg = SkillRegistry()
         count = reg.load_all()
-        assert count == 23
+        assert count == 10
 
     def test_creative_analysis_passes_validation(self):
         """creative_analysis passes full validation."""

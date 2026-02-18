@@ -1,4 +1,4 @@
-"""Tests for the full skill library — validates all 15 YAML skills load and pass validation.
+"""Tests for the full skill library — validates all YAML skills load and pass validation.
 
 Covers:
 - All skills load without error
@@ -41,41 +41,25 @@ _CWF = "src.skills.router.complete_with_fallback"
 
 LIBRARY_DIR = Path(__file__).parent.parent.parent / "src" / "skills" / "library"
 
-# All 23 expected skill IDs (3 original + 12 new + 1 manager + 3 IT + 3 CEO + 1 code-backed)
+# All 10 expected skill IDs (1 example per role + IT + fb_creative_cuts)
 EXPECTED_SKILL_IDS = sorted(
     [
-        # Original 3
-        "creative_analysis",
-        "budget_reallocation",
-        "weekly_report",
-        # Analysis (4 new)
+        # Marketing / performance_media_buyer (3 — 1 standalone + 1 folder-based + 1 code-backed)
         "anomaly_detector",
-        "search_term_audit",
-        "audience_overlap",
-        "landing_page_analysis",
-        # Optimization (3 new)
-        "bid_strategy_review",
-        "dayparting_analysis",
-        "geo_performance",
-        # Monitoring (3 new)
-        "creative_fatigue_check",
-        "budget_pacing_check",
-        "platform_health_check",
-        # Reporting (2 new)
+        "creative_analysis",
+        "fb_creative_cuts",
+        # Marketing / reporting_analyst (1)
+        "weekly_report",
+        # Marketing / strategist (1)
         "competitor_benchmark",
-        "monthly_report",
-        # Manager (1 new)
+        # Marketing / head_of_marketing (1)
         "executive_summary",
-        # IT / Sysadmin (3 new)
+        # IT / head_of_it (3)
         "system_health_check",
         "error_diagnosis",
         "cost_monitoring",
-        # CEO / Executive (3 new)
+        # Executive / ceo (1)
         "org_health_check",
-        "cross_dept_synthesis",
-        "escalation_triage",
-        # Code-backed (1 new)
-        "fb_creative_cuts",
     ]
 )
 
@@ -100,9 +84,9 @@ def all_skills(registry: SkillRegistry) -> list[SkillDefinition]:
 
 
 def test_all_skills_load(registry: SkillRegistry) -> None:
-    """SkillRegistry loads all 23 skills."""
-    assert registry.count == 23, (
-        f"Expected 23 skills, got {registry.count}. "
+    """SkillRegistry loads all 10 skills."""
+    assert registry.count == 10, (
+        f"Expected 10 skills, got {registry.count}. "
         f"Loaded: {sorted(s.id for s in registry.list_all())}"
     )
 
@@ -211,7 +195,7 @@ def test_all_skills_have_nonempty_prompts(all_skills: list[SkillDefinition]) -> 
 def test_scheduled_skills_have_cron(all_skills: list[SkillDefinition]) -> None:
     """Skills with schedule set have valid cron-like expressions."""
     scheduled = [s for s in all_skills if s.schedule is not None]
-    assert len(scheduled) >= 3, f"Expected at least 3 scheduled skills, got {len(scheduled)}"
+    assert len(scheduled) >= 1, f"Expected at least 1 scheduled skill, got {len(scheduled)}"
     for skill in scheduled:
         # Basic cron format check: 5 space-separated parts
         parts = skill.schedule.split()
@@ -242,36 +226,17 @@ def test_no_self_referencing_chains(all_skills: list[SkillDefinition]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Monitoring skill design decisions
+# Operations skill design decisions
 # ---------------------------------------------------------------------------
 
 
-def test_monitoring_skills_use_haiku(all_skills: list[SkillDefinition]) -> None:
-    """Monitoring skills use the haiku model (lightweight checks)."""
-    monitoring = [s for s in all_skills if s.category == "monitoring"]
-    assert len(monitoring) >= 3, f"Expected at least 3 monitoring skills, got {len(monitoring)}"
-    for skill in monitoring:
-        assert skill.model == "haiku", (
-            f"Monitoring skill '{skill.id}' uses '{skill.model}' instead of 'haiku'"
-        )
-
-
-def test_monitoring_skills_no_approval(all_skills: list[SkillDefinition]) -> None:
-    """Monitoring skills don't require approval (read-only)."""
-    monitoring = [s for s in all_skills if s.category == "monitoring"]
-    for skill in monitoring:
+def test_operations_skills_no_approval(all_skills: list[SkillDefinition]) -> None:
+    """Operations skills don't require approval (read-only diagnostics)."""
+    operations = [s for s in all_skills if s.category == "operations"]
+    assert len(operations) >= 1, f"Expected at least 1 operations skill, got {len(operations)}"
+    for skill in operations:
         assert skill.requires_approval is False, (
-            f"Monitoring skill '{skill.id}' requires approval but monitoring skills are read-only"
-        )
-
-
-def test_monitoring_skills_low_turns(all_skills: list[SkillDefinition]) -> None:
-    """Monitoring skills have low max_turns (quick checks)."""
-    monitoring = [s for s in all_skills if s.category == "monitoring"]
-    for skill in monitoring:
-        assert skill.max_turns <= 10, (
-            f"Monitoring skill '{skill.id}' has max_turns={skill.max_turns}, "
-            "expected <= 10 for quick checks"
+            f"Operations skill '{skill.id}' requires approval but operations skills are read-only"
         )
 
 
@@ -280,39 +245,13 @@ def test_monitoring_skills_low_turns(all_skills: list[SkillDefinition]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_budget_pacing_has_daily_schedule(registry: SkillRegistry) -> None:
-    """budget_pacing_check runs daily at noon."""
-    skill = registry.get("budget_pacing_check")
-    assert skill is not None
-    assert skill.schedule is not None
-    # Should be a daily schedule (minute hour * * *)
-    parts = skill.schedule.split()
-    assert parts[2] == "*" and parts[3] == "*" and parts[4] == "*", (
-        f"Expected daily schedule, got '{skill.schedule}'"
-    )
-
-
-def test_monthly_report_has_monthly_schedule(registry: SkillRegistry) -> None:
-    """monthly_report runs on the 1st of each month."""
-    skill = registry.get("monthly_report")
+def test_weekly_report_has_schedule(registry: SkillRegistry) -> None:
+    """weekly_report runs on Mondays."""
+    skill = registry.get("weekly_report")
     assert skill is not None
     assert skill.schedule is not None
     parts = skill.schedule.split()
-    # Day-of-month should be "1"
-    assert parts[2] == "1", (
-        f"Expected monthly_report on day 1, got day '{parts[2]}' in schedule '{skill.schedule}'"
-    )
-
-
-def test_creative_fatigue_chains_after_creative_analysis(
-    registry: SkillRegistry,
-) -> None:
-    """creative_fatigue_check chains after creative_analysis."""
-    skill = registry.get("creative_fatigue_check")
-    assert skill is not None
-    assert skill.chain_after == "creative_analysis", (
-        f"Expected chain_after='creative_analysis', got '{skill.chain_after}'"
-    )
+    assert len(parts) == 5, f"Expected 5-part cron, got '{skill.schedule}'"
 
 
 # ---------------------------------------------------------------------------
@@ -321,11 +260,11 @@ def test_creative_fatigue_chains_after_creative_analysis(
 
 
 def test_router_index_built(registry: SkillRegistry) -> None:
-    """Router builds an index containing all 23 skills."""
+    """Router builds an index containing all 10 skills."""
     index = registry.build_routing_index()
     assert index, "Routing index is empty"
     lines = [ln for ln in index.strip().split("\n") if ln.strip()]
-    assert len(lines) == 23, f"Expected 23 lines in routing index, got {len(lines)}"
+    assert len(lines) == 10, f"Expected 10 lines in routing index, got {len(lines)}"
     # Each line should have the format: skill_id | description | tags
     for line in lines:
         parts = line.split(" | ")
@@ -337,20 +276,12 @@ def test_router_index_built(registry: SkillRegistry) -> None:
     "query,expected_skill_id",
     [
         ("Why did my CPA spike 40% yesterday?", "anomaly_detector"),
-        ("What search terms are wasting money?", "search_term_audit"),
-        ("Are Google and Meta targeting the same people?", "audience_overlap"),
-        ("Which landing pages have the worst conversion rate?", "landing_page_analysis"),
-        ("Should I switch from tCPA to tROAS?", "bid_strategy_review"),
-        ("What hours of the day perform best?", "dayparting_analysis"),
-        ("Which states have the highest CPA?", "geo_performance"),
-        ("Are my ads getting stale?", "creative_fatigue_check"),
-        ("Am I on track for this month's budget?", "budget_pacing_check"),
-        ("Is everything connected and working?", "platform_health_check"),
         ("How do we compare to industry averages?", "competitor_benchmark"),
-        ("Generate the month-end report", "monthly_report"),
         ("Which creatives should I cut or scale?", "creative_analysis"),
-        ("Should I move budget from Meta to Google?", "budget_reallocation"),
         ("Generate the weekly performance summary", "weekly_report"),
+        ("What's the executive overview?", "executive_summary"),
+        ("Is the system healthy?", "system_health_check"),
+        ("Check organization health", "org_health_check"),
     ],
 )
 async def test_router_matches_common_queries(
