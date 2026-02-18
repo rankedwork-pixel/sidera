@@ -25,6 +25,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -55,6 +56,27 @@ logger = structlog.get_logger(__name__)
 
 # Micros divisor for monetary conversions
 _MICROS = Decimal("1000000")
+
+# Validation for IDs interpolated into GAQL queries / resource paths.
+# Google Ads IDs are always numeric (digits only).
+_GAQL_ID_RE = re.compile(r"^\d+$")
+
+
+def _validate_gaql_id(value: str | int, label: str = "id") -> str:
+    """Validate an ID before GAQL/resource-path interpolation.
+
+    Google Ads campaign IDs, customer IDs, and geo-target IDs are always
+    numeric.  This prevents SQL-like injection through crafted ID values.
+
+    Raises:
+        ValueError: If the value contains non-digit characters.
+    """
+    s = str(value).strip()
+    if not _GAQL_ID_RE.match(s):
+        raise ValueError(
+            f"Invalid GAQL {label}: {s!r} — expected digits only",
+        )
+    return s
 
 
 class GoogleAdsConnectorError(Exception):
@@ -532,6 +554,9 @@ class GoogleAdsConnector:
             GoogleAdsWriteError: If the mutation fails.
             ValueError: If budget change exceeds the configured cap.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+
         self._log.info(
             "update_campaign_budget.start",
             customer_id=customer_id,
@@ -616,6 +641,9 @@ class GoogleAdsConnector:
             GoogleAdsWriteError: If the mutation fails.
             ValueError: If *status* is not ENABLED or PAUSED.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+
         status = status.upper()
         if status not in ("ENABLED", "PAUSED"):
             raise ValueError(f"status must be 'ENABLED' or 'PAUSED', got '{status}'")
@@ -694,6 +722,9 @@ class GoogleAdsConnector:
             GoogleAdsWriteError: If the mutation fails.
             ValueError: If neither target is provided.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+
         if target_cpa_micros is None and target_roas is None:
             raise ValueError("At least one of target_cpa_micros or target_roas must be provided.")
 
@@ -780,6 +811,9 @@ class GoogleAdsConnector:
             GoogleAdsWriteError: If the mutation fails (except duplicates).
             ValueError: If *keywords* is empty.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+
         if not keywords:
             raise ValueError("keywords list must not be empty")
 
@@ -872,6 +906,9 @@ class GoogleAdsConnector:
             GoogleAdsWriteError: If the mutation fails.
             ValueError: If *schedule* is empty.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+
         if not schedule:
             raise ValueError("schedule list must not be empty")
 
@@ -884,7 +921,7 @@ class GoogleAdsConnector:
 
         # Build operations using CampaignCriterionService
         criterion_service = self._client.get_service(
-            "CampaignCriterionService", version=self.API_VERSION
+            "CampaignCriterionService", version=self.API_VERSION,
         )
         operations = []
         for entry in schedule:
@@ -967,6 +1004,10 @@ class GoogleAdsConnector:
         Raises:
             GoogleAdsWriteError: If the mutation fails.
         """
+        customer_id = _validate_gaql_id(customer_id, "customer_id")
+        campaign_id = _validate_gaql_id(campaign_id, "campaign_id")
+        geo_target_id_str = _validate_gaql_id(geo_target_id, "geo_target_id")
+
         self._log.info(
             "update_geo_bid_modifier.start",
             customer_id=customer_id,
@@ -976,7 +1017,7 @@ class GoogleAdsConnector:
         )
 
         # Check if geo criterion already exists
-        geo_constant_resource = f"geoTargetConstants/{geo_target_id}"
+        geo_constant_resource = f"geoTargetConstants/{geo_target_id_str}"
         query = (
             f"SELECT campaign_criterion.resource_name, "
             f"campaign_criterion.bid_modifier, "
