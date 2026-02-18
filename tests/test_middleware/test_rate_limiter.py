@@ -12,6 +12,7 @@ from src.middleware.rate_limiter import (
     RateLimiter,
     RateLimitMiddleware,
     RedisRateLimiter,
+    _extract_client_id,
     create_rate_limiter,
 )
 
@@ -123,19 +124,53 @@ class TestRateLimitMiddleware:
         assert "Retry-After" in resp.headers
         assert resp.headers["X-RateLimit-Remaining"] == "0"
 
-    def test_middleware_uses_x_user_id_header(self):
-        """The middleware should prefer X-User-ID over IP for client identity."""
+    def test_middleware_ignores_x_user_id_header(self):
+        """X-User-ID should NOT be used for client identity (spoofable)."""
+        limiter = RateLimiter(requests_per_minute=2, requests_per_hour=100)
+        client = TestClient(_make_app(limiter))
+
+        # Even though X-User-ID differs, same IP → same bucket
+        resp1 = client.get("/test", headers={"X-User-ID": "user-1"})
+        assert resp1.status_code == 200
+        resp2 = client.get("/test", headers={"X-User-ID": "user-2"})
+        assert resp2.status_code == 200
+        # Third request exceeds limit (all same IP)
+        resp3 = client.get("/test", headers={"X-User-ID": "user-3"})
+        assert resp3.status_code == 429
+
+    def test_middleware_uses_api_key_for_identity(self):
+        """Requests with X-API-Key should be identified by hashed key."""
         limiter = RateLimiter(requests_per_minute=1, requests_per_hour=100)
         client = TestClient(_make_app(limiter))
 
-        # First user exhausts their limit
-        resp1 = client.get("/test", headers={"X-User-ID": "user-1"})
+        # First key exhausts its limit
+        resp1 = client.get("/test", headers={"X-API-Key": "key-aaa"})
         assert resp1.status_code == 200
-        resp2 = client.get("/test", headers={"X-User-ID": "user-1"})
+        resp2 = client.get("/test", headers={"X-API-Key": "key-aaa"})
         assert resp2.status_code == 429
 
-        # Second user should still be fine
-        resp3 = client.get("/test", headers={"X-User-ID": "user-2"})
+        # Different key should still work
+        resp3 = client.get("/test", headers={"X-API-Key": "key-bbb"})
+        assert resp3.status_code == 200
+
+    def test_middleware_uses_bearer_token_for_identity(self):
+        """Requests with Bearer token should be identified by hashed token."""
+        limiter = RateLimiter(requests_per_minute=1, requests_per_hour=100)
+        client = TestClient(_make_app(limiter))
+
+        resp1 = client.get(
+            "/test", headers={"Authorization": "Bearer tok-111"},
+        )
+        assert resp1.status_code == 200
+        resp2 = client.get(
+            "/test", headers={"Authorization": "Bearer tok-111"},
+        )
+        assert resp2.status_code == 429
+
+        # Different token should still work
+        resp3 = client.get(
+            "/test", headers={"Authorization": "Bearer tok-222"},
+        )
         assert resp3.status_code == 200
 
 
@@ -306,6 +341,61 @@ class TestCreateRateLimiter:
             "src.cache.redis_client.get_redis_client",
             return_value=None,
         ):
-            limiter = create_rate_limiter(requests_per_minute=30, requests_per_hour=500)
+            limiter = create_rate_limiter(
+                requests_per_minute=30, requests_per_hour=500,
+            )
             assert limiter.requests_per_minute == 30
             assert limiter.requests_per_hour == 500
+
+
+# ------------------------------------------------------------------
+# _extract_client_id unit tests
+# ------------------------------------------------------------------
+
+
+class TestExtractClientId:
+    """Tests for _extract_client_id hardening."""
+
+    def test_ignores_x_user_id(self) -> None:
+        """X-User-ID header should not be used for identity."""
+        req = MagicMock()
+        req.headers = {"X-User-ID": "attacker-supplied"}
+        req.client = MagicMock(host="1.2.3.4")
+        result = _extract_client_id(req)
+        assert result == "ip:1.2.3.4"
+
+    def test_uses_hashed_api_key(self) -> None:
+        """Should return key:<hash> for API key auth."""
+        req = MagicMock()
+        req.headers = {"X-API-Key": "secret-key-123"}
+        req.client = MagicMock(host="1.2.3.4")
+        result = _extract_client_id(req)
+        assert result.startswith("key:")
+        assert len(result) == 4 + 16  # "key:" + 16 hex chars
+
+    def test_uses_hashed_bearer_token(self) -> None:
+        """Should return key:<hash> for Bearer token auth."""
+        req = MagicMock()
+        req.headers = {
+            "Authorization": "Bearer my-token-abc",
+            "X-API-Key": "",
+        }
+        req.client = MagicMock(host="1.2.3.4")
+        result = _extract_client_id(req)
+        assert result.startswith("key:")
+
+    def test_falls_back_to_ip(self) -> None:
+        """Should use client IP when no auth headers present."""
+        req = MagicMock()
+        req.headers = {}
+        req.client = MagicMock(host="10.0.0.1")
+        result = _extract_client_id(req)
+        assert result == "ip:10.0.0.1"
+
+    def test_returns_unknown_when_no_client(self) -> None:
+        """Should return 'unknown' when no client info."""
+        req = MagicMock()
+        req.headers = {}
+        req.client = None
+        result = _extract_client_id(req)
+        assert result == "unknown"

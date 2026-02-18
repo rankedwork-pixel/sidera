@@ -278,13 +278,21 @@ _default_limiter = RateLimiter()
 def _extract_client_id(request: Request) -> str:
     """Extract a client identifier from the request.
 
-    Prefers the ``X-User-ID`` header; falls back to the client's IP address.
+    Uses a hash of the API key or Bearer token for authenticated requests,
+    falling back to the client's IP address.  Never trusts user-supplied
+    identity headers (e.g. ``X-User-ID``) to prevent rate-limit bypass.
     """
-    user_id = request.headers.get("X-User-ID")
-    if user_id:
-        return user_id
+    import hashlib
+
+    api_key = request.headers.get("X-API-Key", "")
+    auth = request.headers.get("Authorization", "")
+    key = api_key or (
+        auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    )
+    if key:
+        return f"key:{hashlib.sha256(key.encode()).hexdigest()[:16]}"
     if request.client:
-        return request.client.host
+        return f"ip:{request.client.host}"
     return "unknown"
 
 
