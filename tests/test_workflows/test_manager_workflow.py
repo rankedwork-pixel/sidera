@@ -235,7 +235,7 @@ class TestManagerRunnerConfig:
     def test_all_workflows_has_sixteen_entries(self):
         from src.workflows.daily_briefing import all_workflows
 
-        assert len(all_workflows) == 17
+        assert len(all_workflows) == 18
 
 
 # =====================================================================

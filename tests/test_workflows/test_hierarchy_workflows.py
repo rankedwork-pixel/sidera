@@ -513,10 +513,10 @@ def test_all_workflows_includes_department_runner():
 
 
 def test_all_workflows_has_sixteen_entries():
-    """all_workflows now exports 17 workflows total (including event_reactor + working_group)."""
+    """all_workflows now exports 18 workflows total (including bootstrap)."""
     from src.workflows.daily_briefing import all_workflows
 
-    assert len(all_workflows) == 17
+    assert len(all_workflows) == 18
 
 
 # =====================================================================

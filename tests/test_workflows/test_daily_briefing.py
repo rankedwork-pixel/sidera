@@ -533,8 +533,8 @@ def test_cost_monitor_function_id():
 
 
 def test_all_workflows_list():
-    """all_workflows exports all seventeen workflow functions."""
-    assert len(all_workflows) == 17
+    """all_workflows exports all eighteen workflow functions."""
+    assert len(all_workflows) == 18
     assert daily_briefing_workflow in all_workflows
     assert cost_monitor_workflow in all_workflows
     assert skill_runner_workflow in all_workflows

@@ -196,6 +196,11 @@ def create_app() -> FastAPI:
 
     app.include_router(webhooks_router)
 
+    # --- Bootstrap routes (company onboarding pipeline) ---
+    from src.api.routes.bootstrap import router as bootstrap_router
+
+    app.include_router(bootstrap_router)
+
     # --- Slack routes ---
     try:
         from src.api.routes.slack import router as slack_router

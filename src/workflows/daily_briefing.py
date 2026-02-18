@@ -6233,6 +6233,131 @@ async def working_group_workflow(ctx: inngest.Context) -> dict:
 
 
 # =====================================================================
+# 18. Bootstrap workflow -- ingest company docs and configure agents
+# =====================================================================
+
+
+@inngest_client.create_function(
+    fn_id="bootstrap-workflow",
+    trigger=inngest.TriggerEvent(event="sidera/bootstrap.run"),
+    retries=1,
+)
+async def bootstrap_workflow(ctx: inngest.Context) -> dict:
+    """Run the company bootstrap pipeline.
+
+    Expected event data:
+    - folder_id (str, required): Google Drive folder ID
+    - user_id (str, optional): User who initiated
+    - max_docs (int, optional): Max documents to crawl (default 100)
+    - channel_id (str, optional): Slack channel for results
+    """
+    try:
+        folder_id = ctx.event.data.get("folder_id", "")
+        user_id = ctx.event.data.get("user_id", "bootstrap")
+        max_docs = int(ctx.event.data.get("max_docs", 100))
+        channel_id = ctx.event.data.get("channel_id", "")
+
+        if not folder_id:
+            raise inngest.NonRetriableError("folder_id is required")
+
+        # Step 1: Run the full bootstrap pipeline (crawl -> classify -> extract -> generate)
+        async def run_pipeline() -> dict:
+            from src.bootstrap import run_bootstrap
+
+            plan = await run_bootstrap(
+                folder_id, user_id=user_id, max_docs=max_docs
+            )
+            return plan.to_dict()
+
+        plan_data = await ctx.step.run("run-bootstrap-pipeline", run_pipeline)
+
+        # Step 2: Post plan summary to Slack for review
+        async def post_plan_for_review() -> dict:
+            plan_id = plan_data.get("id", "unknown")
+            n_depts = len(plan_data.get("departments", []))
+            n_roles = len(plan_data.get("roles", []))
+            n_skills = len(plan_data.get("skills", []))
+            n_memories = len(plan_data.get("memories", []))
+            cost = plan_data.get("estimated_cost", 0)
+            n_docs = plan_data.get("documents_crawled", 0)
+            errors = plan_data.get("errors", [])
+
+            summary_lines = [
+                "*Bootstrap Plan Ready for Review*",
+                f"Plan ID: `{plan_id}`",
+                f"Documents crawled: {n_docs}",
+                "",
+                "*Generated configuration:*",
+                f"  Departments: {n_depts}",
+                f"  Roles: {n_roles}",
+                f"  Skills: {n_skills}",
+                f"  Seed memories: {n_memories}",
+                f"  Estimated cost: ${cost:.2f}",
+            ]
+
+            if errors:
+                summary_lines.append(f"\n:warning: {len(errors)} warning(s):")
+                for err in errors[:5]:
+                    summary_lines.append(f"  - {err}")
+
+            summary_lines.append(
+                f"\nReview via API: `GET /api/bootstrap/{plan_id}`"
+            )
+            summary_lines.append(
+                f"Approve: `POST /api/bootstrap/{plan_id}/approve`"
+            )
+
+            text = "\n".join(summary_lines)
+
+            # Post to Slack if channel configured
+            if channel_id:
+                try:
+                    from src.connectors.slack import SlackConnector
+
+                    slack = SlackConnector()
+                    slack.send_message(channel=channel_id, text=text)
+                except Exception as slack_exc:
+                    _workflow_logger.warning(
+                        "bootstrap.slack_post_error", error=str(slack_exc)
+                    )
+
+            return {"plan_id": plan_id, "posted": bool(channel_id)}
+
+        await ctx.step.run("post-plan-for-review", post_plan_for_review)
+
+        return {
+            "status": "plan_ready",
+            "plan_id": plan_data.get("id", ""),
+            "departments": len(plan_data.get("departments", [])),
+            "roles": len(plan_data.get("roles", [])),
+            "skills": len(plan_data.get("skills", [])),
+        }
+
+    except inngest.NonRetriableError:
+        raise
+    except Exception as exc:
+        _workflow_logger.error("bootstrap.workflow_error", error=str(exc))
+        try:
+            from src.db import service as db_service
+            from src.db.session import get_db_session
+
+            async with get_db_session() as session:
+                await db_service.record_failed_run(
+                    session,
+                    workflow_name="bootstrap_workflow",
+                    event_data=dict(ctx.event.data),
+                    error_message=str(exc),
+                    error_type=type(exc).__name__,
+                    user_id=ctx.event.data.get("user_id", ""),
+                    run_id=ctx.run_id,
+                )
+                await session.commit()
+        except Exception:
+            pass
+        raise
+
+
+# =====================================================================
 # Exports
 # =====================================================================
 
@@ -6254,4 +6379,5 @@ all_workflows = [
     claude_code_task_workflow,
     event_reactor_workflow,
     working_group_workflow,
+    bootstrap_workflow,
 ]

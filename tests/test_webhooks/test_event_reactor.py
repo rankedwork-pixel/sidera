@@ -225,8 +225,8 @@ class TestWorkflowExport:
     def test_event_reactor_in_all_workflows(self):
         from src.workflows.daily_briefing import all_workflows
 
-        # Check that we have 17 workflows
-        assert len(all_workflows) == 17
+        # Check that we have 18 workflows (including bootstrap)
+        assert len(all_workflows) == 18
 
 
 # ---------------------------------------------------------------------------
