@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -180,17 +181,33 @@ async def run_skill_code(
             )
         cmd.append(str(input_path))
 
-    # Add extra args
+    # Add extra args with comprehensive path-traversal defense
     if args:
-        # Validate args don't contain path traversal
+        import urllib.parse
+
         for arg in args:
-            if ".." in arg:
-                return json.dumps(
-                    {
-                        "status": "error",
-                        "error": f"Argument '{arg}' contains path traversal.",
-                    }
-                )
+            # Reject absolute paths
+            if os.path.isabs(arg):
+                return json.dumps({
+                    "status": "error",
+                    "error": "Absolute path argument rejected.",
+                })
+            # Check URL-decoded form for traversal sequences
+            decoded = urllib.parse.unquote(arg)
+            if ".." in decoded:
+                return json.dumps({
+                    "status": "error",
+                    "error": "Path traversal in argument rejected.",
+                })
+            # Resolve and verify arg stays within source directory
+            resolved = (source_dir / decoded).resolve()
+            if not str(resolved).startswith(
+                str(source_dir.resolve()),
+            ):
+                return json.dumps({
+                    "status": "error",
+                    "error": "Argument escapes source directory.",
+                })
         cmd.extend(args)
 
     logger.info(
