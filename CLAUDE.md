@@ -5,8 +5,6 @@ A framework for building **AI employees** — autonomous agents that connect to 
 
 The core pattern is domain-agnostic: connect data sources → teach skills via YAML → get structured Slack briefings with approve/reject buttons → execute approved actions → log everything. Swap connectors and skills for any domain.
 
-**First use case:** Performance marketing (Google Ads + Meta), where the agent optimizes for the advertiser's P&L rather than platform revenue. BigQuery backend data is the source of truth.
-
 **Target users:** Developers and operators building AI-powered automation for any domain.
 
 ## Current Status

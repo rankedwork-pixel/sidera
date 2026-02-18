@@ -6,18 +6,18 @@ Sidera is a framework for building **AI employees** — autonomous agents that c
 
 The pattern is domain-agnostic: connect data sources, teach the agent via YAML skills (with examples, context, and guidelines), get structured briefings in Slack with approve/reject buttons, and log every action. Swap the connectors and skills, and Sidera becomes a different employee.
 
-## First Use Case: Performance Marketing
+## Built-In Connectors
 
-The first fully built domain is **performance marketing** — Google Ads + Meta ad management with BigQuery as the backend source of truth. This includes:
+Sidera ships with connectors ready to use out of the box:
 
-- Google Ads connector (7 read + 6 write methods)
-- Meta Marketing API connector (7 read + 6 write methods)
-- BigQuery connector for backend business data
-- 16 marketing-specific skills (creative analysis, budget reallocation, pacing, anomaly detection, executive summary, etc.)
-- Head of Marketing manager role that directs media buyers, analysts, and strategists as a team
-- Cross-platform analysis that questions what ad platforms report vs. actual business outcomes
+- Google Ads (7 read + 6 write methods)
+- Meta Marketing API (7 read + 6 write methods)
+- BigQuery for backend business data
+- Google Drive (Docs, Sheets, Slides)
+- Slack (notifications, approvals, conversations)
+- Recall.ai (meeting transcript capture)
 
-**But the framework doesn't care what the job is.** The same core handles customer support ops, engineering management, e-commerce operations, finance — anything with APIs and decisions.
+23 example skills across 3 departments demonstrate the skill system. Add your own connectors and skills for any domain — customer support, engineering management, e-commerce, finance, or anything with APIs and decisions.
 
 ## Framework Capabilities
 
@@ -29,9 +29,9 @@ The first fully built domain is **performance marketing** — Google Ads + Meta 
 - **Cost controls** — Circuit breakers ($10/day LLM cap, 20 tool calls/cycle)
 
 ### Conversational Mode
-- **Talk to any role** in a Slack thread (`@Sidera talk to the media buyer`). The agent stays in character, uses tools, and can propose write operations with in-thread Approve/Reject buttons
+- **Talk to any role** in a Slack thread (`@Sidera talk to the analyst`). The agent stays in character, uses tools, and can propose write operations with in-thread Approve/Reject buttons
 - **Write operations in conversations** — Agent generates action proposals → Approve/Reject buttons appear in-thread → approved actions execute and post results back
-- **Slash command** — `/sidera run creative_analysis`, `/sidera run manager:head_of_marketing`, `/sidera chat media_buyer`, or describe what you need in natural language
+- **Slash command** — `/sidera run <skill_id>`, `/sidera run manager:<role_id>`, `/sidera chat <role_id>`, or describe what you need in natural language
 
 ### Skill System
 - **YAML-defined skills** (flat files or rich folders with examples/context/guidelines) with Haiku-powered semantic routing
@@ -65,11 +65,11 @@ The first fully built domain is **performance marketing** — Google Ads + Meta 
 
 | Domain | Connectors | Example Skills |
 |--------|-----------|---------------|
-| **Performance Marketing** | Google Ads, Meta, BigQuery | Creative analysis, budget reallocation, pacing monitor |
 | **Customer Support Ops** | Zendesk, Stripe, product DB | Ticket triage, churn risk detection, refund recommendations |
 | **Engineering Management** | GitHub, Jira, PagerDuty, Datadog | Sprint health, incident postmortem, tech debt prioritization |
 | **E-Commerce Ops** | Shopify, inventory system, shipping API | Reorder alerts, return analysis, demand forecasting |
 | **Finance / Accounting** | QuickBooks, Stripe, bank API | Cash flow monitor, invoice follow-up, anomaly detection |
+| **Digital Marketing** | Google Ads, Meta, BigQuery | Creative analysis, budget reallocation, pacing monitor |
 
 Each new domain = new connectors + new skills. The agent loop, Slack interaction, approval queue, audit trail, cron scheduling, cost controls, encryption, and error handling stay identical.
 

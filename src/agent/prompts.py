@@ -5,9 +5,9 @@ a base identity prompt + domain-specific supplements + skill context.
 
 The system prompt is split into two composable parts:
 
-- ``BASE_SYSTEM_PROMPT`` — Domain-specific identity and principles. Currently
-  configured for performance marketing (the first use case). Future domains
-  will have their own base prompts loaded from domain configuration.
+- ``BASE_SYSTEM_PROMPT`` — Domain-specific identity and principles. The included
+  example is configured for digital marketing. Replace for other domains or
+  load from domain configuration.
 - ``DAILY_BRIEFING_SUPPLEMENT`` — Analysis framework and output format specific
   to the daily briefing skill.
 
@@ -26,9 +26,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 # =============================================================================
-# Base system prompt — Domain: Performance Marketing
-# This prompt configures Sidera for its first use case. Future domains
-# will have their own base prompts loaded from domain/skill configuration.
+# Base system prompt — Example domain: Digital Marketing
+# Replace this prompt for other domains or load from domain configuration.
 # =============================================================================
 
 BASE_SYSTEM_PROMPT = """\

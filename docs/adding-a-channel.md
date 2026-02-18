@@ -1,6 +1,6 @@
-# Adding a New Channel to Sidera
+# Adding a New Connector to Sidera
 
-This guide walks through adding a new ad platform connector (e.g., TikTok Ads, LinkedIn Ads, Amazon Ads) to Sidera. Follow each step in order — by the end you'll have a fully wired channel with connector, MCP tools, OAuth, tests, and caching.
+This guide walks through adding a new API connector (e.g., Zendesk, GitHub, Shopify, TikTok Ads) to Sidera. Follow each step in order — by the end you'll have a fully wired connector with API client, MCP tools, OAuth, tests, and caching.
 
 **Time estimate:** 2-4 hours for an experienced developer familiar with the platform's API.
 
@@ -143,7 +143,7 @@ ALL_TOOLS = (
 **File:** `src/api/routes/__CHANNEL___oauth.py`
 **Template:** `src/templates/oauth_route_template.py`
 
-Most ad platforms use OAuth2. Create a router with 4 endpoints:
+Most APIs use OAuth2. Create a router with 4 endpoints:
 
 - `GET /authorize` — Redirect user to platform login
 - `GET /callback` — Exchange auth code for tokens
