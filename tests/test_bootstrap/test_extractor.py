@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.bootstrap.extractor import (
+    _chunk_document,
     _filter_by_categories,
     _merge_context_into_roles,
     _merge_vocabulary_into_departments,
     _parse_json_response,
+    _prepare_doc_batches,
     _prepare_doc_content,
     extract_knowledge,
 )
@@ -278,3 +280,121 @@ class TestExtractKnowledge:
         assert knowledge.departments == []
         assert knowledge.roles == []
         assert cost == 0.0
+
+    @patch("src.bootstrap.extractor.call_claude_api", new_callable=AsyncMock)
+    async def test_extraction_multi_batch(self, mock_api):
+        """Large docs should be split into batches with multiple API calls."""
+        mock_api.return_value = {
+            "text": json.dumps({
+                "departments": [
+                    {"id": "eng", "name": "Engineering", "description": "Builds stuff"}
+                ],
+                "roles": [
+                    {
+                        "id": "swe",
+                        "name": "Software Engineer",
+                        "department_id": "eng",
+                        "description": "Writes code",
+                        "persona": "A careful engineer",
+                    }
+                ],
+            }),
+            "cost": {"total_cost_usd": 0.05},
+        }
+
+        # Create a large document that will be chunked into multiple batches
+        big_content = "x" * 60_000
+        docs = [
+            _make_classified("d1", ["org_structure"], content=big_content),
+        ]
+        knowledge, cost = await extract_knowledge(docs)
+
+        # Should have made multiple API calls due to chunking
+        assert mock_api.call_count >= 2
+        # Results should be merged
+        assert len(knowledge.departments) >= 1
+
+
+class TestChunkDocument:
+    def test_short_doc_single_chunk(self):
+        content = "Short text"
+        chunks = _chunk_document(content)
+        assert len(chunks) == 1
+        assert chunks[0] == content
+
+    def test_exact_limit_single_chunk(self):
+        content = "x" * 25_000
+        chunks = _chunk_document(content, max_chars=25_000)
+        assert len(chunks) == 1
+
+    def test_long_doc_multiple_chunks(self):
+        content = "x" * 60_000
+        chunks = _chunk_document(content, max_chars=25_000, overlap=2_000)
+        assert len(chunks) >= 3
+        # Each chunk should be at most max_chars
+        for chunk in chunks:
+            assert len(chunk) <= 25_000
+
+    def test_overlap_preserved(self):
+        """Overlapping regions should contain the same content."""
+        content = "ABCDE" * 10_000  # 50K chars
+        chunks = _chunk_document(content, max_chars=25_000, overlap=2_000)
+        assert len(chunks) >= 2
+        # End of first chunk should overlap with start of second chunk
+        overlap_from_first = chunks[0][-2_000:]
+        overlap_from_second = chunks[1][:2_000]
+        assert overlap_from_first == overlap_from_second
+
+    def test_all_content_covered(self):
+        """Union of chunks should cover the entire document."""
+        content = "".join(str(i % 10) for i in range(55_000))
+        chunks = _chunk_document(content, max_chars=25_000, overlap=2_000)
+        # First char of content in first chunk, last char in last chunk
+        assert chunks[0][0] == content[0]
+        assert chunks[-1][-1] == content[-1]
+
+    def test_empty_content(self):
+        chunks = _chunk_document("")
+        assert len(chunks) == 1
+        assert chunks[0] == ""
+
+
+class TestPrepareDocBatches:
+    def test_small_docs_single_batch(self):
+        docs = [_make_classified("d1", content="Short")]
+        batches = _prepare_doc_batches(docs)
+        assert len(batches) == 1
+        assert "Doc d1" in batches[0]
+
+    def test_large_doc_split_into_parts(self):
+        big_content = "x" * 60_000
+        docs = [_make_classified("d1", content=big_content)]
+        batches = _prepare_doc_batches(docs)
+        # Large doc should be chunked, creating multiple parts
+        assert len(batches) >= 2
+        # Parts should be labeled
+        assert "(part 1/" in batches[0]
+
+    def test_multiple_small_docs_packed(self):
+        docs = [
+            _make_classified(f"d{i}", content="Small content")
+            for i in range(5)
+        ]
+        batches = _prepare_doc_batches(docs)
+        # All small docs should fit in one batch
+        assert len(batches) == 1
+
+    def test_batches_respect_char_limit(self):
+        """Each batch should stay within the character limit."""
+        docs = [
+            _make_classified(f"d{i}", content="x" * 10_000)
+            for i in range(5)
+        ]
+        batches = _prepare_doc_batches(docs, max_chars_per_batch=30_000)
+        for batch in batches:
+            assert len(batch) <= 35_000  # slight overhead from formatting
+
+    def test_empty_docs(self):
+        batches = _prepare_doc_batches([])
+        assert len(batches) == 1
+        assert batches[0] == ""

@@ -28,6 +28,8 @@ _TRUNCATION_KEEP = 10_000  # chars to keep from each end
 _READABLE_MIME_TYPES = {
     "application/vnd.google-apps.document",
     "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation",  # Google Slides
+    "application/pdf",  # uploaded PDFs
 }
 
 
@@ -158,7 +160,7 @@ async def _crawl_recursive(
 def _read_file_content(
     drive: GoogleDriveConnector, file_id: str, mime_type: str
 ) -> str:
-    """Read content from a Google Doc or Sheet, returning plain text."""
+    """Read content from a supported file type, returning plain text."""
     try:
         if mime_type == "application/vnd.google-apps.document":
             result = drive.read_document(file_id)
@@ -169,6 +171,14 @@ def _read_file_content(
             result = drive.read_spreadsheet(file_id)
             if result and result.get("values"):
                 return _sheet_to_text(result["values"])
+
+        elif mime_type == "application/vnd.google-apps.presentation":
+            text = drive.export_presentation_text(file_id)
+            if text:
+                return text
+
+        elif mime_type == "application/pdf":
+            return _read_pdf_content(drive, file_id)
 
     except Exception as exc:
         logger.warning(
@@ -188,3 +198,65 @@ def _sheet_to_text(values: list[list[Any]]) -> str:
         if line.strip():
             lines.append(line)
     return "\n".join(lines)
+
+
+def _read_pdf_content(drive: GoogleDriveConnector, file_id: str) -> str:
+    """Download a PDF from Drive and extract text using pdfplumber.
+
+    Falls back gracefully if pdfplumber is not installed.
+
+    Parameters
+    ----------
+    drive:
+        The Google Drive connector instance.
+    file_id:
+        The Drive file ID of the PDF.
+
+    Returns
+    -------
+    str
+        Extracted text content, or empty string on failure.
+    """
+    try:
+        import pdfplumber
+    except ImportError:
+        logger.warning(
+            "bootstrap.pdf_not_available",
+            reason="pdfplumber not installed -- skipping PDF",
+        )
+        return ""
+
+    import io
+
+    pdf_bytes = drive.download_file_bytes(file_id)
+    if not pdf_bytes:
+        return ""
+
+    try:
+        text_parts: list[str] = []
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page_num, page in enumerate(pdf.pages, 1):
+                # Extract text
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(f"--- Page {page_num} ---")
+                    text_parts.append(page_text)
+
+                # Extract tables as pipe-separated rows
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        cells = [str(c) if c else "" for c in row]
+                        line = " | ".join(cells)
+                        if line.strip():
+                            text_parts.append(line)
+
+        return "\n".join(text_parts)
+
+    except Exception as exc:
+        logger.warning(
+            "bootstrap.pdf_parse_error",
+            file_id=file_id,
+            error=str(exc),
+        )
+        return ""

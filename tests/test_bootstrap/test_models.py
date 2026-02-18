@@ -13,6 +13,7 @@ from src.bootstrap.models import (
     ExtractedMemory,
     ExtractedRole,
     ExtractedSkill,
+    PlanConflict,
     RawDocument,
 )
 
@@ -86,6 +87,59 @@ class TestDocumentCategory:
         assert DocumentCategory.IRRELEVANT.value == "irrelevant"
 
 
+class TestPlanConflict:
+    def test_basic_creation(self):
+        conflict = PlanConflict(
+            entity_type="department",
+            entity_id="eng",
+            field="description",
+            values=[
+                {"source_docs": ["doc1"], "value": "Builds products"},
+                {"source_docs": ["doc2"], "value": "Ships software"},
+            ],
+            resolution="Builds products",
+            confidence=0.5,
+        )
+        assert conflict.entity_type == "department"
+        assert conflict.entity_id == "eng"
+        assert conflict.field == "description"
+        assert len(conflict.values) == 2
+        assert conflict.resolution == "Builds products"
+        assert conflict.confidence == 0.5
+
+    def test_default_values(self):
+        conflict = PlanConflict(
+            entity_type="role",
+            entity_id="swe",
+            field="persona",
+            values=[],
+        )
+        assert conflict.resolution == ""
+        assert conflict.confidence == 0.0
+
+    def test_serialization(self):
+        from src.bootstrap.models import _conflict_to_dict
+
+        conflict = PlanConflict(
+            entity_type="department",
+            entity_id="eng",
+            field="description",
+            values=[
+                {"source_docs": ["doc1"], "value": "Builds products"},
+                {"source_docs": ["doc2"], "value": "Ships software"},
+            ],
+            resolution="Builds products",
+            confidence=0.5,
+        )
+        d = _conflict_to_dict(conflict)
+        assert d["entity_type"] == "department"
+        assert d["entity_id"] == "eng"
+        assert d["field"] == "description"
+        assert len(d["values"]) == 2
+        assert d["resolution"] == "Builds products"
+        assert d["confidence"] == 0.5
+
+
 class TestBootstrapPlan:
     def test_default_creation(self):
         plan = BootstrapPlan()
@@ -95,6 +149,7 @@ class TestBootstrapPlan:
         assert plan.roles == []
         assert plan.skills == []
         assert plan.memories == []
+        assert plan.conflicts == []
 
     def test_summary(self):
         plan = BootstrapPlan(
@@ -114,7 +169,34 @@ class TestBootstrapPlan:
         assert summary["departments"] == 1
         assert summary["roles"] == 1
         assert summary["skills"] == 0
+        assert summary["conflicts"] == 0
         assert summary["estimated_cost"] == "$0.35"
+
+    def test_summary_with_conflicts(self):
+        plan = BootstrapPlan(
+            conflicts=[
+                PlanConflict(
+                    entity_type="department",
+                    entity_id="eng",
+                    field="description",
+                    values=[
+                        {"source_docs": ["d1"], "value": "A"},
+                        {"source_docs": ["d2"], "value": "B"},
+                    ],
+                ),
+                PlanConflict(
+                    entity_type="role",
+                    entity_id="swe",
+                    field="persona",
+                    values=[
+                        {"source_docs": ["d1"], "value": "X"},
+                        {"source_docs": ["d2"], "value": "Y"},
+                    ],
+                ),
+            ],
+        )
+        summary = plan.summary()
+        assert summary["conflicts"] == 2
 
     def test_to_dict(self):
         plan = BootstrapPlan(
@@ -134,6 +216,29 @@ class TestBootstrapPlan:
         assert d["departments"][0]["vocabulary"] == [
             {"term": "SLA", "definition": "Service Level Agreement"}
         ]
+        assert d["conflicts"] == []
+
+    def test_to_dict_with_conflicts(self):
+        plan = BootstrapPlan(
+            conflicts=[
+                PlanConflict(
+                    entity_type="department",
+                    entity_id="eng",
+                    field="description",
+                    values=[
+                        {"source_docs": ["doc1"], "value": "Builds products"},
+                        {"source_docs": ["doc2"], "value": "Ships software"},
+                    ],
+                    resolution="Builds products",
+                    confidence=0.5,
+                ),
+            ],
+        )
+        d = plan.to_dict()
+        assert len(d["conflicts"]) == 1
+        assert d["conflicts"][0]["entity_type"] == "department"
+        assert d["conflicts"][0]["entity_id"] == "eng"
+        assert d["conflicts"][0]["confidence"] == 0.5
 
     def test_status_enum(self):
         assert BootstrapStatus.DRAFT.value == "draft"

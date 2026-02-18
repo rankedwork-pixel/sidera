@@ -185,7 +185,7 @@ src/
   templates/    — Templates for adding new connectors, MCP tools, and OAuth routes
 dashboard/      — Streamlit MVP (6 pages)
 scripts/        — Operational scripts (seed, health check, cache, audit, doc sync)
-tests/          — 3613+ unit and integration tests
+tests/          — 3728+ unit and integration tests
 alembic/        — Database migrations (18 revisions)
 ```
 

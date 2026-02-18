@@ -865,6 +865,110 @@ class GoogleDriveConnector:
             return None
 
     # ------------------------------------------------------------------
+    # Public methods — Bootstrap helpers (PDF + Slides text extraction)
+    # ------------------------------------------------------------------
+
+    @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0)
+    def download_file_bytes(self, file_id: str) -> bytes | None:
+        """Download raw bytes of an uploaded (non-native) file via Drive API.
+
+        Useful for PDFs and other binary files that need client-side
+        processing (e.g. text extraction via pdfplumber).
+
+        Args:
+            file_id: The Google Drive file ID.
+
+        Returns:
+            The file bytes, or ``None`` on failure.
+        """
+        import io
+
+        from googleapiclient.http import MediaIoBaseDownload
+
+        self._log.info("google_drive.download_file_bytes", file_id=file_id)
+
+        try:
+            request = self._drive.files().get_media(fileId=file_id)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+
+            done = False
+            while not done:
+                _status, done = downloader.next_chunk()
+
+            self._log.info(
+                "google_drive.download_file_bytes.done",
+                file_id=file_id,
+                size=buffer.tell(),
+            )
+            return buffer.getvalue()
+
+        except HttpError as exc:
+            self._handle_http_error(exc, "download_file_bytes", file_id=file_id)
+            return None
+
+    @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0)
+    def export_presentation_text(self, presentation_id: str) -> str | None:
+        """Extract plain text from all slides in a Google Slides presentation.
+
+        Walks through every slide's page elements, finds shapes with
+        text content, and concatenates all text into a readable format
+        with ``--- Slide N ---`` delimiters.
+
+        Args:
+            presentation_id: The Google Slides presentation ID.
+
+        Returns:
+            The combined text content of all slides, or ``None`` on failure.
+        """
+        self._log.info(
+            "google_drive.export_presentation_text",
+            presentation_id=presentation_id,
+        )
+
+        try:
+            presentation = (
+                self._slides.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
+
+            slides = presentation.get("slides", [])
+            text_parts: list[str] = []
+
+            for slide_idx, slide in enumerate(slides, 1):
+                slide_texts: list[str] = []
+
+                for element in slide.get("pageElements", []):
+                    shape = element.get("shape", {})
+                    text_content = shape.get("text", {})
+                    for text_element in text_content.get("textElements", []):
+                        text_run = text_element.get("textRun", {})
+                        content = text_run.get("content", "")
+                        if content.strip():
+                            slide_texts.append(content.strip())
+
+                if slide_texts:
+                    text_parts.append(f"--- Slide {slide_idx} ---")
+                    text_parts.extend(slide_texts)
+
+            result = "\n".join(text_parts)
+            self._log.info(
+                "google_drive.export_presentation_text.done",
+                presentation_id=presentation_id,
+                slides=len(slides),
+                chars=len(result),
+            )
+            return result
+
+        except HttpError as exc:
+            self._handle_http_error(
+                exc, "export_presentation_text",
+                presentation_id=presentation_id,
+            )
+            return None
+
+    # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 

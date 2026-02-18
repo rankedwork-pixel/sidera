@@ -165,6 +165,27 @@ class ExtractedKnowledge:
 
 
 # =====================================================================
+# Conflict detection
+# =====================================================================
+
+
+@dataclass
+class PlanConflict:
+    """A detected disagreement between source documents.
+
+    Created during deduplication when multiple documents provide different
+    values for the same field on the same entity.
+    """
+
+    entity_type: str  # "department" | "role"
+    entity_id: str  # slug id
+    field: str  # "description", "persona", "context", "department_id"
+    values: list[dict[str, Any]]  # [{"source_docs": [...], "value": "..."}, ...]
+    resolution: str = ""  # what dedup chose as the final value
+    confidence: float = 0.0  # agreement ratio: most_common_count / total_sources
+
+
+# =====================================================================
 # Pipeline stage 4: Complete bootstrap plan
 # =====================================================================
 
@@ -185,6 +206,7 @@ class BootstrapPlan:
     roles: list[ExtractedRole] = field(default_factory=list)
     skills: list[ExtractedSkill] = field(default_factory=list)
     memories: list[ExtractedMemory] = field(default_factory=list)
+    conflicts: list[PlanConflict] = field(default_factory=list)
     estimated_cost: float = 0.0
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
@@ -203,6 +225,7 @@ class BootstrapPlan:
             "roles": len(self.roles),
             "skills": len(self.skills),
             "memories": len(self.memories),
+            "conflicts": len(self.conflicts),
             "estimated_cost": f"${self.estimated_cost:.2f}",
             "errors": len(self.errors),
         }
@@ -219,6 +242,7 @@ class BootstrapPlan:
             "roles": [_role_to_dict(r) for r in self.roles],
             "skills": [_skill_to_dict(s) for s in self.skills],
             "memories": [_memory_to_dict(m) for m in self.memories],
+            "conflicts": [_conflict_to_dict(c) for c in self.conflicts],
             "estimated_cost": self.estimated_cost,
             "created_at": self.created_at,
             "status": self.status,
@@ -326,4 +350,15 @@ def _memory_to_dict(m: ExtractedMemory) -> dict[str, Any]:
         "content": m.content,
         "confidence": m.confidence,
         "source_doc": m.source_doc,
+    }
+
+
+def _conflict_to_dict(c: PlanConflict) -> dict[str, Any]:
+    return {
+        "entity_type": c.entity_type,
+        "entity_id": c.entity_id,
+        "field": c.field,
+        "values": c.values,
+        "resolution": c.resolution,
+        "confidence": c.confidence,
     }

@@ -8,6 +8,7 @@ deduplicates, validates, and assembles it into a complete
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 import structlog
@@ -19,6 +20,7 @@ from src.bootstrap.models import (
     ExtractedMemory,
     ExtractedRole,
     ExtractedSkill,
+    PlanConflict,
 )
 
 logger = structlog.get_logger(__name__)
@@ -62,10 +64,13 @@ def generate_plan(
     6. Assemble into BootstrapPlan
     """
     errors: list[str] = []
+    conflicts: list[PlanConflict] = []
 
     # --- Step 1: Deduplicate ---
-    departments = _deduplicate_departments(knowledge.departments)
-    roles = _deduplicate_roles(knowledge.roles)
+    departments, dept_conflicts = _deduplicate_departments(knowledge.departments)
+    conflicts.extend(dept_conflicts)
+    roles, role_conflicts = _deduplicate_roles(knowledge.roles)
+    conflicts.extend(role_conflicts)
 
     # --- Step 2: Normalize IDs ---
     dept_id_map = _normalize_entity_ids(departments, "department")
@@ -126,6 +131,7 @@ def generate_plan(
         roles=roles,
         skills=skills,
         memories=memories,
+        conflicts=conflicts,
         estimated_cost=estimated_cost,
         errors=errors,
     )
@@ -137,6 +143,7 @@ def generate_plan(
         roles=len(roles),
         skills=len(skills),
         memories=len(memories),
+        conflicts=len(conflicts),
         errors=len(errors),
     )
 
@@ -150,24 +157,71 @@ def generate_plan(
 
 def _deduplicate_departments(
     depts: list[ExtractedDepartment],
-) -> list[ExtractedDepartment]:
-    """Merge departments with the same or very similar IDs/names."""
+) -> tuple[list[ExtractedDepartment], list[PlanConflict]]:
+    """Merge departments with the same or very similar IDs/names.
+
+    Returns the deduplicated list and any conflicts detected during merge.
+    """
     seen: dict[str, ExtractedDepartment] = {}
+    # Track all values per entity+field for conflict detection
+    field_values: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    conflicts: list[PlanConflict] = []
 
     for dept in depts:
         key = _normalize_slug(dept.id or dept.name)
+        source = dept.source_docs[:] if dept.source_docs else [dept.id or dept.name]
+
         if key in seen:
-            # Merge: combine descriptions, vocabulary, source docs
             existing = seen[key]
-            if dept.description and not existing.description:
-                existing.description = dept.description
-            if dept.context and not existing.context:
-                existing.context = dept.context
+
+            # Track conflicting descriptions
+            if dept.description:
+                field_values.setdefault(key, {}).setdefault("description", []).append(
+                    {"source_docs": source, "value": dept.description}
+                )
+                if not existing.description:
+                    existing.description = dept.description
+
+            # Track conflicting contexts
+            if dept.context:
+                field_values.setdefault(key, {}).setdefault("context", []).append(
+                    {"source_docs": source, "value": dept.context}
+                )
+                if not existing.context:
+                    existing.context = dept.context
+
             existing.vocabulary.extend(dept.vocabulary)
             existing.source_docs.extend(dept.source_docs)
         else:
             dept.id = key
             seen[key] = dept
+            # Track initial values for conflict detection
+            if dept.description:
+                field_values.setdefault(key, {}).setdefault("description", []).append(
+                    {"source_docs": source, "value": dept.description}
+                )
+            if dept.context:
+                field_values.setdefault(key, {}).setdefault("context", []).append(
+                    {"source_docs": source, "value": dept.context}
+                )
+
+    # Detect conflicts: fields where multiple distinct values were provided
+    for entity_id, fields in field_values.items():
+        for field_name, entries in fields.items():
+            unique_values = {e["value"] for e in entries}
+            if len(unique_values) > 1:
+                resolution = getattr(seen[entity_id], field_name, "")
+                confidence = _compute_agreement_confidence(entries)
+                conflicts.append(
+                    PlanConflict(
+                        entity_type="department",
+                        entity_id=entity_id,
+                        field=field_name,
+                        values=entries,
+                        resolution=resolution,
+                        confidence=confidence,
+                    )
+                )
 
     # Deduplicate vocabulary within each department
     for dept in seen.values():
@@ -180,21 +234,49 @@ def _deduplicate_departments(
                 unique_vocab.append(v)
         dept.vocabulary = unique_vocab
 
-    return list(seen.values())
+    return list(seen.values()), conflicts
 
 
-def _deduplicate_roles(roles: list[ExtractedRole]) -> list[ExtractedRole]:
-    """Merge roles with the same or very similar IDs/names."""
+def _deduplicate_roles(
+    roles: list[ExtractedRole],
+) -> tuple[list[ExtractedRole], list[PlanConflict]]:
+    """Merge roles with the same or very similar IDs/names.
+
+    Returns the deduplicated list and any conflicts detected during merge.
+    """
     seen: dict[str, ExtractedRole] = {}
+    field_values: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    conflicts: list[PlanConflict] = []
 
     for role in roles:
         key = _normalize_slug(role.id or role.name)
+        source = role.source_docs[:] if role.source_docs else [role.id or role.name]
+
         if key in seen:
             existing = seen[key]
-            if role.persona and not existing.persona:
-                existing.persona = role.persona
-            if role.description and not existing.description:
-                existing.description = role.description
+
+            # Track conflicting descriptions
+            if role.description:
+                field_values.setdefault(key, {}).setdefault("description", []).append(
+                    {"source_docs": source, "value": role.description}
+                )
+                if not existing.description:
+                    existing.description = role.description
+
+            # Track conflicting personas
+            if role.persona:
+                field_values.setdefault(key, {}).setdefault("persona", []).append(
+                    {"source_docs": source, "value": role.persona}
+                )
+                if not existing.persona:
+                    existing.persona = role.persona
+
+            # Track conflicting department_ids
+            if role.department_id:
+                field_values.setdefault(key, {}).setdefault(
+                    "department_id", []
+                ).append({"source_docs": source, "value": role.department_id})
+
             existing.principles.extend(role.principles)
             existing.goals.extend(role.goals)
             existing.source_docs.extend(role.source_docs)
@@ -205,13 +287,44 @@ def _deduplicate_roles(roles: list[ExtractedRole]) -> list[ExtractedRole]:
         else:
             role.id = key
             seen[key] = role
+            # Track initial values for conflict detection
+            if role.description:
+                field_values.setdefault(key, {}).setdefault("description", []).append(
+                    {"source_docs": source, "value": role.description}
+                )
+            if role.persona:
+                field_values.setdefault(key, {}).setdefault("persona", []).append(
+                    {"source_docs": source, "value": role.persona}
+                )
+            if role.department_id:
+                field_values.setdefault(key, {}).setdefault(
+                    "department_id", []
+                ).append({"source_docs": source, "value": role.department_id})
+
+    # Detect conflicts: fields where multiple distinct values were provided
+    for entity_id, fields in field_values.items():
+        for field_name, entries in fields.items():
+            unique_values = {e["value"] for e in entries}
+            if len(unique_values) > 1:
+                resolution = getattr(seen[entity_id], field_name, "")
+                confidence = _compute_agreement_confidence(entries)
+                conflicts.append(
+                    PlanConflict(
+                        entity_type="role",
+                        entity_id=entity_id,
+                        field=field_name,
+                        values=entries,
+                        resolution=resolution,
+                        confidence=confidence,
+                    )
+                )
 
     # Deduplicate principles/goals within each role
     for role in seen.values():
         role.principles = list(dict.fromkeys(role.principles))
         role.goals = list(dict.fromkeys(role.goals))
 
-    return list(seen.values())
+    return list(seen.values()), conflicts
 
 
 # =====================================================================
@@ -225,6 +338,19 @@ def _normalize_slug(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", slug)
     slug = slug.strip("_")
     return slug or "unknown"
+
+
+def _compute_agreement_confidence(entries: list[dict[str, Any]]) -> float:
+    """Compute agreement ratio: most_common_count / total_sources.
+
+    If 3 sources say "Builds products" and 1 says "Ships software",
+    confidence = 3/4 = 0.75.
+    """
+    if not entries:
+        return 0.0
+    value_counts = Counter(e["value"] for e in entries)
+    most_common_count = value_counts.most_common(1)[0][1]
+    return most_common_count / len(entries)
 
 
 def _normalize_entity_ids(

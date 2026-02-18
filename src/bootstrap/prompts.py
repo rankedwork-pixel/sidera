@@ -1,11 +1,12 @@
 """LLM prompts for the company bootstrap pipeline.
 
-Four prompts power the bootstrap extraction:
+Five prompt sets power the bootstrap:
 
 1. **CLASSIFY_PROMPT** -- Haiku classifies each document's type.
 2. **EXTRACT_ORG_PROMPT** -- Sonnet extracts org structure (depts, roles, hierarchy).
 3. **EXTRACT_SKILLS_PROMPT** -- Sonnet extracts skills from SOPs/playbooks.
 4. **EXTRACT_CONTEXT_PROMPT** -- Sonnet extracts goals, vocabulary, principles, memories.
+5. **REFINE_PROMPT** -- Sonnet applies user feedback to modify a draft plan.
 """
 
 from __future__ import annotations
@@ -234,3 +235,50 @@ Return JSON with:
 
 Documents:
 {documents}"""
+
+# =====================================================================
+# Plan refinement (Sonnet -- single-turn, no tools)
+# =====================================================================
+
+REFINE_SYSTEM_PROMPT = """\
+You are a plan editor for an AI agent onboarding system. You receive a \
+draft bootstrap plan (departments, roles, skills) and natural language \
+feedback from a human reviewer. Your job is to return structured JSON \
+modifications that implement the reviewer's feedback.
+
+IMPORTANT:
+- Only modify what the feedback explicitly asks for.
+- If feedback says "add X", return an "add" operation.
+- If feedback says "remove X" or "delete X", return a "remove" operation.
+- If feedback says "rename X" or "change X", return a "modify" operation.
+- Keep IDs as lowercase_underscored slugs.
+- Be conservative: do not make changes beyond what was requested.
+
+Return ONLY a JSON object (no markdown fences) with this structure:
+{{
+  "changes": [
+    {{
+      "action": "add" | "remove" | "modify",
+      "entity_type": "department" | "role" | "skill",
+      "entity_id": "slug_id",
+      "fields": {{"field": "value"}}
+    }}
+  ],
+  "explanation": "Brief description of what was changed and why"
+}}
+
+For "add" actions, include all required fields in "fields":
+- department: id, name, description
+- role: id, name, department_id, description
+- skill: id, name, role_id, department_id, description
+
+For "modify" actions, only include the fields being changed.
+For "remove" actions, fields can be empty or omitted.
+"""
+
+REFINE_USER_TEMPLATE = """\
+Current plan summary:
+{plan_summary}
+
+User feedback:
+{feedback}"""

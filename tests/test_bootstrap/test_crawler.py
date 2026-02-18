@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.bootstrap.crawler import (
     MAX_DOC_CHARS,
     _read_file_content,
+    _read_pdf_content,
     _sheet_to_text,
     _truncate_content,
     crawl_folder,
@@ -194,3 +196,180 @@ class TestCrawlFolder:
 
         docs = await crawl_folder("empty_folder", connector=mock_drive)
         assert len(docs) == 0
+
+    async def test_crawl_includes_presentations(self):
+        """Google Slides presentations should be crawled."""
+        mock_drive = MagicMock()
+        mock_drive.list_files.return_value = [
+            {
+                "id": "pres1",
+                "name": "Strategy Deck",
+                "mimeType": "application/vnd.google-apps.presentation",
+            },
+        ]
+        mock_drive.export_presentation_text.return_value = "--- Slide 1 ---\nTitle"
+
+        docs = await crawl_folder("folder_id", connector=mock_drive)
+        assert len(docs) == 1
+        assert docs[0].title == "Strategy Deck"
+        assert "Slide 1" in docs[0].content
+
+    async def test_crawl_includes_pdfs(self):
+        """PDFs should be crawled when pdfplumber is available."""
+        mock_drive = MagicMock()
+        mock_drive.list_files.return_value = [
+            {
+                "id": "pdf1",
+                "name": "Org Chart.pdf",
+                "mimeType": "application/pdf",
+            },
+        ]
+        mock_drive.download_file_bytes.return_value = b"fake pdf bytes"
+
+        # Mock _read_pdf_content since it uses pdfplumber internals
+        with patch(
+            "src.bootstrap.crawler._read_pdf_content",
+            return_value="Org chart content",
+        ):
+            docs = await crawl_folder("folder_id", connector=mock_drive)
+            assert len(docs) == 1
+            assert docs[0].title == "Org Chart.pdf"
+            assert "Org chart content" in docs[0].content
+
+
+class TestReadFileContentSlides:
+    def test_read_presentation(self):
+        mock_drive = MagicMock()
+        mock_drive.export_presentation_text.return_value = "Slide text"
+
+        result = _read_file_content(
+            mock_drive, "pres1", "application/vnd.google-apps.presentation"
+        )
+        assert result == "Slide text"
+        mock_drive.export_presentation_text.assert_called_once_with("pres1")
+
+    def test_read_presentation_empty(self):
+        mock_drive = MagicMock()
+        mock_drive.export_presentation_text.return_value = None
+
+        result = _read_file_content(
+            mock_drive, "pres1", "application/vnd.google-apps.presentation"
+        )
+        assert result == ""
+
+    def test_read_presentation_error(self):
+        mock_drive = MagicMock()
+        mock_drive.export_presentation_text.side_effect = Exception("API error")
+
+        result = _read_file_content(
+            mock_drive, "pres1", "application/vnd.google-apps.presentation"
+        )
+        assert result == ""
+
+
+def _mock_pdfplumber_module(mock_pdf_obj):
+    """Create a mock pdfplumber module and inject it into sys.modules."""
+    mock_module = MagicMock()
+    mock_module.open.return_value = mock_pdf_obj
+    return mock_module
+
+
+def _make_mock_pdf(*pages):
+    """Create a mock PDF object with context manager support."""
+    mock_pdf = MagicMock()
+    mock_pdf.pages = list(pages)
+    mock_pdf.__enter__ = lambda self: self
+    mock_pdf.__exit__ = MagicMock(return_value=False)
+    return mock_pdf
+
+
+class TestReadPdfContent:
+    def test_read_pdf_success(self):
+        mock_drive = MagicMock()
+        mock_drive.download_file_bytes.return_value = b"fake pdf"
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Hello from PDF"
+        mock_page.extract_tables.return_value = []
+
+        mock_pdf = _make_mock_pdf(mock_page)
+        mock_pdfplumber = _mock_pdfplumber_module(mock_pdf)
+
+        with patch.dict(sys.modules, {"pdfplumber": mock_pdfplumber}):
+            result = _read_pdf_content(mock_drive, "file1")
+            assert "Hello from PDF" in result
+            assert "Page 1" in result
+
+    def test_read_pdf_with_tables(self):
+        mock_drive = MagicMock()
+        mock_drive.download_file_bytes.return_value = b"fake pdf"
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Text"
+        mock_page.extract_tables.return_value = [
+            [["Name", "Age"], ["Alice", "30"]]
+        ]
+
+        mock_pdf = _make_mock_pdf(mock_page)
+        mock_pdfplumber = _mock_pdfplumber_module(mock_pdf)
+
+        with patch.dict(sys.modules, {"pdfplumber": mock_pdfplumber}):
+            result = _read_pdf_content(mock_drive, "file1")
+            assert "Name | Age" in result
+            assert "Alice | 30" in result
+
+    def test_read_pdf_no_bytes(self):
+        mock_drive = MagicMock()
+        mock_drive.download_file_bytes.return_value = None
+
+        # Need pdfplumber mock for the import to succeed
+        mock_pdfplumber = MagicMock()
+        with patch.dict(sys.modules, {"pdfplumber": mock_pdfplumber}):
+            result = _read_pdf_content(mock_drive, "file1")
+            assert result == ""
+
+    def test_read_pdf_pdfplumber_not_installed(self):
+        """Should return empty string when pdfplumber is not available."""
+        mock_drive = MagicMock()
+
+        # Remove pdfplumber from sys.modules and make import fail
+        saved = sys.modules.pop("pdfplumber", None)
+        try:
+            if isinstance(__builtins__, dict):
+                original_import = __builtins__["__import__"]
+            else:
+                original_import = __builtins__.__import__
+
+            def mock_import(name, *args, **kwargs):
+                if name == "pdfplumber":
+                    raise ImportError("No module named 'pdfplumber'")
+                return original_import(name, *args, **kwargs)
+
+            with patch("builtins.__import__", side_effect=mock_import):
+                result = _read_pdf_content(mock_drive, "file1")
+                assert result == ""
+        finally:
+            if saved is not None:
+                sys.modules["pdfplumber"] = saved
+
+    def test_read_pdf_multiple_pages(self):
+        mock_drive = MagicMock()
+        mock_drive.download_file_bytes.return_value = b"fake pdf"
+
+        mock_page1 = MagicMock()
+        mock_page1.extract_text.return_value = "Page one text"
+        mock_page1.extract_tables.return_value = []
+
+        mock_page2 = MagicMock()
+        mock_page2.extract_text.return_value = "Page two text"
+        mock_page2.extract_tables.return_value = []
+
+        mock_pdf = _make_mock_pdf(mock_page1, mock_page2)
+        mock_pdfplumber = _mock_pdfplumber_module(mock_pdf)
+
+        with patch.dict(sys.modules, {"pdfplumber": mock_pdfplumber}):
+            result = _read_pdf_content(mock_drive, "file1")
+            assert "Page 1" in result
+            assert "Page 2" in result
+            assert "Page one text" in result
+            assert "Page two text" in result
