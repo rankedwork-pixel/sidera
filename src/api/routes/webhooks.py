@@ -22,6 +22,10 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
+# Maximum webhook payload size (100 KB). Prevents memory exhaustion from
+# oversized payloads and limits blast radius of malformed requests.
+_MAX_WEBHOOK_PAYLOAD_BYTES = 102_400
+
 
 # ------------------------------------------------------------------
 # Recall.ai transcript webhook
@@ -107,6 +111,10 @@ async def _handle_recall_transcript(
     """Shared handler for Recall.ai transcript webhook events."""
     try:
         raw_body = await request.body()
+        if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
+            return JSONResponse(
+                {"status": "payload_too_large"}, status_code=413,
+            )
         body: dict[str, Any] = await request.json()
     except Exception:
         logger.warning(
@@ -362,6 +370,12 @@ async def google_ads_webhook(request: Request) -> JSONResponse:
 
     Authenticated via shared secret in payload or header.
     """
+    raw_body = await request.body()
+    if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
+        return JSONResponse(
+            {"status": "payload_too_large"}, status_code=413,
+        )
+
     try:
         body: dict[str, Any] = await request.json()
     except Exception:
@@ -418,6 +432,10 @@ async def meta_webhook(request: Request) -> JSONResponse:
     X-Hub-Signature-256 HMAC.
     """
     raw_body = await request.body()
+    if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
+        return JSONResponse(
+            {"status": "payload_too_large"}, status_code=413,
+        )
 
     # Verify HMAC signature
     from src.config import settings
@@ -458,6 +476,12 @@ async def bigquery_webhook(request: Request) -> JSONResponse:
     The Pub/Sub subscription pushes to this endpoint. Payload is the
     decoded message data (after base64 decoding by Pub/Sub).
     """
+    raw_body = await request.body()
+    if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
+        return JSONResponse(
+            {"status": "payload_too_large"}, status_code=413,
+        )
+
     try:
         body: dict[str, Any] = await request.json()
     except Exception:
@@ -494,12 +518,20 @@ async def custom_webhook(source_id: str, request: Request) -> JSONResponse:
     Required fields: ``event_type``, ``summary``.
     Optional: ``severity``, ``account_id``, ``campaign_id``, ``details``.
     """
+    raw_body = await request.body()
+    if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
+        return JSONResponse(
+            {"status": "payload_too_large"}, status_code=413,
+        )
+
     # Verify shared secret
     from src.config import settings
 
     if settings.webhook_secret_custom:
         header_secret = request.headers.get("X-Webhook-Secret", "")
-        if not hmac.compare_digest(header_secret, settings.webhook_secret_custom):
+        if not hmac.compare_digest(
+            header_secret, settings.webhook_secret_custom,
+        ):
             return JSONResponse({"status": "unauthorized"}, status_code=401)
 
     try:

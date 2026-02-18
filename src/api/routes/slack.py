@@ -3103,13 +3103,27 @@ _MEETING_URL_RE = _re.compile(
 )
 
 
+def _sanitize_meeting_url(url: str) -> str:
+    """Strip query parameters and fragments from a meeting URL.
+
+    Meeting URLs like ``https://zoom.us/j/123?pwd=SECRET`` may contain
+    passwords or tokens in query params.  We only need the path portion
+    for the Recall.ai bot to join.
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
 def _detect_meeting_url(text: str) -> str | None:
     """Return the first meeting URL found in *text*, or ``None``.
 
     Supports Google Meet, Zoom, Microsoft Teams, and WebEx links.
+    The URL is sanitized to strip query parameters and fragments.
     """
     m = _MEETING_URL_RE.search(text)
-    return m.group(0) if m else None
+    return _sanitize_meeting_url(m.group(0)) if m else None
 
 
 async def _resolve_user_display_name(client, user_id: str) -> str:
