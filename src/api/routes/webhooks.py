@@ -115,6 +115,17 @@ async def _handle_recall_transcript(
         )
         return JSONResponse({"status": "invalid_json"}, status_code=400)
 
+    # --- Webhook authentication ---
+    from src.config import settings
+
+    if settings.recall_ai_webhook_secret:
+        header_secret = request.headers.get("X-Webhook-Secret", "")
+        if not hmac.compare_digest(
+            header_secret, settings.recall_ai_webhook_secret,
+        ):
+            logger.warning("webhook.recall.auth_failed")
+            return JSONResponse({"status": "unauthorized"}, status_code=401)
+
     # Log full payload for debugging (temporary)
     import json as _json
 
@@ -148,6 +159,20 @@ async def _handle_recall_transcript(
             logger.info(
                 "webhook.recall.fallback_bot_id",
                 resolved_bot_id=resolved_bot_id,
+            )
+
+    # --- Validate bot_id against active sessions ---
+    if resolved_bot_id:
+        from src.meetings.session import get_meeting_manager as _get_mgr
+
+        _mgr = _get_mgr()
+        if _mgr.get_active_session(resolved_bot_id) is None:
+            logger.warning(
+                "webhook.recall.unknown_bot_id",
+                bot_id=resolved_bot_id,
+            )
+            return JSONResponse(
+                {"status": "unknown_bot_id"}, status_code=404,
             )
 
     # Parse transcript from the real Recall.ai payload format.

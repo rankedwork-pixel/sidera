@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     # Recall.ai (meeting bot service)
     recall_ai_api_key: str = ""
     recall_ai_region: str = "us-west-2"  # us-west-2, us-east-1, etc.
+    recall_ai_webhook_secret: str = ""  # Shared secret for Recall.ai webhook auth
 
     # Meeting settings
     meeting_max_duration_minutes: int = 120
