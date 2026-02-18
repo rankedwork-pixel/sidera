@@ -5896,15 +5896,16 @@ async def working_group_workflow(ctx: inngest.Context) -> dict:
             }
 
             # Update DB
+            from datetime import datetime as _dt
+            from datetime import timezone as _tz
+
             async with get_db_session() as session:
                 await db_service.update_working_group_status(
                     session,
                     group_id,
                     "executing",
                     plan_json=plan_dict,
-                    started_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc,
-                    ),
+                    started_at=_dt.now(_tz.utc),
                 )
                 await session.commit()
 

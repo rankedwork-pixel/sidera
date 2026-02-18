@@ -110,7 +110,14 @@ async def _get_oauth_state(state: str) -> dict | None:
         )
 
     # Fall back to in-memory
-    return _pending_states.pop(state, None)
+    result = _pending_states.pop(state, None)
+    if result is not None:
+        logger.warning(
+            "oauth.state.inmemory_fallback",
+            provider="google_drive",
+            state_prefix=state[:8],
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------

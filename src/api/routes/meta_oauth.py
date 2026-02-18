@@ -87,7 +87,14 @@ async def _get_oauth_state(state: str) -> dict | None:
         logger.debug("oauth.meta.state.redis_get_failed", state_prefix=state[:8])
 
     # Fall back to in-memory
-    return _pending_states.pop(state, None)
+    result = _pending_states.pop(state, None)
+    if result is not None:
+        logger.warning(
+            "oauth.state.inmemory_fallback",
+            provider="meta",
+            state_prefix=state[:8],
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
