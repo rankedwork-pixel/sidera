@@ -37,6 +37,7 @@ from src.bootstrap.prompts import (
 )
 from src.config import settings
 from src.llm.provider import TaskType
+from src.utils.input_boundary import wrap_untrusted
 
 logger = structlog.get_logger(__name__)
 
@@ -445,7 +446,7 @@ def _prepare_doc_content(docs: list[ClassifiedDocument]) -> str:
         part = (
             f'---\nDocument: "{doc.title}"\n'
             f"Folder: {doc.folder_path or '(root)'}\n"
-            f"Content:\n{content}\n"
+            f"Content:\n{wrap_untrusted(content)}\n"
         )
         parts.append(part)
         total_chars += len(part)
@@ -544,7 +545,7 @@ def _prepare_doc_batches(
         part = (
             f'---\nDocument: "{title}"\n'
             f"Folder: {folder}\n"
-            f"Content:\n{content}\n"
+            f"Content:\n{wrap_untrusted(content)}\n"
         )
         part_len = len(part)
 

@@ -335,17 +335,26 @@ async def extract_conversation_memories_llm(
     """
     from src.agent.api_client import run_agent_loop
     from src.config import settings
+    from src.utils.input_boundary import wrap_untrusted
 
-    # Build conversation context (truncated to keep costs low)
-    conversation = f"User: {user_message[:1500]}\n\nAgent: {agent_response[:1500]}"
+    # Build conversation context (truncated to keep costs low).
+    # User messages are wrapped in boundary tags to prevent prompt injection.
+    conversation = (
+        f"User: {wrap_untrusted(user_message[:1500])}\n\n"
+        f"Agent: {agent_response[:1500]}"
+    )
 
     # Add recent thread context if available (last 3 messages)
     if thread_history:
         recent = thread_history[-3:]
-        history_text = "\n".join(
-            f"{'Agent' if m.get('is_bot') else 'User'}: {(m.get('text', '') or '')[:300]}"
-            for m in recent
-        )
+        history_parts: list[str] = []
+        for m in recent:
+            text = (m.get("text", "") or "")[:300]
+            if m.get("is_bot"):
+                history_parts.append(f"Agent: {text}")
+            else:
+                history_parts.append(f"User: {wrap_untrusted(text)}")
+        history_text = "\n".join(history_parts)
         conversation = (
             f"Recent thread context:\n{history_text}\n\n---\n\nCurrent turn:\n{conversation}"
         )

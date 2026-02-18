@@ -70,11 +70,19 @@ def get_approval_status(approval_id: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def _extract_recommendations(response_text: str) -> tuple[str, list[dict]]:
+def _extract_recommendations(
+    response_text: str,
+    expected_nonce: str = "",
+) -> tuple[str, list[dict]]:
     """Extract JSON recommendation blocks from agent response text.
 
     Returns (clean_text, recommendations) where clean_text has the JSON
     block removed, and recommendations is the parsed list.
+
+    When ``expected_nonce`` is provided, the extracted JSON must contain a
+    matching ``_nonce`` field. This prevents prompt injection attacks where
+    an attacker embeds a fake recommendations JSON block in a user message
+    that the LLM might quote or reference in its response.
     """
     pattern = r'```json\s*(\{.*?"recommendations"\s*:\s*\[.*?\].*?\})\s*```'
     match = _re.search(pattern, response_text, _re.DOTALL)
@@ -86,6 +94,17 @@ def _extract_recommendations(response_text: str) -> tuple[str, list[dict]]:
         recs = data.get("recommendations", [])
         if not isinstance(recs, list):
             return response_text, []
+
+        # Nonce provenance check — reject recommendations without
+        # the correct nonce (defense against injected JSON blocks).
+        if expected_nonce and data.get("_nonce") != expected_nonce:
+            logger.warning(
+                "extract_recommendations.nonce_mismatch",
+                expected=expected_nonce[:8],
+                got=str(data.get("_nonce", ""))[:8],
+            )
+            return response_text, []
+
         # Remove the JSON block from the response text shown to user
         clean = response_text[: match.start()].rstrip()
         return clean, recs
@@ -462,6 +481,12 @@ async def _run_conversation_turn_inline(
         except Exception:
             pass
 
+        import secrets as _secrets
+
+        from src.agent.injection_defense import NONCE_INSTRUCTION_TEMPLATE
+
+        _rec_nonce = _secrets.token_hex(8)
+
         role_context = compose_role_context(
             department=dept,
             role=role,
@@ -469,6 +494,8 @@ async def _run_conversation_turn_inline(
             registry=registry,
             pending_messages=message_ctx,
         )
+        # Append nonce instruction so the agent tags its recommendations
+        role_context += NONCE_INSTRUCTION_TEMPLATE.format(nonce=_rec_nonce)
 
         # Get thread history from Slack
         connector = SlackConnector()
@@ -580,7 +607,9 @@ async def _run_conversation_turn_inline(
         )
 
         # Also check for JSON blocks in text as fallback
-        clean_text, text_recs = _extract_recommendations(result.response_text)
+        clean_text, text_recs = _extract_recommendations(
+            result.response_text, expected_nonce=_rec_nonce,
+        )
         all_recs = pending_actions + text_recs + skill_proposals + cc_task_proposals
         response_text = clean_text if text_recs else result.response_text
 

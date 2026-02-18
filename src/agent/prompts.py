@@ -25,6 +25,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+from src.agent.injection_defense import INJECTION_DEFENSE_SUPPLEMENT
+from src.utils.input_boundary import wrap_untrusted
+
 # =============================================================================
 # Base system prompt — Example domain: Digital Marketing
 # Replace this prompt for other domains or load from domain configuration.
@@ -101,7 +104,7 @@ spreadsheet, or presentation.
 3. Never delete or overwrite existing files — only create new ones or append.
 4. When creating Sheets with data, always include a header row.
 5. After creating any file, provide the shareable link to the user.
-"""
+""" + INJECTION_DEFENSE_SUPPLEMENT
 
 
 # =============================================================================
@@ -1175,11 +1178,11 @@ def build_conversation_prompt(
                 parts.append(f"[You]: {msg['text']}")
             else:
                 user_label = f"<@{msg['user']}>" if msg.get("user") else "[User]"
-                parts.append(f"[{user_label}]: {msg['text']}")
+                parts.append(f"[{user_label}]: {wrap_untrusted(msg['text'])}")
         parts.append("")  # blank line separator
 
     parts.append("## Current Message\n")
-    parts.append(current_message)
+    parts.append(wrap_untrusted(current_message))
 
     # Provide message coordinates so the agent can react with emoji
     if channel_id and message_ts:
@@ -1310,11 +1313,11 @@ def build_webhook_reaction_prompt(
         f"**Severity:** {severity.upper()}",
         f"**Source:** {source}",
         f"**Event Type:** {event_type}",
-        f"**Summary:** {summary}",
+        f"**Summary:** {wrap_untrusted(summary)}",
     ]
 
     if campaign_name:
-        parts.append(f"**Campaign:** {campaign_name}")
+        parts.append(f"**Campaign:** {wrap_untrusted(campaign_name)}")
     if account_id:
         parts.append(f"**Account:** {account_id}")
 
@@ -1323,7 +1326,9 @@ def build_webhook_reaction_prompt(
 
         detail_str = json.dumps(details, indent=2, default=str)
         if len(detail_str) < 2000:
-            parts.append(f"\n**Event Details:**\n```json\n{detail_str}\n```")
+            parts.append(
+                f"\n**Event Details:**\n{wrap_untrusted(detail_str)}"
+            )
 
     parts.append(
         "\nInvestigate this event now. Confirm whether it's real, "
