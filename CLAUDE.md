@@ -26,6 +26,10 @@ The core pattern is domain-agnostic: connect data sources → teach skills via Y
 - Core agent loop (`src/agent/core.py`) — SideraAgent with ClaudeSDKClient, model routing, BigQuery + Google Drive wired in, `run_skill()` method, `run_daily_briefing_optimized()` three-phase method (Haiku→Sonnet→Opus), `run_delegation_decision()` + `run_synthesis()` for manager roles, `run_conversation_turn()` for Slack thread conversations, `run_heartbeat_turn()` for proactive check-ins
 - Agent prompts (`src/agent/prompts.py`) — split into BASE_SYSTEM_PROMPT + DAILY_BRIEFING_SUPPLEMENT for skill composition, plus three-phase cost-optimized prompts (DATA_COLLECTION, ANALYSIS_ONLY, STRATEGIC_ANALYSIS), plus DELEGATION_DECISION_PROMPT and SYNTHESIS_PROMPT for manager roles, plus CONVERSATION_SUPPLEMENT + `build_conversation_prompt()` for threaded conversations, plus HEARTBEAT_SUPPLEMENT + `build_heartbeat_prompt()` for proactive check-ins
 - Recall.ai connector (`src/connectors/recall_ai.py`) — meeting bot lifecycle (create_bot, get_bot, leave, get_transcript, get_recording_url), real-time transcript streaming via httpx
+- SSH connector (`src/connectors/ssh.py`) — async remote server execution via SSH (asyncssh). 7 methods: run_command, read_file, list_directory, get_system_info, list_processes, check_service_status, tail_log. Command safety filter (20+ blocked patterns: rm -rf, mkfs, shutdown, etc.), output truncation (50K chars), timeout enforcement (max 300s), connection reuse. Retry with backoff, SSHAuthError classified as permanent.
+- SSH MCP tools (`src/mcp_servers/ssh.py`) — 6 tools (run_remote_command, read_remote_file, list_remote_directory, get_remote_system_info, list_remote_processes, tail_remote_log)
+- Computer Use connector (`src/connectors/computer_use.py`) — Anthropic Computer Use desktop automation. Manages sessions (Docker container or HTTP endpoint), action execution (click, type, scroll, screenshot), and a complete agent loop (`run_task()`) that handles the screenshot→Claude→action cycle. Supports latest tool version (`computer_20251124` for Opus/Sonnet 4.6) and legacy (`computer_20250124`). Session lifecycle with action limits (100/task), timeout enforcement (600s), cost tracking.
+- Computer Use MCP tools (`src/mcp_servers/computer_use.py`) — 3 tools (run_computer_use_task, get_computer_use_session, stop_computer_use_session)
 - Meeting session manager (`src/meetings/session.py`) — MeetingSessionManager singleton orchestrating listen-only meeting participation via Recall.ai. MeetingContext tracks transcript, participants, and costs. Webhook-triggered transcript capture.
 - Meeting MCP tools (`src/mcp_servers/meeting.py`) — 3 tools (get_meeting_transcript, get_meeting_participants, end_meeting_participation)
 - Slack connector (`src/connectors/slack.py`) — 19 methods: Block Kit formatting, approval buttons, auto-execute notification, thread replies, thread history, reactions, meeting notifications
@@ -111,7 +115,7 @@ The core pattern is domain-agnostic: connect data sources → teach skills via Y
 - Context-aware prompt reordering (`src/skills/executor.py`) — `compose_role_context()` refactored to separate stable identity sections from dynamic per-run sections. Stable sections (department context, vocabulary, persona, principles, goals, context files, team awareness) go first for KV-cache prefix reuse across requests. Dynamic sections (memory context, pending messages) go last at the attention edge, leveraging the U-shaped attention curve (models attend most to beginning and end of context). This improves both cache hit rates and recall of the most important per-run information.
 - Observation masking for conversations (`src/agent/prompts.py`) — `build_conversation_prompt()` now compresses verbose bot responses from older conversation turns. Bot messages older than `_OBSERVATION_MASK_TURN_AGE` (3) turns and exceeding `_OBSERVATION_MASK_MIN_LENGTH` (500 chars) are replaced with compact `[Earlier response summarized]` markers preserving the first sentence. Human messages always kept in full. Reduces context waste from tool output dumps in long conversations (research shows tool outputs consume 80%+ of tokens in agent trajectories). `_mask_observation()` helper extracts first sentence or truncates at 150 chars.
 - Memory contradiction detection (`src/skills/consolidation.py`) — enhanced consolidation pipeline detects conflicting memories instead of silently merging them. When the Haiku consolidator identifies directly conflicting claims in a cluster (e.g., "Campaign X works best on weekdays" vs "Campaign X works best on weekends"), it flags the group with `is_contradiction: true`. Contradictions get `[Contradiction]` prefix, fixed confidence=0.3 (signals "needs human review"), type="insight", and skip normal confidence boosting. Stats dict includes `contradictions_found` count. Prevents context poisoning from hallucinated or conflicting memories compounding when re-injected.
-- 4024+ unit + integration tests, ruff lint clean
+- 4221+ unit + integration tests, ruff lint clean
 
 - E2E testing — Google Ads live (test MCC 9433912543 → client 8382412741, 3 campaigns created), Slack bot connected (ngrok tunnel, triple slash command `/sidera` + `/mjz-test-agent` + `/project-sidera`), conversation mode verified with live Claude API calls, inline dev-mode runner (`_run_conversation_turn_inline`) bypasses Inngest for local testing, `_load_dotenv_overrides()` fix for empty shell env vars, protobuf `_pb` compatibility fix for newer google-ads library, ClearanceLevel model fix (Enum→String(20) to match migration)
 
@@ -178,12 +182,12 @@ src/
   llm/          — Provider abstraction: LLMProvider protocol, TaskType enum, AnthropicProvider, OpenAICompatibleProvider, hybrid router with fallback
   bootstrap/    — Company onboarding pipeline: crawl Drive → classify → extract → generate plan → execute (7 modules, 104 tests)
   skills/       — Skill system: schema, registry, router, role router, executor, manager executor, portability (export/import), YAML library (dept/role/skill hierarchy)
-  mcp_servers/  — MCP tools for agent (Google Ads, Meta, BigQuery, Google Drive, Slack, System, Evolution, Meeting, Context, Delegation, Messaging, Orchestration, Code Execution + write_safety) — 65 tools total
+  mcp_servers/  — MCP tools for agent (Google Ads, Meta, BigQuery, Google Drive, Slack, System, Evolution, Meeting, Context, Delegation, Messaging, Orchestration, Code Execution, SSH, Computer Use + write_safety) — 74 tools total
   meetings/     — Listen-only meeting session manager, transcript capture
   mcp_stdio/    — MCP stdio server for Claude Code (server, bridge, meta-tools)
   workflows/    — Inngest durable functions (18 workflows: daily briefing, cost monitor, skill/role/dept/manager runners, scheduler, token refresh, conversation turn, meeting join/end, data retention, heartbeat runner, event reactor, working group, bootstrap)
   models/       — Database schema, cross-platform metric normalization
-  connectors/   — API clients (Google Ads, Meta, BigQuery, Google Drive, Slack, Recall.ai) — 6 connectors + retry utility
+  connectors/   — API clients (Google Ads, Meta, BigQuery, Google Drive, Slack, Recall.ai, SSH, Computer Use) — 8 connectors + retry utility
   api/          — FastAPI app, OAuth routes, webhooks, /sidera slash command, org chart REST API
   db/           — Async SQLAlchemy session + 115-method CRUD service
   cache/        — Redis caching client, service layer, @cached decorator
@@ -192,7 +196,7 @@ src/
   templates/    — Connector, MCP server, and OAuth route templates for adding new domains
 alembic/        — Database migrations (29 revisions)
 dashboard/      — Streamlit MVP UI (6 pages)
-tests/          — 4024+ unit + integration tests with mock fixtures
+tests/          — 4221+ unit + integration tests with mock fixtures
 scripts/        — DB setup, manual triggers
 docs/           — Build progress log
 ```

@@ -170,6 +170,25 @@ class Settings(BaseSettings):
     webhook_auto_investigate_severity: str = "high"  # Min severity for auto-investigation
     webhook_max_investigations_per_hour: int = 10  # Rate limit on agent investigations
 
+    # SSH remote server execution
+    ssh_enabled: bool = False  # Global kill switch — default OFF
+    ssh_host: str = ""
+    ssh_port: int = 22
+    ssh_username: str = ""
+    ssh_private_key_path: str = ""  # Path to SSH private key (preferred)
+    ssh_password: str = ""  # Fallback — key-based auth preferred
+    ssh_known_hosts_path: str = ""  # Empty = accept any (dev only)
+    ssh_command_timeout: int = 30  # Default command timeout in seconds
+
+    # Computer Use (Anthropic desktop automation)
+    computer_use_enabled: bool = False  # Global kill switch — default OFF
+    computer_use_container_url: str = ""  # HTTP endpoint for existing env
+    computer_use_docker_image: str = (
+        "ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest"
+    )
+    computer_use_max_actions: int = 100  # Max actions per task
+    computer_use_max_duration: int = 600  # Max task duration in seconds
+
     # Timezone for agent time awareness
     agent_timezone: str = "America/New_York"  # IANA timezone name
 

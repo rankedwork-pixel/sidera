@@ -43,6 +43,7 @@ import structlog
 import src.mcp_servers.actions  # noqa: F401, E402 — trigger @tool registration
 import src.mcp_servers.bigquery  # noqa: F401, E402
 import src.mcp_servers.claude_code_actions  # noqa: F401, E402
+import src.mcp_servers.computer_use  # noqa: F401, E402
 import src.mcp_servers.context  # noqa: F401, E402
 import src.mcp_servers.delegation  # noqa: F401, E402
 import src.mcp_servers.evolution  # noqa: F401, E402
@@ -54,6 +55,7 @@ import src.mcp_servers.messaging  # noqa: F401, E402
 import src.mcp_servers.meta  # noqa: F401, E402
 import src.mcp_servers.orchestration  # noqa: F401, E402
 import src.mcp_servers.slack  # noqa: F401, E402
+import src.mcp_servers.ssh  # noqa: F401, E402
 import src.mcp_servers.system  # noqa: F401, E402
 import src.mcp_servers.web  # noqa: F401, E402
 from src.agent.api_client import run_agent_loop

@@ -1,6 +1,6 @@
 """Sidera MCP stdio server — bridges Sidera tools to Claude Code.
 
-Exposes 36 stateless tools directly from the ``ToolRegistry`` plus
+Exposes 50 stateless tools directly from the ``ToolRegistry`` plus
 7 meta-tools (``talk_to_role``, ``run_role``, ``list_roles``,
 ``review_pending_approvals``, ``decide_approval``,
 ``run_claude_code_task``, ``orchestrate``) via the MCP protocol
@@ -80,7 +80,9 @@ import src.mcp_servers.meeting  # noqa: F401, E402
 import src.mcp_servers.memory  # noqa: F401, E402
 import src.mcp_servers.messaging  # noqa: F401, E402
 import src.mcp_servers.meta  # noqa: F401, E402
+import src.mcp_servers.computer_use  # noqa: F401, E402
 import src.mcp_servers.slack  # noqa: F401, E402
+import src.mcp_servers.ssh  # noqa: F401, E402
 import src.mcp_servers.system  # noqa: F401, E402
 from src.agent.tool_registry import get_global_registry  # noqa: E402
 from src.mcp_stdio.bridge import DIRECT_TOOLS  # noqa: E402

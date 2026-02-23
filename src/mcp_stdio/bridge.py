@@ -1,6 +1,6 @@
 """Tool allowlist for the Sidera MCP stdio server.
 
-Defines which of Sidera's 56 internal tools are exposed directly to
+Defines which of Sidera's 72 internal tools are exposed directly to
 Claude Code via the MCP protocol.  Only **stateless** tools that need no
 ``contextvars`` setup are included — write tools (which require approval
 IDs) and context-dependent tools (memory, delegation, messaging, actions,
@@ -59,6 +59,17 @@ DIRECT_TOOLS: frozenset[str] = frozenset(
         # Web research — 2
         "fetch_web_page",
         "web_search",
+        # SSH remote server — 6
+        "run_remote_command",
+        "read_remote_file",
+        "list_remote_directory",
+        "get_remote_system_info",
+        "list_remote_processes",
+        "tail_remote_log",
+        # Computer Use — 3
+        "run_computer_use_task",
+        "get_computer_use_session",
+        "stop_computer_use_session",
         # System introspection — 8
         "get_system_health",
         "get_failed_runs",

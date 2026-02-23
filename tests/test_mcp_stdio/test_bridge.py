@@ -14,6 +14,7 @@ import src.mcp_servers.actions  # noqa: F401
 import src.mcp_servers.bigquery  # noqa: F401
 import src.mcp_servers.claude_code_actions  # noqa: F401
 import src.mcp_servers.code_execution  # noqa: F401
+import src.mcp_servers.computer_use  # noqa: F401
 import src.mcp_servers.context  # noqa: F401
 import src.mcp_servers.delegation  # noqa: F401
 import src.mcp_servers.evolution  # noqa: F401
@@ -25,6 +26,7 @@ import src.mcp_servers.messaging  # noqa: F401
 import src.mcp_servers.meta  # noqa: F401
 import src.mcp_servers.skill_runner  # noqa: F401
 import src.mcp_servers.slack  # noqa: F401
+import src.mcp_servers.ssh  # noqa: F401
 import src.mcp_servers.system  # noqa: F401
 import src.mcp_servers.web  # noqa: F401
 from src.agent.tool_registry import get_global_registry
@@ -48,16 +50,16 @@ class TestDirectToolsAllowlist:
             )
 
     def test_direct_tools_count(self):
-        """DIRECT_TOOLS should have exactly 41 stateless tools."""
-        assert len(DIRECT_TOOLS) == 41
+        """DIRECT_TOOLS should have exactly 50 stateless tools."""
+        assert len(DIRECT_TOOLS) == 50
 
     def test_meta_tools_count(self):
         """META_TOOL_NAMES should have exactly 7 meta-tools."""
         assert len(META_TOOL_NAMES) == 7
 
     def test_total_exposed_tools(self):
-        """Total tools exposed to Claude Code = 41 direct + 7 meta = 48."""
-        assert len(DIRECT_TOOLS) + len(META_TOOL_NAMES) == 48
+        """Total tools exposed to Claude Code = 50 direct + 7 meta = 57."""
+        assert len(DIRECT_TOOLS) + len(META_TOOL_NAMES) == 57
 
 
 class TestWriteToolsExcluded:

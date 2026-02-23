@@ -178,14 +178,14 @@ src/
   db/           — Async SQLAlchemy session + 115-method CRUD service
   meetings/     — Listen-only meeting session manager, transcript capture
   middleware/   — Sentry, rate limiting, structured request logging, API auth, RBAC
-  mcp_servers/  — MCP tools for the Claude agent (65 tools — extensible)
+  mcp_servers/  — MCP tools for the Claude agent (74 tools — extensible)
   mcp_stdio/    — MCP stdio server for Claude Code (bridge, meta-tools)
   models/       — Database schema, cross-platform metric normalization
   workflows/    — Inngest durable functions (15 workflows)
   templates/    — Templates for adding new connectors, MCP tools, and OAuth routes
 dashboard/      — Streamlit MVP (6 pages)
 scripts/        — Operational scripts (seed, health check, cache, audit, doc sync)
-tests/          — 4024+ unit and integration tests
+tests/          — 4221+ unit and integration tests
 alembic/        — Database migrations (18 revisions)
 ```
 

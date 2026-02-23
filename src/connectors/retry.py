@@ -41,6 +41,7 @@ _PERMANENT_ERROR_TYPES = (
     "GoogleDriveAuthError",
     "SlackAuthError",
     "RecallAIAuthError",
+    "SSHAuthError",
 )
 
 # Slack error strings indicating rate limiting or transient issues
