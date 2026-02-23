@@ -178,14 +178,14 @@ src/
   db/           — Async SQLAlchemy session + 115-method CRUD service
   meetings/     — Listen-only meeting session manager, transcript capture
   middleware/   — Sentry, rate limiting, structured request logging, API auth, RBAC
-  mcp_servers/  — MCP tools for the Claude agent (62 tools — extensible)
+  mcp_servers/  — MCP tools for the Claude agent (65 tools — extensible)
   mcp_stdio/    — MCP stdio server for Claude Code (bridge, meta-tools)
   models/       — Database schema, cross-platform metric normalization
   workflows/    — Inngest durable functions (15 workflows)
   templates/    — Templates for adding new connectors, MCP tools, and OAuth routes
 dashboard/      — Streamlit MVP (6 pages)
 scripts/        — Operational scripts (seed, health check, cache, audit, doc sync)
-tests/          — 3742+ unit and integration tests
+tests/          — 4002+ unit and integration tests
 alembic/        — Database migrations (18 revisions)
 ```
 
@@ -254,15 +254,15 @@ See the [Adding a Channel Guide](docs/adding-a-channel.md) for a detailed walkth
 
 | Metric | Count |
 |--------|-------|
-| Unit + integration tests | 2916+ |
-| MCP tools | 54 |
-| DB service methods | 98 |
-| Inngest workflows | 15 |
-| Alembic migrations | 18 |
-| API connectors | 8 |
-| YAML skills | 19 |
-| Departments | 2 |
-| Agent roles | 5 |
+| Unit + integration tests | 4002+ |
+| MCP tools | 65 |
+| DB service methods | 115 |
+| Inngest workflows | 18 |
+| Alembic migrations | 29 |
+| API connectors | 6 |
+| YAML skills | 11 |
+| Departments | 3 |
+| Agent roles | 7 |
 
 ## License
 
