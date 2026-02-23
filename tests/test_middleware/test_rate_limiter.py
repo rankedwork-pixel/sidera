@@ -159,17 +159,20 @@ class TestRateLimitMiddleware:
         client = TestClient(_make_app(limiter))
 
         resp1 = client.get(
-            "/test", headers={"Authorization": "Bearer tok-111"},
+            "/test",
+            headers={"Authorization": "Bearer tok-111"},
         )
         assert resp1.status_code == 200
         resp2 = client.get(
-            "/test", headers={"Authorization": "Bearer tok-111"},
+            "/test",
+            headers={"Authorization": "Bearer tok-111"},
         )
         assert resp2.status_code == 429
 
         # Different token should still work
         resp3 = client.get(
-            "/test", headers={"Authorization": "Bearer tok-222"},
+            "/test",
+            headers={"Authorization": "Bearer tok-222"},
         )
         assert resp3.status_code == 200
 
@@ -342,7 +345,8 @@ class TestCreateRateLimiter:
             return_value=None,
         ):
             limiter = create_rate_limiter(
-                requests_per_minute=30, requests_per_hour=500,
+                requests_per_minute=30,
+                requests_per_hour=500,
             )
             assert limiter.requests_per_minute == 30
             assert limiter.requests_per_hour == 500

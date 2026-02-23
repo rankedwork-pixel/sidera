@@ -90,8 +90,13 @@ async def list_google_ads_accounts(args: dict[str, Any]) -> dict[str, Any]:
 
         lines = [f"Found {len(customer_ids)} accessible account(s):\n"]
         for cid in customer_ids:
-            # Try to fetch account details; fall back to just the ID
-            info = connector.get_account_info(cid)
+            # Try to fetch account details; skip deactivated/inaccessible accounts
+            try:
+                info = connector.get_account_info(cid)
+            except Exception:
+                lines.append(f"  - Account {cid} (deactivated or inaccessible)")
+                continue
+
             if info:
                 name = info.get("descriptive_name") or info.get("name") or "Unnamed"
                 currency = info.get("currency", "")
@@ -106,7 +111,10 @@ async def list_google_ads_accounts(args: dict[str, Any]) -> dict[str, Any]:
                 lines.append(f"  - Manager Account / MCC (ID: {cid})")
 
             # Check for child accounts (MCC hierarchy)
-            children = connector.get_child_accounts(cid)
+            try:
+                children = connector.get_child_accounts(cid)
+            except Exception:
+                children = []
             if children:
                 # Separate managers (sub-MCCs) from client accounts
                 client_children = [c for c in children if not c.get("manager")]

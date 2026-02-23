@@ -61,7 +61,8 @@ class TestCodeExecutionArgValidation:
 
     @pytest.mark.asyncio
     async def test_rejects_url_encoded_traversal(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """URL-encoded '..' (%2e%2e) should be caught."""
         source_dir = tmp_path / "skills" / "test"
@@ -81,7 +82,8 @@ class TestCodeExecutionArgValidation:
 
     @pytest.mark.asyncio
     async def test_rejects_arg_resolving_outside_source(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Args that resolve outside source_dir should be rejected."""
         source_dir = tmp_path / "skills" / "test"
@@ -128,7 +130,8 @@ class TestCodeExecutionArgValidation:
 
     @pytest.mark.asyncio
     async def test_accepts_valid_filename_args(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Valid filenames within source_dir should be accepted."""
         source_dir = tmp_path / "skills" / "test"

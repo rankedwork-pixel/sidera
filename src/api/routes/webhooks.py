@@ -113,7 +113,8 @@ async def _handle_recall_transcript(
         raw_body = await request.body()
         if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
             return JSONResponse(
-                {"status": "payload_too_large"}, status_code=413,
+                {"status": "payload_too_large"},
+                status_code=413,
             )
         body: dict[str, Any] = await request.json()
     except Exception:
@@ -129,7 +130,8 @@ async def _handle_recall_transcript(
     if settings.recall_ai_webhook_secret:
         header_secret = request.headers.get("X-Webhook-Secret", "")
         if not hmac.compare_digest(
-            header_secret, settings.recall_ai_webhook_secret,
+            header_secret,
+            settings.recall_ai_webhook_secret,
         ):
             logger.warning("webhook.recall.auth_failed")
             return JSONResponse({"status": "unauthorized"}, status_code=401)
@@ -180,7 +182,8 @@ async def _handle_recall_transcript(
                 bot_id=resolved_bot_id,
             )
             return JSONResponse(
-                {"status": "unknown_bot_id"}, status_code=404,
+                {"status": "unknown_bot_id"},
+                status_code=404,
             )
 
     # Parse transcript from the real Recall.ai payload format.
@@ -373,7 +376,8 @@ async def google_ads_webhook(request: Request) -> JSONResponse:
     raw_body = await request.body()
     if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
         return JSONResponse(
-            {"status": "payload_too_large"}, status_code=413,
+            {"status": "payload_too_large"},
+            status_code=413,
         )
 
     try:
@@ -434,7 +438,8 @@ async def meta_webhook(request: Request) -> JSONResponse:
     raw_body = await request.body()
     if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
         return JSONResponse(
-            {"status": "payload_too_large"}, status_code=413,
+            {"status": "payload_too_large"},
+            status_code=413,
         )
 
     # Verify HMAC signature
@@ -479,7 +484,8 @@ async def bigquery_webhook(request: Request) -> JSONResponse:
     raw_body = await request.body()
     if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
         return JSONResponse(
-            {"status": "payload_too_large"}, status_code=413,
+            {"status": "payload_too_large"},
+            status_code=413,
         )
 
     try:
@@ -521,7 +527,8 @@ async def custom_webhook(source_id: str, request: Request) -> JSONResponse:
     raw_body = await request.body()
     if len(raw_body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
         return JSONResponse(
-            {"status": "payload_too_large"}, status_code=413,
+            {"status": "payload_too_large"},
+            status_code=413,
         )
 
     # Verify shared secret
@@ -530,7 +537,8 @@ async def custom_webhook(source_id: str, request: Request) -> JSONResponse:
     if settings.webhook_secret_custom:
         header_secret = request.headers.get("X-Webhook-Secret", "")
         if not hmac.compare_digest(
-            header_secret, settings.webhook_secret_custom,
+            header_secret,
+            settings.webhook_secret_custom,
         ):
             return JSONResponse({"status": "unauthorized"}, status_code=401)
 

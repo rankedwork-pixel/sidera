@@ -188,26 +188,32 @@ async def run_skill_code(
         for arg in args:
             # Reject absolute paths
             if os.path.isabs(arg):
-                return json.dumps({
-                    "status": "error",
-                    "error": "Absolute path argument rejected.",
-                })
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": "Absolute path argument rejected.",
+                    }
+                )
             # Check URL-decoded form for traversal sequences
             decoded = urllib.parse.unquote(arg)
             if ".." in decoded:
-                return json.dumps({
-                    "status": "error",
-                    "error": "Path traversal in argument rejected.",
-                })
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": "Path traversal in argument rejected.",
+                    }
+                )
             # Resolve and verify arg stays within source directory
             resolved = (source_dir / decoded).resolve()
             if not str(resolved).startswith(
                 str(source_dir.resolve()),
             ):
-                return json.dumps({
-                    "status": "error",
-                    "error": "Argument escapes source directory.",
-                })
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": "Argument escapes source directory.",
+                    }
+                )
         cmd.extend(args)
 
     logger.info(

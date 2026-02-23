@@ -52,13 +52,19 @@ class TestRecallWebhookAuth:
     async def test_rejects_missing_secret(self) -> None:
         """When secret is configured but header is missing → 401."""
         req = _fake_request(headers={})
-        with patch(
-            "src.api.routes.webhooks.settings",
-            new=MagicMock(recall_ai_webhook_secret="my-secret"),
-            create=True,
-        ), patch("src.config.settings", new=MagicMock(
-            recall_ai_webhook_secret="my-secret",
-        )):
+        with (
+            patch(
+                "src.api.routes.webhooks.settings",
+                new=MagicMock(recall_ai_webhook_secret="my-secret"),
+                create=True,
+            ),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="my-secret",
+                ),
+            ),
+        ):
             resp = await _handle_recall_transcript(req, bot_id="bot123")
         assert resp.status_code == 401
 
@@ -66,9 +72,12 @@ class TestRecallWebhookAuth:
     async def test_rejects_wrong_secret(self) -> None:
         """When header secret doesn't match configured secret → 401."""
         req = _fake_request(headers={"X-Webhook-Secret": "wrong-secret"})
-        with patch("src.config.settings", new=MagicMock(
-            recall_ai_webhook_secret="correct-secret",
-        )):
+        with patch(
+            "src.config.settings",
+            new=MagicMock(
+                recall_ai_webhook_secret="correct-secret",
+            ),
+        ):
             resp = await _handle_recall_transcript(req, bot_id="bot123")
         assert resp.status_code == 401
 
@@ -81,9 +90,12 @@ class TestRecallWebhookAuth:
         mock_manager.receive_transcript_event = MagicMock()
 
         with (
-            patch("src.config.settings", new=MagicMock(
-                recall_ai_webhook_secret="my-secret",
-            )),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="my-secret",
+                ),
+            ),
             patch(
                 "src.meetings.session.get_meeting_manager",
                 return_value=mock_manager,
@@ -101,9 +113,12 @@ class TestRecallWebhookAuth:
         mock_manager.receive_transcript_event = MagicMock()
 
         with (
-            patch("src.config.settings", new=MagicMock(
-                recall_ai_webhook_secret="",
-            )),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="",
+                ),
+            ),
             patch(
                 "src.meetings.session.get_meeting_manager",
                 return_value=mock_manager,
@@ -129,9 +144,12 @@ class TestRecallBotIdValidation:
         mock_manager.get_active_session.return_value = None
 
         with (
-            patch("src.config.settings", new=MagicMock(
-                recall_ai_webhook_secret="",
-            )),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="",
+                ),
+            ),
             patch(
                 "src.meetings.session.get_meeting_manager",
                 return_value=mock_manager,
@@ -149,9 +167,12 @@ class TestRecallBotIdValidation:
         mock_manager.receive_transcript_event = MagicMock()
 
         with (
-            patch("src.config.settings", new=MagicMock(
-                recall_ai_webhook_secret="",
-            )),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="",
+                ),
+            ),
             patch(
                 "src.meetings.session.get_meeting_manager",
                 return_value=mock_manager,

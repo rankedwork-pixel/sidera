@@ -64,9 +64,12 @@ class TestWebhookPayloadSizeLimit:
         from unittest.mock import patch
 
         with (
-            patch("src.config.settings", new=MagicMock(
-                recall_ai_webhook_secret="",
-            )),
+            patch(
+                "src.config.settings",
+                new=MagicMock(
+                    recall_ai_webhook_secret="",
+                ),
+            ),
             patch(
                 "src.meetings.session.get_meeting_manager",
                 return_value=mock_manager,

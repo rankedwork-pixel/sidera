@@ -921,7 +921,8 @@ class GoogleAdsConnector:
 
         # Build operations using CampaignCriterionService
         criterion_service = self._client.get_service(
-            "CampaignCriterionService", version=self.API_VERSION,
+            "CampaignCriterionService",
+            version=self.API_VERSION,
         )
         operations = []
         for entry in schedule:

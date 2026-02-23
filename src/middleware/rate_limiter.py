@@ -286,9 +286,7 @@ def _extract_client_id(request: Request) -> str:
 
     api_key = request.headers.get("X-API-Key", "")
     auth = request.headers.get("Authorization", "")
-    key = api_key or (
-        auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    )
+    key = api_key or (auth[7:].strip() if auth.lower().startswith("bearer ") else "")
     if key:
         return f"key:{hashlib.sha256(key.encode()).hexdigest()[:16]}"
     if request.client:
