@@ -187,6 +187,11 @@ class ClaudeCodeExecutor:
         try:
             from src.llm.provider import TaskType
 
+            _budget = (
+                settings.extended_thinking_budget_tokens
+                if settings.extended_thinking_enabled
+                else None
+            )
             result = await run_agent_loop(
                 system_prompt=system_prompt,
                 user_prompt=rendered_prompt,
@@ -195,6 +200,7 @@ class ClaudeCodeExecutor:
                 max_turns=skill.max_turns,
                 max_cost_usd=max_budget_usd,
                 task_type=TaskType.SKILL_EXECUTION,
+                thinking_budget=_budget,
             )
         except Exception as exc:
             elapsed = int((time.monotonic() - start_time) * 1000)
@@ -273,6 +279,7 @@ class ClaudeCodeExecutor:
         import src.mcp_servers.skill_runner  # noqa: F401
         import src.mcp_servers.slack  # noqa: F401
         import src.mcp_servers.system  # noqa: F401
+        import src.mcp_servers.web  # noqa: F401
 
         if include_context_tools:
             import src.mcp_servers.actions  # noqa: F401

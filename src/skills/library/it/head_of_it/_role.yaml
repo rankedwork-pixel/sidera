@@ -44,6 +44,8 @@ goals:
 learning_channels:
   - performance_media_buyer
   - head_of_marketing
+manages:
+  - skill_creator
 clearance_level: internal
 connectors: []
 briefing_skills:

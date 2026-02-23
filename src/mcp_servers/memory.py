@@ -339,10 +339,7 @@ async def extract_conversation_memories_llm(
 
     # Build conversation context (truncated to keep costs low).
     # User messages are wrapped in boundary tags to prevent prompt injection.
-    conversation = (
-        f"User: {wrap_untrusted(user_message[:1500])}\n\n"
-        f"Agent: {agent_response[:1500]}"
-    )
+    conversation = f"User: {wrap_untrusted(user_message[:1500])}\n\nAgent: {agent_response[:1500]}"
 
     # Add recent thread context if available (last 3 messages)
     if thread_history:

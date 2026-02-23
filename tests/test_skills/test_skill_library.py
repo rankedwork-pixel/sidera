@@ -41,7 +41,7 @@ _CWF = "src.skills.router.complete_with_fallback"
 
 LIBRARY_DIR = Path(__file__).parent.parent.parent / "src" / "skills" / "library"
 
-# All 10 expected skill IDs (1 example per role + IT + fb_creative_cuts)
+# All 11 expected skill IDs (1 example per role + IT + fb_creative_cuts)
 EXPECTED_SKILL_IDS = sorted(
     [
         # Marketing / performance_media_buyer (3 — 1 standalone + 1 folder-based + 1 code-backed)
@@ -58,6 +58,8 @@ EXPECTED_SKILL_IDS = sorted(
         "system_health_check",
         "error_diagnosis",
         "cost_monitoring",
+        # IT / skill_creator (1)
+        "create_skill_wizard",
         # Executive / ceo (1)
         "org_health_check",
     ]
@@ -84,9 +86,9 @@ def all_skills(registry: SkillRegistry) -> list[SkillDefinition]:
 
 
 def test_all_skills_load(registry: SkillRegistry) -> None:
-    """SkillRegistry loads all 10 skills."""
-    assert registry.count == 10, (
-        f"Expected 10 skills, got {registry.count}. "
+    """SkillRegistry loads all 11 skills."""
+    assert registry.count == 11, (
+        f"Expected 11 skills, got {registry.count}. "
         f"Loaded: {sorted(s.id for s in registry.list_all())}"
     )
 
@@ -260,11 +262,11 @@ def test_weekly_report_has_schedule(registry: SkillRegistry) -> None:
 
 
 def test_router_index_built(registry: SkillRegistry) -> None:
-    """Router builds an index containing all 10 skills."""
+    """Router builds an index containing all 11 skills."""
     index = registry.build_routing_index()
     assert index, "Routing index is empty"
     lines = [ln for ln in index.strip().split("\n") if ln.strip()]
-    assert len(lines) == 10, f"Expected 10 lines in routing index, got {len(lines)}"
+    assert len(lines) == 11, f"Expected 11 lines in routing index, got {len(lines)}"
     # Each line should have the format: skill_id | description | tags
     for line in lines:
         parts = line.split(" | ")

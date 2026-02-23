@@ -37,7 +37,7 @@ def registry() -> SkillRegistry:
 
 
 class TestTopLevelCounts:
-    """Verify the registry discovers exactly 3 departments, 6 roles, 10 skills."""
+    """Verify the registry discovers exactly 3 departments, 7 roles, 11 skills."""
 
     def test_department_count(self, registry: SkillRegistry) -> None:
         assert registry.department_count == 3, (
@@ -46,14 +46,14 @@ class TestTopLevelCounts:
         )
 
     def test_role_count(self, registry: SkillRegistry) -> None:
-        assert registry.role_count == 6, (
-            f"Expected 6 roles, got {registry.role_count}. "
+        assert registry.role_count == 7, (
+            f"Expected 7 roles, got {registry.role_count}. "
             f"Loaded: {[r.id for r in registry.list_roles()]}"
         )
 
     def test_skill_count(self, registry: SkillRegistry) -> None:
-        assert registry.count == 10, (
-            f"Expected 10 skills, got {registry.count}. "
+        assert registry.count == 11, (
+            f"Expected 11 skills, got {registry.count}. "
             f"Loaded: {sorted(s.id for s in registry.list_all())}"
         )
 
@@ -92,6 +92,7 @@ EXPECTED_ROLE_IDS = sorted(
         "reporting_analyst",
         "strategist",
         "head_of_it",
+        "skill_creator",
     ]
 )
 
@@ -103,6 +104,7 @@ EXPECTED_ROLE_DEPTS: dict[str, str] = {
     "reporting_analyst": "marketing",
     "strategist": "marketing",
     "head_of_it": "it",
+    "skill_creator": "it",
 }
 
 EXPECTED_MARKETING_ROLE_IDS = sorted(
@@ -150,8 +152,9 @@ class TestRoleDepartmentAssignment:
         registry: SkillRegistry,
     ) -> None:
         roles = registry.list_roles("it")
-        assert len(roles) == 1
-        assert roles[0].id == "head_of_it"
+        assert len(roles) == 2
+        role_ids = sorted(r.id for r in roles)
+        assert role_ids == ["head_of_it", "skill_creator"]
 
     def test_list_roles_filtered_by_executive(
         self,

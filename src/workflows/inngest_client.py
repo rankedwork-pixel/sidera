@@ -1,6 +1,7 @@
 """Inngest client singleton for Sidera workflows."""
 
 import inngest
+
 from src.config import settings
 
 inngest_client = inngest.Inngest(

@@ -38,8 +38,8 @@ _MAX_RUNS_PER_TURN = 2
 # Skill runner context — per-async-task via contextvars (concurrency-safe)
 # ---------------------------------------------------------------------------
 
-_skill_runner_context_var: contextvars.ContextVar[dict[str, Any] | None] = (
-    contextvars.ContextVar("skill_runner_context", default=None)
+_skill_runner_context_var: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "skill_runner_context", default=None
 )
 
 _skill_run_count_var: contextvars.ContextVar[int] = contextvars.ContextVar(
@@ -153,8 +153,7 @@ async def run_skill(
     if skill_id not in role.briefing_skills:
         available = ", ".join(sorted(role.briefing_skills))
         return error_response(
-            f"Skill '{skill_id}' is not in your skill set. "
-            f"Your available skills: {available}"
+            f"Skill '{skill_id}' is not in your skill set. Your available skills: {available}"
         )
 
     # -- Load skill definition --

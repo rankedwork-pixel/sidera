@@ -3,7 +3,7 @@
 Users can naturally ask a role to join a meeting by including a meeting URL
 in a conversation message (either a new @mention or an existing thread reply).
 The system detects the URL and dispatches ``sidera/meeting.join`` alongside
-the normal ``sidera/conversation.turn`` event.
+the normal ``sidera/conversation.turn`` event (via debounce).
 """
 
 from __future__ import annotations
@@ -87,6 +87,10 @@ class TestAppMentionMeetingJoin:
 
     @pytest.mark.asyncio
     @patch(
+        "src.api.routes.slack._debounce_conversation_turn",
+        new_callable=AsyncMock,
+    )
+    @patch(
         "src.api.routes.slack._dispatch_or_run_inline",
         new_callable=AsyncMock,
     )
@@ -105,10 +109,10 @@ class TestAppMentionMeetingJoin:
         return_value=None,
     )
     async def test_mention_with_meeting_url_dispatches_both(
-        self, mock_images, mock_name, mock_rbac, mock_dispatch
+        self, mock_images, mock_name, mock_rbac, mock_dispatch, mock_debounce
     ):
-        """@mention with a meeting URL dispatches both conversation
-        and meeting join events."""
+        """@mention with a meeting URL dispatches conversation turn (via
+        debounce) AND meeting join (via direct dispatch)."""
         from src.api.routes.slack import handle_app_mention
 
         mock_role = MagicMock()
@@ -146,22 +150,16 @@ class TestAppMentionMeetingJoin:
         ):
             await handle_app_mention(event, client, say)
 
-        # Should have dispatched conversation turn AND meeting join
-        assert mock_dispatch.call_count == 2
+        # Conversation turn goes through debounce
+        assert mock_debounce.call_count == 1
+        debounce_kwargs = mock_debounce.call_args.kwargs
+        assert debounce_kwargs["role_id"] == "head_of_marketing"
 
-        call_events = [c.kwargs["event_name"] for c in mock_dispatch.call_args_list]
-        assert "sidera/conversation.turn" in call_events
-        assert "sidera/meeting.join" in call_events
-
-        # Meeting join should have the right data
-        meeting_call = [
-            c
-            for c in mock_dispatch.call_args_list
-            if c.kwargs["event_name"] == "sidera/meeting.join"
-        ][0]
-        meeting_data = meeting_call.kwargs["data"]
-        assert "meet.google.com" in meeting_data["meeting_url"]
-        assert meeting_data["role_id"] == "head_of_marketing"
+        # Meeting join goes through direct dispatch
+        assert mock_dispatch.call_count == 1
+        dispatch_kwargs = mock_dispatch.call_args.kwargs
+        assert dispatch_kwargs["event_name"] == "sidera/meeting.join"
+        assert "meet.google.com" in dispatch_kwargs["data"]["meeting_url"]
 
         # Should have posted the meeting join notification
         posted = False
@@ -173,6 +171,10 @@ class TestAppMentionMeetingJoin:
         assert posted, "Expected a meeting join notification message"
 
     @pytest.mark.asyncio
+    @patch(
+        "src.api.routes.slack._debounce_conversation_turn",
+        new_callable=AsyncMock,
+    )
     @patch(
         "src.api.routes.slack._dispatch_or_run_inline",
         new_callable=AsyncMock,
@@ -192,10 +194,10 @@ class TestAppMentionMeetingJoin:
         return_value=None,
     )
     async def test_mention_without_meeting_url_single_dispatch(
-        self, mock_images, mock_name, mock_rbac, mock_dispatch
+        self, mock_images, mock_name, mock_rbac, mock_dispatch, mock_debounce
     ):
         """@mention WITHOUT a meeting URL dispatches only the conversation
-        turn — no meeting join."""
+        turn via debounce — no meeting join."""
         from src.api.routes.slack import handle_app_mention
 
         mock_role = MagicMock()
@@ -232,10 +234,9 @@ class TestAppMentionMeetingJoin:
         ):
             await handle_app_mention(event, client, say)
 
-        # Only conversation turn — no meeting join
-        assert mock_dispatch.call_count == 1
-        call_event = mock_dispatch.call_args_list[0].kwargs["event_name"]
-        assert call_event == "sidera/conversation.turn"
+        # Only conversation turn via debounce — no meeting join dispatch
+        assert mock_debounce.call_count == 1
+        assert mock_dispatch.call_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +248,10 @@ class TestThreadMessageMeetingJoin:
     """Meeting URL detection in existing conversation threads."""
 
     @pytest.mark.asyncio
+    @patch(
+        "src.api.routes.slack._debounce_conversation_turn",
+        new_callable=AsyncMock,
+    )
     @patch(
         "src.api.routes.slack._dispatch_or_run_inline",
         new_callable=AsyncMock,
@@ -266,10 +271,10 @@ class TestThreadMessageMeetingJoin:
         return_value=None,
     )
     async def test_thread_with_meeting_url_dispatches_both(
-        self, mock_images, mock_name, mock_rbac, mock_dispatch
+        self, mock_images, mock_name, mock_rbac, mock_dispatch, mock_debounce
     ):
-        """Reply in a Sidera thread with a meeting URL dispatches both
-        conversation and meeting join events."""
+        """Reply in a Sidera thread with a meeting URL dispatches conversation
+        turn (via debounce) AND meeting join (via direct dispatch)."""
         from src.api.routes.slack import handle_thread_message
 
         mock_thread = MagicMock()
@@ -321,24 +326,22 @@ class TestThreadMessageMeetingJoin:
         ):
             await handle_thread_message(event, client)
 
-        # Should have dispatched both events
-        assert mock_dispatch.call_count == 2
+        # Conversation turn via debounce
+        assert mock_debounce.call_count == 1
+        debounce_kwargs = mock_debounce.call_args.kwargs
+        assert debounce_kwargs["role_id"] == "head_of_marketing"
 
-        call_events = [c.kwargs["event_name"] for c in mock_dispatch.call_args_list]
-        assert "sidera/conversation.turn" in call_events
-        assert "sidera/meeting.join" in call_events
-
-        # Meeting join has correct data
-        meeting_call = [
-            c
-            for c in mock_dispatch.call_args_list
-            if c.kwargs["event_name"] == "sidera/meeting.join"
-        ][0]
-        d = meeting_call.kwargs["data"]
-        assert "meet.google.com" in d["meeting_url"]
-        assert d["role_id"] == "head_of_marketing"
+        # Meeting join via direct dispatch
+        assert mock_dispatch.call_count == 1
+        dispatch_kwargs = mock_dispatch.call_args.kwargs
+        assert dispatch_kwargs["event_name"] == "sidera/meeting.join"
+        assert "meet.google.com" in dispatch_kwargs["data"]["meeting_url"]
 
     @pytest.mark.asyncio
+    @patch(
+        "src.api.routes.slack._debounce_conversation_turn",
+        new_callable=AsyncMock,
+    )
     @patch(
         "src.api.routes.slack._dispatch_or_run_inline",
         new_callable=AsyncMock,
@@ -358,10 +361,10 @@ class TestThreadMessageMeetingJoin:
         return_value=None,
     )
     async def test_thread_without_url_no_meeting_dispatch(
-        self, mock_images, mock_name, mock_rbac, mock_dispatch
+        self, mock_images, mock_name, mock_rbac, mock_dispatch, mock_debounce
     ):
         """Thread reply without meeting URL dispatches only
-        the conversation turn."""
+        the conversation turn via debounce."""
         from src.api.routes.slack import handle_thread_message
 
         mock_thread = MagicMock()
@@ -395,7 +398,6 @@ class TestThreadMessageMeetingJoin:
         ):
             await handle_thread_message(event, client)
 
-        # Only conversation turn — no meeting join
-        assert mock_dispatch.call_count == 1
-        call_event = mock_dispatch.call_args_list[0].kwargs["event_name"]
-        assert call_event == "sidera/conversation.turn"
+        # Only conversation turn via debounce — no meeting join
+        assert mock_debounce.call_count == 1
+        assert mock_dispatch.call_count == 0

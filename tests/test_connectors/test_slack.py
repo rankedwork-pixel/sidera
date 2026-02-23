@@ -635,3 +635,289 @@ class TestDefaultChannelFallback:
 
         call_kwargs = connector._mock_client.chat_postMessage.call_args
         assert (call_kwargs.kwargs.get("channel") or call_kwargs[1].get("channel")) == "C0123456789"
+
+
+# ===========================================================================
+# 9. markdown_to_mrkdwn conversion
+# ===========================================================================
+
+
+class TestMarkdownToMrkdwn:
+    """Tests for the markdown_to_mrkdwn utility function."""
+
+    def test_double_asterisks_to_single(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("**bold text**") == "*bold text*"
+
+    def test_double_underscores_to_bold(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("__bold text__") == "*bold text*"
+
+    def test_heading_h1(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("# Title") == "*Title*"
+
+    def test_heading_h2(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("## Subtitle") == "*Subtitle*"
+
+    def test_heading_h3(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("### Section") == "*Section*"
+
+    def test_preserves_single_asterisks(self):
+        """Already-correct Slack mrkdwn should not be altered."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("*already bold*") == "*already bold*"
+
+    def test_preserves_code_blocks(self):
+        """Code inside triple backticks should not be converted."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = "before ```**not bold**``` after **bold**"
+        result = markdown_to_mrkdwn(text)
+        assert "```**not bold**```" in result
+        assert "*bold*" in result
+
+    def test_preserves_inline_code(self):
+        """Inline code should not be converted."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = "try `**not bold**` but **bold**"
+        result = markdown_to_mrkdwn(text)
+        assert "`**not bold**`" in result
+        assert "*bold*" in result
+
+    def test_mixed_content(self):
+        """Test a realistic agent response with mixed formatting."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = (
+            "## System Health\n"
+            "**Redis** is working fine. **PostgreSQL** too.\n"
+            "Here's a code snippet: `SELECT **` — don't touch that."
+        )
+        result = markdown_to_mrkdwn(text)
+        assert result.startswith("*System Health*")
+        assert "*Redis*" in result
+        assert "*PostgreSQL*" in result
+        assert "`SELECT **`" in result
+
+    def test_empty_string(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        assert markdown_to_mrkdwn("") == ""
+
+    def test_no_markdown(self):
+        """Plain text should pass through unchanged."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = "Just some plain text, no formatting."
+        assert markdown_to_mrkdwn(text) == text
+
+    def test_idempotent(self):
+        """Running twice should produce the same result (safe for double-apply)."""
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = "**bold** and ## Heading"
+        once = markdown_to_mrkdwn(text)
+        twice = markdown_to_mrkdwn(once)
+        assert once == twice
+
+    def test_multiline_headings(self):
+        from src.connectors.slack import markdown_to_mrkdwn
+
+        text = "## First\nSome text\n### Second\nMore text"
+        result = markdown_to_mrkdwn(text)
+        assert "*First*" in result
+        assert "*Second*" in result
+        assert "Some text" in result
+
+
+class TestConnectorLevelConversion:
+    """Verify that connector methods automatically convert Markdown to mrkdwn."""
+
+    def test_send_briefing_converts_bold(self, connector):
+        """send_briefing should convert **bold** in briefing_text."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        connector.send_briefing(None, "**Redis is down** — investigate!", [])
+
+        call_kwargs = connector._mock_client.chat_postMessage.call_args
+        blocks = call_kwargs.kwargs.get("blocks") or call_kwargs[1].get("blocks", [])
+        # The section block should have single asterisks, not double
+        section_text = blocks[1]["text"]["text"]
+        assert "**" not in section_text
+        assert "*Redis is down*" in section_text
+
+    def test_send_thread_reply_converts_bold(self, connector):
+        """send_thread_reply should convert **bold** in text."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        connector.send_thread_reply("C123", "ts123", "**Status:** All systems operational")
+
+        call_kwargs = connector._mock_client.chat_postMessage.call_args
+        posted_text = call_kwargs.kwargs.get("text") or call_kwargs[1].get("text", "")
+        assert "**" not in posted_text
+        assert "*Status:*" in posted_text
+
+    def test_send_alert_converts_bold(self, connector):
+        """send_alert should convert **bold** in message."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        connector.send_alert(None, "info", "## Summary\n**Redis** is fine")
+
+        call_kwargs = connector._mock_client.chat_postMessage.call_args
+        blocks = call_kwargs.kwargs.get("blocks") or call_kwargs[1].get("blocks", [])
+        section_text = blocks[1]["text"]["text"]
+        assert "**" not in section_text
+        assert "*Redis*" in section_text
+
+
+class TestChunkedThreadReply:
+    """Test auto-chunking of long thread replies."""
+
+    def test_short_message_single_post(self, connector):
+        """Messages under 3500 chars should be posted as a single message."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        short_text = "A" * 3000
+        connector.send_thread_reply("C123", "ts123", short_text)
+
+        assert connector._mock_client.chat_postMessage.call_count == 1
+
+    def test_long_message_auto_chunks(self, connector):
+        """Messages over 3500 chars should be split into multiple posts."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        long_text = "A" * 7000
+        connector.send_thread_reply("C123", "ts123", long_text)
+
+        assert connector._mock_client.chat_postMessage.call_count >= 2
+
+    def test_chunking_preserves_all_content(self, connector):
+        """All content should be posted across chunks, nothing dropped."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        long_text = "\n".join(f"Line {i}: {'x' * 100}" for i in range(50))
+        connector.send_thread_reply("C123", "ts123", long_text)
+
+        # Reassemble all posted chunks
+        posted = ""
+        for call in connector._mock_client.chat_postMessage.call_args_list:
+            chunk = call.kwargs.get("text") or call[1].get("text", "")
+            posted += chunk
+
+        # Every line should appear in the reassembled output
+        for i in range(50):
+            assert f"Line {i}:" in posted
+
+    def test_chunking_not_triggered_with_blocks(self, connector):
+        """When blocks are provided, chunking should be skipped."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        long_text = "A" * 5000
+        blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "test"}}]
+        connector.send_thread_reply("C123", "ts123", long_text, blocks=blocks)
+
+        # Should be single post (blocks mode, no chunking)
+        assert connector._mock_client.chat_postMessage.call_count == 1
+
+    def test_chunks_posted_to_correct_thread(self, connector):
+        """All chunks should be posted to the same channel and thread."""
+        connector._mock_client.chat_postMessage.return_value = _make_success_response()
+
+        connector.send_thread_reply("C123", "ts_parent", "B" * 8000)
+
+        for call in connector._mock_client.chat_postMessage.call_args_list:
+            kwargs = call.kwargs
+            assert kwargs.get("channel") == "C123"
+            assert kwargs.get("thread_ts") == "ts_parent"
+
+
+class TestDriveRedirect:
+    """Test _maybe_redirect_to_drive helper."""
+
+    def test_short_text_returned_unchanged(self):
+        """Text under the threshold should pass through unchanged."""
+        from src.api.routes.slack import _maybe_redirect_to_drive
+
+        short = "Hello world"
+        assert _maybe_redirect_to_drive(short, "Agent") == short
+
+    def test_long_text_with_no_drive_returns_original(self):
+        """Long text should pass through when Drive connector unavailable."""
+        from src.api.routes.slack import _maybe_redirect_to_drive
+
+        long_text = "A" * 5000
+
+        with patch(
+            "src.connectors.google_drive.GoogleDriveConnector",
+            side_effect=ImportError("no creds"),
+        ):
+            result = _maybe_redirect_to_drive(long_text, "Agent")
+            assert result == long_text
+
+    def test_drive_failure_returns_original(self):
+        """If Drive API fails, original text should be returned."""
+        from src.api.routes.slack import _maybe_redirect_to_drive
+
+        long_text = "C" * 5000
+
+        mock_connector = MagicMock()
+        mock_connector.create_document.side_effect = Exception("API error")
+
+        with patch(
+            "src.connectors.google_drive.GoogleDriveConnector",
+            return_value=mock_connector,
+        ):
+            result = _maybe_redirect_to_drive(long_text, "Agent")
+            assert result == long_text
+
+    def test_drive_success_includes_link(self):
+        """Successful Drive redirect should include the doc link."""
+        from src.api.routes.slack import _maybe_redirect_to_drive
+
+        long_text = "D" * 5000
+
+        mock_connector = MagicMock()
+        mock_connector.create_document.return_value = {
+            "id": "abc",
+            "title": "Agent — 2025",
+            "web_view_link": "https://docs.google.com/document/d/abc/edit",
+        }
+
+        with patch(
+            "src.connectors.google_drive.GoogleDriveConnector",
+            return_value=mock_connector,
+        ):
+            result = _maybe_redirect_to_drive(long_text, "Agent")
+            assert "https://docs.google.com/document/d/abc/edit" in result
+            assert ":page_facing_up:" in result
+            assert len(result) < len(long_text)
+
+    def test_drive_redirect_includes_excerpt(self):
+        """Redirected text should include an excerpt of the original."""
+        from src.api.routes.slack import _maybe_redirect_to_drive
+
+        long_text = "Important finding: " + "x" * 5000
+
+        mock_connector = MagicMock()
+        mock_connector.create_document.return_value = {
+            "id": "xyz",
+            "title": "Test",
+            "web_view_link": "https://docs.google.com/document/d/xyz/edit",
+        }
+
+        with patch(
+            "src.connectors.google_drive.GoogleDriveConnector",
+            return_value=mock_connector,
+        ):
+            result = _maybe_redirect_to_drive(long_text, "Agent")
+            assert "Important finding:" in result

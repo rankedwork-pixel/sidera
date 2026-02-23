@@ -78,6 +78,9 @@ exclude = ["src/templates/"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*.py" = ["E402"]  # Alembic puts imports after revision vars
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -581,12 +581,12 @@ class TestCreativeAnalysisFolder:
         assert "# Context:" in text
 
     def test_all_skills_still_load(self):
-        """All 10 skills load (folder-based creative_analysis + fb_creative_cuts included)."""
+        """All 11 skills load (folder-based creative_analysis + fb_creative_cuts included)."""
         from src.skills.registry import SkillRegistry
 
         reg = SkillRegistry()
         count = reg.load_all()
-        assert count == 10
+        assert count == 11
 
     def test_creative_analysis_passes_validation(self):
         """creative_analysis passes full validation."""

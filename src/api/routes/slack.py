@@ -21,6 +21,7 @@ Exports:
 - ``get_approval_status`` — Helper to check approval status
 """
 
+import asyncio as _asyncio
 import json as _json
 import re as _re
 import time as _time
@@ -63,6 +64,200 @@ def get_approval_status(approval_id: str) -> dict | None:
     or ``None`` if no decision exists for the given ID.
     """
     return _pending_approvals.get(approval_id)
+
+
+# ---------------------------------------------------------------------------
+# Message debounce — batch rapid-fire messages into a single turn
+# ---------------------------------------------------------------------------
+
+# When a user sends multiple messages quickly ("YOOO" then "MY MAN" 2s later),
+# each one triggers a Slack event.  Without debounce, each fires a separate
+# agent turn and the user gets multiple redundant replies.
+#
+# The debounce buffer collects messages per thread and waits for a short quiet
+# period before dispatching a single combined turn.
+
+_DEBOUNCE_SECONDS: float = 1.5  # quiet window before dispatching
+
+# Keyed by thread_ts (or channel_id for non-threaded @mentions).
+# Value: dict with buffered messages, metadata, and the pending timer handle.
+_debounce_buffers: dict[str, dict] = {}
+_debounce_lock = _asyncio.Lock()
+
+
+async def _debounce_conversation_turn(
+    *,
+    debounce_key: str,
+    role_id: str,
+    channel_id: str,
+    thread_ts: str,
+    user_id: str,
+    message_text: str,
+    message_ts: str,
+    source_user_name: str,
+    image_content: list | None = None,
+) -> None:
+    """Buffer a message and schedule a debounced dispatch.
+
+    If messages are already buffered for this thread, the new message is
+    appended and the timer is reset.  When the quiet window expires, all
+    buffered messages are joined with newlines and dispatched as one turn.
+    """
+    async with _debounce_lock:
+        buf = _debounce_buffers.get(debounce_key)
+
+        if buf is not None:
+            # Cancel the existing timer — we'll reset it.
+            timer: _asyncio.TimerHandle | _asyncio.Task = buf["timer"]
+            if isinstance(timer, _asyncio.Task) and not timer.done():
+                timer.cancel()
+            # Append the new message text.
+            buf["texts"].append(message_text)
+            # Keep the latest message_ts and any images.
+            buf["message_ts"] = message_ts
+            if image_content:
+                buf["image_content"] = (buf.get("image_content") or []) + image_content
+            logger.info(
+                "debounce.appended",
+                debounce_key=debounce_key,
+                buffered_count=len(buf["texts"]),
+            )
+        else:
+            # First message — create a new buffer entry.
+            buf = {
+                "texts": [message_text],
+                "role_id": role_id,
+                "channel_id": channel_id,
+                "thread_ts": thread_ts,
+                "user_id": user_id,
+                "message_ts": message_ts,
+                "source_user_name": source_user_name,
+                "image_content": image_content,
+                "timer": None,  # will be set below
+            }
+            _debounce_buffers[debounce_key] = buf
+            logger.info(
+                "debounce.started",
+                debounce_key=debounce_key,
+            )
+
+        # Schedule (or reschedule) the flush after the quiet window.
+        buf["timer"] = _asyncio.get_event_loop().create_task(_debounce_flush(debounce_key))
+
+
+async def _debounce_flush(debounce_key: str) -> None:
+    """Wait for the quiet window, then dispatch the combined turn."""
+    await _asyncio.sleep(_DEBOUNCE_SECONDS)
+
+    async with _debounce_lock:
+        buf = _debounce_buffers.pop(debounce_key, None)
+
+    if buf is None:
+        return
+
+    # Combine all buffered messages into one.
+    combined_text = "\n".join(buf["texts"])
+    logger.info(
+        "debounce.flushing",
+        debounce_key=debounce_key,
+        message_count=len(buf["texts"]),
+        combined_length=len(combined_text),
+    )
+
+    await _dispatch_or_run_inline(
+        event_name="sidera/conversation.turn",
+        data={
+            "role_id": buf["role_id"],
+            "channel_id": buf["channel_id"],
+            "thread_ts": buf["thread_ts"],
+            "user_id": buf["user_id"],
+            "message_text": combined_text,
+            "message_ts": buf["message_ts"],
+            "source_user_name": buf["source_user_name"],
+            "image_content": buf.get("image_content"),
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Markdown → Slack mrkdwn conversion
+# ---------------------------------------------------------------------------
+
+
+def _markdown_to_mrkdwn(text: str) -> str:
+    """Thin wrapper — delegates to the shared utility in the Slack connector."""
+    from src.connectors.slack import markdown_to_mrkdwn
+
+    return markdown_to_mrkdwn(text)
+
+
+# ---------------------------------------------------------------------------
+# Long response → Google Doc redirect
+# ---------------------------------------------------------------------------
+
+# Threshold in characters — responses longer than this get written to a
+# Google Doc with a link posted in Slack instead of the raw text.
+_DRIVE_REDIRECT_THRESHOLD = 3000
+
+
+def _maybe_redirect_to_drive(
+    response_text: str,
+    role_label: str,
+    *,
+    doc_title_prefix: str = "",
+) -> str:
+    """If *response_text* exceeds the threshold, write it to a new Google
+    Doc and return a short Slack message containing a summary excerpt plus
+    a link to the full document.
+
+    Falls back to returning *response_text* unchanged when:
+    - the text is short enough for Slack
+    - Google Drive credentials are not configured
+    - the Drive API call fails for any reason
+
+    The function is **non-fatal** — it should never prevent a response
+    from reaching the user.
+    """
+    if len(response_text) <= _DRIVE_REDIRECT_THRESHOLD:
+        return response_text
+
+    try:
+        from src.connectors.google_drive import GoogleDriveConnector
+
+        drive = GoogleDriveConnector()
+    except Exception:
+        logger.debug("drive_redirect.no_connector", reason="Drive not configured")
+        return response_text
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    title_date = now.strftime("%Y-%m-%d %H:%M")
+    prefix = doc_title_prefix or role_label
+    doc_title = f"{prefix} — {title_date}"
+
+    try:
+        result = drive.create_document(title=doc_title, content=response_text)
+        if not result or not result.get("web_view_link"):
+            logger.warning("drive_redirect.create_failed", result=result)
+            return response_text
+
+        link = result["web_view_link"]
+
+        # Build a short summary: first ~600 chars of the response
+        excerpt = response_text[:600].rstrip()
+        if len(response_text) > 600:
+            # Try to break at the last newline within the excerpt
+            last_nl = excerpt.rfind("\n")
+            if last_nl > 200:
+                excerpt = excerpt[:last_nl]
+            excerpt += "\n..."
+
+        return f"{excerpt}\n\n:page_facing_up: *Full report:* <{link}|{doc_title}>"
+
+    except Exception:
+        logger.warning("drive_redirect.error", exc_info=True)
+        return response_text
 
 
 # ---------------------------------------------------------------------------
@@ -282,26 +477,39 @@ async def _execute_approved_action_inline(
 
         # Format Claude Code results with richer output
         if action_type == "claude_code_task" and result.get("success"):
-            output = result.get("output_text", "")[:2000]
+            output = result.get("output_text", "")
             cost = result.get("cost_usd", 0)
             turns = result.get("num_turns", 0)
-            reply_text = (
-                f":white_check_mark: *Claude Code task completed.*\n\n"
-                f"{output}\n\n"
-                f"_Cost: ${cost:.4f} | Turns: {turns}_"
+            footer = f"\n_Cost: ${cost:.4f} | Turns: {turns}_"
+
+            # Redirect long output to Google Drive (posts summary + link)
+            output = _maybe_redirect_to_drive(
+                output,
+                "Claude Code Task",
+            )
+
+            reply_text = f":white_check_mark: *Claude Code task completed.*\n\n{output}{footer}"
+            slack.send_thread_reply(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                text=reply_text,
             )
         elif action_type == "claude_code_task" and result.get("is_error"):
             error_msg = result.get("error_message", "Unknown error")
             reply_text = f":x: *Claude Code task failed.*\n{error_msg}"
+            slack.send_thread_reply(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                text=reply_text,
+            )
         else:
             result_text = _json.dumps(result, indent=2, default=str)[:2000]
             reply_text = f":white_check_mark: Action executed successfully.\n```{result_text}```"
-
-        slack.send_thread_reply(
-            channel_id=channel_id,
-            thread_ts=thread_ts,
-            text=reply_text,
-        )
+            slack.send_thread_reply(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                text=reply_text,
+            )
 
     except Exception as exc:
         logger.error("inline_execute.failed", error=str(exc))
@@ -608,7 +816,8 @@ async def _run_conversation_turn_inline(
 
         # Also check for JSON blocks in text as fallback
         clean_text, text_recs = _extract_recommendations(
-            result.response_text, expected_nonce=_rec_nonce,
+            result.response_text,
+            expected_nonce=_rec_nonce,
         )
         all_recs = pending_actions + text_recs + skill_proposals + cc_task_proposals
         response_text = clean_text if text_recs else result.response_text
@@ -620,6 +829,15 @@ async def _run_conversation_turn_inline(
             if clean_response.startswith(prefix_variant):
                 clean_response = clean_response[len(prefix_variant) :]
                 break
+        # Convert Markdown → Slack mrkdwn (fixes **bold**, ## headers, etc.)
+        clean_response = _markdown_to_mrkdwn(clean_response)
+
+        # Redirect long responses to Google Drive (posts summary + link)
+        clean_response = _maybe_redirect_to_drive(
+            clean_response,
+            role_label,
+        )
+
         prefixed_text = f"*{role_label}:*\n{clean_response}"
 
         # Post reply to thread
@@ -3234,19 +3452,17 @@ async def handle_app_mention(event, client, say):
                     # Check for meeting URL in the reply
                     detected_url = _detect_meeting_url(clean_text)
 
-                    # Dispatch (Inngest or inline fallback)
-                    await _dispatch_or_run_inline(
-                        event_name="sidera/conversation.turn",
-                        data={
-                            "role_id": existing.role_id,
-                            "channel_id": channel_id,
-                            "thread_ts": thread_ts,
-                            "user_id": user_id,
-                            "message_text": clean_text,
-                            "message_ts": ts,
-                            "source_user_name": source_user_name,
-                            "image_content": image_content or None,
-                        },
+                    # Dispatch via debounce (batches rapid-fire messages)
+                    await _debounce_conversation_turn(
+                        debounce_key=thread_ts,
+                        role_id=existing.role_id,
+                        channel_id=channel_id,
+                        thread_ts=thread_ts,
+                        user_id=user_id,
+                        message_text=clean_text,
+                        message_ts=ts,
+                        source_user_name=source_user_name,
+                        image_content=image_content or None,
                     )
 
                     # If a meeting URL was detected, also join the meeting
@@ -3333,19 +3549,17 @@ async def handle_app_mention(event, client, say):
         # Check for meeting URL — if present, also dispatch meeting join
         detected_url = _detect_meeting_url(clean_text)
 
-        # Dispatch conversation turn (Inngest or inline fallback)
-        await _dispatch_or_run_inline(
-            event_name="sidera/conversation.turn",
-            data={
-                "role_id": role.id,
-                "channel_id": channel_id,
-                "thread_ts": effective_thread_ts,
-                "user_id": user_id,
-                "message_text": clean_text,
-                "message_ts": ts,
-                "source_user_name": source_user_name,
-                "image_content": image_content or None,
-            },
+        # Dispatch via debounce (batches rapid-fire messages)
+        await _debounce_conversation_turn(
+            debounce_key=effective_thread_ts,
+            role_id=role.id,
+            channel_id=channel_id,
+            thread_ts=effective_thread_ts,
+            user_id=user_id,
+            message_text=clean_text,
+            message_ts=ts,
+            source_user_name=source_user_name,
+            image_content=image_content or None,
         )
 
         # If a meeting URL was detected, also join the meeting
@@ -3484,19 +3698,17 @@ async def handle_thread_message(event, client):
         # Check for meeting URL — if present, also dispatch meeting join
         detected_url = _detect_meeting_url(clean_text)
 
-        # Dispatch conversation turn (Inngest or inline fallback)
-        await _dispatch_or_run_inline(
-            event_name="sidera/conversation.turn",
-            data={
-                "role_id": thread.role_id,
-                "channel_id": channel_id,
-                "thread_ts": thread_ts,
-                "user_id": user_id,
-                "message_text": clean_text,
-                "message_ts": ts,
-                "source_user_name": source_user_name,
-                "image_content": image_content or None,
-            },
+        # Dispatch via debounce (batches rapid-fire messages)
+        await _debounce_conversation_turn(
+            debounce_key=thread_ts,
+            role_id=thread.role_id,
+            channel_id=channel_id,
+            thread_ts=thread_ts,
+            user_id=user_id,
+            message_text=clean_text,
+            message_ts=ts,
+            source_user_name=source_user_name,
+            image_content=image_content or None,
         )
 
         # If a meeting URL was detected, also join the meeting

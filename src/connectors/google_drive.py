@@ -928,9 +928,7 @@ class GoogleDriveConnector:
 
         try:
             presentation = (
-                self._slides.presentations()
-                .get(presentationId=presentation_id)
-                .execute()
+                self._slides.presentations().get(presentationId=presentation_id).execute()
             )
 
             slides = presentation.get("slides", [])
@@ -963,7 +961,8 @@ class GoogleDriveConnector:
 
         except HttpError as exc:
             self._handle_http_error(
-                exc, "export_presentation_text",
+                exc,
+                "export_presentation_text",
                 presentation_id=presentation_id,
             )
             return None

@@ -44,6 +44,7 @@ def _make_skill(
     skill.output_format = output_format
     skill.business_guidance = business_guidance
     skill.context_files = context_files
+    skill.references = ()
     skill.department_id = department_id
     skill.tools_required = tools_required
     return skill

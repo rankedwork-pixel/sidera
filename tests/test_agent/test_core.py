@@ -722,6 +722,7 @@ class TestPipelineOutputInjection:
             "Skill supplement.",
         )
         skill.context_files = overrides.get("context_files", ())
+        skill.references = overrides.get("references", ())
         skill.output_format = overrides.get("output_format", "")
         skill.business_guidance = overrides.get(
             "business_guidance",

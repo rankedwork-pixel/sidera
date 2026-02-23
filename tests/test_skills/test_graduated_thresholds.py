@@ -66,16 +66,17 @@ class TestGetAllowedFields:
         assert _get_allowed_fields(2) == frozenset()
 
     def test_minor_tier(self):
-        """3 lessons should only allow business_guidance."""
+        """3 lessons should only allow business_guidance + references."""
         fields = _get_allowed_fields(3)
-        assert fields == frozenset({"business_guidance"})
+        assert fields == frozenset({"business_guidance", "references"})
 
     def test_moderate_tier(self):
-        """5 lessons should allow business_guidance + system_supplement."""
+        """5 lessons should allow business_guidance + system_supplement + references."""
         fields = _get_allowed_fields(5)
         assert "business_guidance" in fields
         assert "system_supplement" in fields
-        assert len(fields) == 2
+        assert "references" in fields
+        assert len(fields) == 3
 
     def test_major_tier(self):
         """7 lessons should allow all major fields."""
@@ -86,11 +87,12 @@ class TestGetAllowedFields:
         assert "output_format" in fields
         assert "model" in fields
         assert "max_turns" in fields
+        assert "references" in fields
 
     def test_between_tiers(self):
         """4 lessons should still be minor tier."""
         fields = _get_allowed_fields(4)
-        assert fields == frozenset({"business_guidance"})
+        assert fields == frozenset({"business_guidance", "references"})
 
     def test_above_major(self):
         """10 lessons should use major tier."""

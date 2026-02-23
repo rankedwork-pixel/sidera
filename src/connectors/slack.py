@@ -59,6 +59,61 @@ class SlackAuthError(SlackConnectorError):
 
 
 # ---------------------------------------------------------------------------
+# Markdown → Slack mrkdwn conversion (standalone utility)
+# ---------------------------------------------------------------------------
+
+
+def markdown_to_mrkdwn(text: str) -> str:
+    """Convert standard Markdown formatting to Slack mrkdwn.
+
+    Claude's training data is overwhelmingly Markdown, so despite prompt
+    instructions it frequently emits ``**bold**`` and ``## Heading`` syntax.
+    This function mechanically converts the most common offenders so the
+    text renders correctly in Slack.
+
+    Rules applied (in order, code blocks/inline code protected):
+
+    1. ``**text**``   → ``*text*``   (bold)
+    2. ``__text__``   → ``*text*``   (bold, alt syntax)
+    3. ``## Heading`` → ``*Heading*`` (any heading level → bold line)
+    """
+    import re
+
+    # Protect code blocks from transformation (```...```)
+    code_blocks: list[str] = []
+
+    def _stash_code(m: re.Match) -> str:
+        code_blocks.append(m.group(0))
+        return f"\x00CODEBLOCK{len(code_blocks) - 1}\x00"
+
+    text = re.sub(r"```[\s\S]*?```", _stash_code, text)
+
+    # Also protect inline code (`...`)
+    inline_codes: list[str] = []
+
+    def _stash_inline(m: re.Match) -> str:
+        inline_codes.append(m.group(0))
+        return f"\x00INLINE{len(inline_codes) - 1}\x00"
+
+    text = re.sub(r"`[^`]+`", _stash_inline, text)
+
+    # **bold** or __bold__ → *bold*
+    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+    text = re.sub(r"__(.+?)__", r"*\1*", text)
+
+    # ## Heading / # Heading / ### Heading → *Heading* on its own line
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"*\1*", text, flags=re.MULTILINE)
+
+    # Restore code blocks and inline code
+    for i, block in enumerate(code_blocks):
+        text = text.replace(f"\x00CODEBLOCK{i}\x00", block)
+    for i, code in enumerate(inline_codes):
+        text = text.replace(f"\x00INLINE{i}\x00", code)
+
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Image download helper (async, standalone)
 # ---------------------------------------------------------------------------
 
@@ -166,6 +221,9 @@ class SlackConnector:
         """
         channel = channel_id or self._default_channel_id
         self._log.info("sending_briefing", channel=channel)
+
+        # Ensure Markdown is converted to Slack mrkdwn
+        briefing_text = markdown_to_mrkdwn(briefing_text)
 
         blocks: list[dict[str, Any]] = [
             {
@@ -539,6 +597,9 @@ class SlackConnector:
             alert_type=alert_type,
         )
 
+        # Ensure Markdown is converted to Slack mrkdwn
+        message = markdown_to_mrkdwn(message)
+
         alert_emoji = {
             "cost_overrun": "money_with_wings",
             "anomaly": "warning",
@@ -770,6 +831,9 @@ class SlackConnector:
         Used by conversation mode to send agent responses within a
         threaded discussion rather than as top-level channel messages.
 
+        Long messages (>3500 chars) are automatically split into multiple
+        sequential thread replies to avoid Slack's message size limits.
+
         Args:
             channel_id: The channel containing the thread.
             thread_ts: The timestamp of the parent message (thread root).
@@ -777,7 +841,8 @@ class SlackConnector:
             blocks: Optional Block Kit blocks for rich formatting.
 
         Returns:
-            Dict with ``ok``, ``channel``, and ``ts`` keys.
+            Dict with ``ok``, ``channel``, and ``ts`` keys (from last
+            message posted if chunked).
 
         Raises:
             SlackAuthError: On auth failures.
@@ -788,6 +853,19 @@ class SlackConnector:
             channel=channel_id,
             thread_ts=thread_ts,
         )
+
+        # Ensure Markdown is converted to Slack mrkdwn
+        text = markdown_to_mrkdwn(text)
+
+        # Auto-chunk long messages to stay within Slack's ~4000 char limit
+        max_chunk = 3500
+        if len(text) > max_chunk and blocks is None:
+            return self._send_chunked_thread_reply(
+                channel_id,
+                thread_ts,
+                text,
+                max_chunk,
+            )
 
         try:
             kwargs: dict[str, Any] = {
@@ -820,6 +898,73 @@ class SlackConnector:
                 thread_ts=thread_ts,
             )
             return {}
+
+    def _send_chunked_thread_reply(
+        self,
+        channel_id: str,
+        thread_ts: str,
+        text: str,
+        max_chunk: int,
+    ) -> dict[str, Any]:
+        """Split a long message into sequential thread replies.
+
+        Each chunk is posted as a separate message. Returns the result
+        dict from the *last* posted message.
+        """
+        self._log.info(
+            "sending_chunked_thread_reply",
+            channel=channel_id,
+            thread_ts=thread_ts,
+            total_len=len(text),
+            max_chunk=max_chunk,
+        )
+
+        result: dict[str, Any] = {}
+        remaining = text
+        part = 0
+
+        while remaining:
+            part += 1
+            if len(remaining) <= max_chunk:
+                chunk = remaining
+                remaining = ""
+            else:
+                # Try to break at last newline within the chunk
+                cut = remaining[:max_chunk].rfind("\n")
+                if cut < max_chunk // 2:
+                    # Newline too far back — just cut at max_chunk
+                    cut = max_chunk
+                chunk = remaining[:cut]
+                remaining = remaining[cut:].lstrip("\n")
+
+            try:
+                response = self._client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text=chunk,
+                )
+                result = {
+                    "ok": response.get("ok", True),
+                    "channel": response.get("channel", channel_id),
+                    "ts": response.get("ts", ""),
+                }
+            except SlackApiError as exc:
+                self._handle_slack_error(
+                    exc,
+                    "send_chunked_thread_reply",
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    part=part,
+                )
+                return result or {}
+
+        self._log.info(
+            "chunked_thread_reply_sent",
+            channel=channel_id,
+            thread_ts=thread_ts,
+            parts=part,
+        )
+        return result
 
     @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0)
     def get_thread_history(

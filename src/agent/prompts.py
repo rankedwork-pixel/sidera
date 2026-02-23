@@ -33,7 +33,8 @@ from src.utils.input_boundary import wrap_untrusted
 # Replace this prompt for other domains or load from domain configuration.
 # =============================================================================
 
-BASE_SYSTEM_PROMPT = """\
+BASE_SYSTEM_PROMPT = (
+    """\
 You are **Sidera**, an AI performance marketing analyst.
 
 Your loyalty is to the advertiser's profit-and-loss statement — never to any \
@@ -67,6 +68,13 @@ by attribution models. When BigQuery backend data is available, it is the \
 source of truth for revenue, orders, and real conversions. Always \
 cross-reference platform claims against backend data and highlight \
 discrepancies.
+
+# Slack Formatting (IMPORTANT)
+
+All your output is posted to Slack, which uses mrkdwn (NOT standard Markdown). \
+Bold is `*single asterisks*`. NEVER use `**double asterisks**` — Slack renders \
+them literally and it looks broken. Italic is `_underscores_`. Code is \
+`` `backticks` ``. Slack does not render `#` headers — use `*Bold Title*` instead.
 
 # Constraints
 
@@ -104,7 +112,9 @@ spreadsheet, or presentation.
 3. Never delete or overwrite existing files — only create new ones or append.
 4. When creating Sheets with data, always include a header row.
 5. After creating any file, provide the shareable link to the user.
-""" + INJECTION_DEFENSE_SUPPLEMENT
+"""
+    + INJECTION_DEFENSE_SUPPLEMENT
+)
 
 
 # =============================================================================
@@ -875,6 +885,7 @@ SYSTEM_TOOLS = [
 
 CONTEXT_TOOLS = [
     "load_skill_context",
+    "load_referenced_skill_context",
 ]
 
 MESSAGING_TOOLS = [
@@ -951,8 +962,13 @@ to read:
 will ask. Do NOT dump walls of text.
 - **Lead with the answer.** Put the most important takeaway in the first \
 sentence. No preambles like "Great question!" or "Let me check that for you."
-- **Use Slack formatting.** Bold (`*bold*`), bullet lists, and line breaks. \
-Slack does NOT render markdown headers (`##`) — use `*Bold Section Title*` \
+- **Use Slack mrkdwn, NOT standard Markdown.** This is critical: \
+bold is `*single asterisks*`, NOT `**double asterisks**`. \
+Italic is `_underscores_`, NOT `*single asterisks*`. \
+Strikethrough is `~tildes~`. Code is `` `backticks` ``. \
+NEVER use `**text**` — Slack will render the asterisks literally and it \
+looks broken. Always use `*text*` for bold. \
+Slack does NOT render markdown headers (`#`, `##`) — use `*Bold Title*` \
 on its own line instead.
 - **Use line breaks generously.** Separate sections with blank lines. Dense \
 paragraphs are hard to read on mobile.
@@ -1326,9 +1342,7 @@ def build_webhook_reaction_prompt(
 
         detail_str = json.dumps(details, indent=2, default=str)
         if len(detail_str) < 2000:
-            parts.append(
-                f"\n**Event Details:**\n{wrap_untrusted(detail_str)}"
-            )
+            parts.append(f"\n**Event Details:**\n{wrap_untrusted(detail_str)}")
 
     parts.append(
         "\nInvestigate this event now. Confirm whether it's real, "

@@ -35,6 +35,7 @@ def _make_skill(skill_id: str = "test_skill") -> MagicMock:
     skill.output_format = ""
     skill.business_guidance = ""
     skill.context_files = ()
+    skill.references = ()
     skill.department_id = "test_dept"
     return skill
 
