@@ -508,6 +508,17 @@ class RoleMemory(Base):
         Index("ix_role_memory_supersedes_id", "supersedes_id"),
         Index("ix_role_memory_consolidated_into_id", "consolidated_into_id"),
         Index("ix_role_memory_source_role", "source_role_id", "role_id"),
+        # Performance indexes for scale (migration 029)
+        Index(
+            "ix_role_memory_role_active_time",
+            "role_id",
+            "is_archived",
+            "created_at",
+        ),
+        # NOTE: ix_role_memory_unconsolidated is a partial index
+        # (WHERE consolidated_into_id IS NULL) created via raw SQL in
+        # migration 029. SQLAlchemy doesn't support partial indexes
+        # declaratively, so it's not declared here.
     )
 
 
@@ -638,6 +649,7 @@ class OrgSkill(Base):
     chain_after = Column(String(100), nullable=True)
     requires_approval = Column(Boolean, default=True)
     min_clearance = Column(String(20), nullable=False, server_default="public")
+    references = Column(JSON, default=list)
     department_id = Column(String(100), default="", index=True)
     role_id = Column(String(100), default="", index=True)
     author = Column(String(100), default="sidera")

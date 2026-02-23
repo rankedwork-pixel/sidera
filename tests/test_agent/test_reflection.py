@@ -438,3 +438,155 @@ class TestRunReflection:
         )
         assert "outside your role" in user_prompt.lower() or "outside your" in user_prompt.lower()
         assert '"gap"' in user_prompt or "gap" in user_prompt.lower()
+
+    # -----------------------------------------------------------------
+    # Error-Aware Reflection tests
+    # -----------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_tool_errors_injected_into_prompt(self, agent):
+        """When tool_errors are provided, they appear in the reflection prompt."""
+        tool_errors = [
+            {
+                "tool_name": "get_google_ads_performance",
+                "error_message": "Error: API rate limit exceeded",
+                "input_summary": "{'customer_id': '123'}",
+            },
+        ]
+        with patch(
+            "src.agent.core.run_agent_loop",
+            new_callable=AsyncMock,
+            return_value=FakeAgentResult(text="[]"),
+        ) as mock_loop:
+            await agent.run_reflection(
+                role_id="buyer",
+                role_name="Media Buyer",
+                output_text="output",
+                tool_errors=tool_errors,
+            )
+
+        call_args = mock_loop.call_args
+        user_prompt = call_args.kwargs.get(
+            "user_prompt",
+            call_args[1].get("user_prompt", ""),
+        )
+        assert "get_google_ads_performance" in user_prompt
+        assert "rate limit" in user_prompt.lower()
+
+    @pytest.mark.asyncio
+    async def test_no_tool_errors_no_error_section(self, agent):
+        """When tool_errors is None or empty, no error section in prompt."""
+        with patch(
+            "src.agent.core.run_agent_loop",
+            new_callable=AsyncMock,
+            return_value=FakeAgentResult(text="[]"),
+        ) as mock_loop:
+            await agent.run_reflection(
+                role_id="buyer",
+                role_name="Media Buyer",
+                output_text="output",
+                tool_errors=None,
+            )
+
+        call_args = mock_loop.call_args
+        user_prompt = call_args.kwargs.get(
+            "user_prompt",
+            call_args[1].get("user_prompt", ""),
+        )
+        assert "Tool errors encountered" not in user_prompt
+
+    @pytest.mark.asyncio
+    async def test_error_pattern_stored_as_lesson(self, agent):
+        """error_pattern observations should be stored as 'lesson' memory type."""
+        response_json = """[{
+            "type": "error_pattern",
+            "title": "API rate limit failures",
+            "content": "Google Ads API consistently hits rate limits during peak hours",
+            "confidence": 0.85,
+            "error_tools": ["get_google_ads_performance"]
+        }]"""
+        with patch(
+            "src.agent.core.run_agent_loop",
+            new_callable=AsyncMock,
+            return_value=FakeAgentResult(text=response_json),
+        ):
+            memories = await agent.run_reflection(
+                role_id="buyer",
+                role_name="Media Buyer",
+                output_text="output",
+                tool_errors=[
+                    {
+                        "tool_name": "get_google_ads_performance",
+                        "error_message": "Error: rate limit",
+                        "input_summary": "{}",
+                    }
+                ],
+            )
+
+        assert len(memories) == 1
+        assert memories[0]["memory_type"] == "lesson"
+        assert "[Error Pattern]" in memories[0]["content"]
+        assert memories[0]["evidence"]["error_type"] == "tool_failure"
+        assert "get_google_ads_performance" in memories[0]["evidence"]["error_tools"]
+
+    @pytest.mark.asyncio
+    async def test_tool_errors_capped_at_five(self, agent):
+        """At most 5 tool errors should be injected into the prompt."""
+        tool_errors = [
+            {
+                "tool_name": f"tool_{i}",
+                "error_message": f"Error: failure {i}",
+                "input_summary": "{}",
+            }
+            for i in range(10)
+        ]
+        with patch(
+            "src.agent.core.run_agent_loop",
+            new_callable=AsyncMock,
+            return_value=FakeAgentResult(text="[]"),
+        ) as mock_loop:
+            await agent.run_reflection(
+                role_id="buyer",
+                role_name="Media Buyer",
+                output_text="output",
+                tool_errors=tool_errors,
+            )
+
+        call_args = mock_loop.call_args
+        user_prompt = call_args.kwargs.get(
+            "user_prompt",
+            call_args[1].get("user_prompt", ""),
+        )
+        # First 5 should appear, last 5 should not
+        assert "tool_0" in user_prompt
+        assert "tool_4" in user_prompt
+        assert "tool_5" not in user_prompt
+
+    @pytest.mark.asyncio
+    async def test_error_pattern_prompt_mentions_error_pattern_type(self, agent):
+        """The reflection prompt should mention 'error_pattern' as a valid type."""
+        tool_errors = [
+            {
+                "tool_name": "get_meta_performance",
+                "error_message": "Error: timeout",
+                "input_summary": "{}",
+            },
+        ]
+        with patch(
+            "src.agent.core.run_agent_loop",
+            new_callable=AsyncMock,
+            return_value=FakeAgentResult(text="[]"),
+        ) as mock_loop:
+            await agent.run_reflection(
+                role_id="buyer",
+                role_name="Media Buyer",
+                output_text="output",
+                tool_errors=tool_errors,
+            )
+
+        call_args = mock_loop.call_args
+        user_prompt = call_args.kwargs.get(
+            "user_prompt",
+            call_args[1].get("user_prompt", ""),
+        )
+        assert "error_pattern" in user_prompt

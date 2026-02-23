@@ -163,7 +163,7 @@ async def _execute_claude_code_task(
 
     return {
         "success": not result.is_error,
-        "output_text": result.output_text[:3000],
+        "output_text": result.output_text[:20000],
         "cost_usd": result.cost_usd,
         "num_turns": result.num_turns,
         "duration_ms": result.duration_ms,
@@ -2039,6 +2039,9 @@ async def role_runner_workflow(ctx: inngest.Context) -> dict:
             if _role_def and hasattr(_role_def, "principles"):
                 _principles = _role_def.principles or ()
 
+            # Aggregate tool errors from all skill runs
+            all_tool_errors = [err for sr in result.skill_results for err in sr.tool_errors]
+
             return {
                 "role_id": result.role_id,
                 "department_id": result.department_id,
@@ -2052,6 +2055,7 @@ async def role_runner_workflow(ctx: inngest.Context) -> dict:
                 "recommendations": [
                     rec for sr in result.skill_results for rec in sr.recommendations
                 ],
+                "tool_errors": all_tool_errors,
             }
 
         execution = await ctx.step.run("execute-role", execute_role)
@@ -2224,6 +2228,7 @@ async def role_runner_workflow(ctx: inngest.Context) -> dict:
                     skill_ids=execution.get("skill_ids", []),
                     principles=tuple(execution.get("principles", [])),
                     peer_role_ids=tuple(peer_role_ids),
+                    tool_errors=execution.get("tool_errors", []),
                 )
 
                 # Fill in department_id from execution context
@@ -2408,6 +2413,61 @@ async def role_runner_workflow(ctx: inngest.Context) -> dict:
             "scan-gaps-for-role-proposals",
             scan_gaps_for_roles,
         )
+
+        # Step: Suggest skills from gaps → message skill_creator
+        async def suggest_skills_from_gaps() -> dict:
+            try:
+                from src.skills.reflection_evolution import (
+                    scan_gaps_for_skill_suggestions,
+                )
+
+                suggestions = await scan_gaps_for_skill_suggestions(
+                    role_id=role_id,
+                    department_id=execution.get("department_id", ""),
+                    user_id=user_id,
+                )
+
+                if not suggestions:
+                    return {"suggestions": [], "sent": 0}
+
+                from src.db import service as db_service
+                from src.db.session import get_db_session
+
+                sent = 0
+                for suggestion in suggestions:
+                    message_content = (
+                        f"Skill Creation Suggestion from {role_id}:\n\n"
+                        f"Domain: {suggestion['domain']}\n"
+                        f"Suggested name: {suggestion['suggested_skill_name']}\n"
+                        f"Display name: {suggestion.get('display_name', '')}\n"
+                        f"Description: {suggestion['suggested_description']}\n"
+                        f"Category: {suggestion.get('suggested_category', 'analysis')}\n"
+                        f"Target role: {suggestion.get('suggested_role_id', role_id)}\n"
+                        f"Reasoning: {suggestion['reasoning']}\n\n"
+                        f"Gap evidence ({suggestion.get('gap_count', 0)} observations):\n"
+                        f"{suggestion.get('gap_summary', 'No details available')}"
+                    )
+                    async with get_db_session() as session:
+                        await db_service.create_role_message(
+                            session,
+                            from_role_id=role_id,
+                            to_role_id="skill_creator",
+                            from_department_id=execution.get("department_id", ""),
+                            to_department_id="it",
+                            subject=f"Skill Suggestion: {suggestion['domain']}"[:100],
+                            content=message_content[:2000],
+                        )
+                    sent += 1
+
+                return {"suggestions": len(suggestions), "sent": sent}
+            except Exception as exc:
+                _workflow_logger.warning(
+                    "role_runner.skill_suggestion_failed",
+                    error=str(exc),
+                )
+                return {"suggestions": 0, "sent": 0, "error": str(exc)}
+
+        await ctx.step.run("suggest-skills-from-gaps", suggest_skills_from_gaps)
 
         # Step: Send output to Slack
         async def send_output() -> dict:
@@ -3898,6 +3958,15 @@ async def conversation_turn_workflow(
                 if response_text.startswith(prefix_variant):
                     response_text = response_text[len(prefix_variant) :]
                     break
+
+            # Redirect long responses to Google Drive (summary + link)
+            from src.api.routes.slack import _maybe_redirect_to_drive
+
+            response_text = _maybe_redirect_to_drive(
+                response_text,
+                role_label,
+            )
+
             prefixed_text = f"*{role_label}:*\n{response_text}"
             return connector.send_thread_reply(
                 channel_id=channel_id,
@@ -4889,10 +4958,6 @@ async def heartbeat_runner_workflow(ctx: inngest.Context) -> dict:
                 role_name = context_data.get("role_name", role_id)
                 output = heartbeat_result.get("output_text", "")
 
-                # Truncate for Slack (max ~3000 chars)
-                if len(output) > 3000:
-                    output = output[:2950] + "\n\n_(truncated)_"
-
                 message = f"🔍 *{role_name} — Proactive Check-In*\n\n{output}"
                 await slack.send_alert(
                     channel=target_channel,
@@ -5348,8 +5413,15 @@ async def claude_code_task_workflow(ctx: inngest.Context) -> dict:
 
                     status_emoji = "❌" if is_err else "✅"
                     output = exec_result.get("output_text", "")
-                    if len(output) > 2500:
-                        output = output[:2450] + "\n\n_(truncated)_"
+
+                    # Redirect long output to Google Drive
+                    from src.api.routes.slack import _maybe_redirect_to_drive
+
+                    output = _maybe_redirect_to_drive(
+                        output,
+                        skill_name,
+                        doc_title_prefix=f"Task: {skill_name}",
+                    )
 
                     message = (
                         f"{status_emoji} *Claude Code Task: {skill_name}*\n\n"
@@ -6265,9 +6337,7 @@ async def bootstrap_workflow(ctx: inngest.Context) -> dict:
         async def run_pipeline() -> dict:
             from src.bootstrap import run_bootstrap
 
-            plan = await run_bootstrap(
-                folder_id, user_id=user_id, max_docs=max_docs
-            )
+            plan = await run_bootstrap(folder_id, user_id=user_id, max_docs=max_docs)
             return plan.to_dict()
 
         plan_data = await ctx.step.run("run-bootstrap-pipeline", run_pipeline)
@@ -6301,12 +6371,8 @@ async def bootstrap_workflow(ctx: inngest.Context) -> dict:
                 for err in errors[:5]:
                     summary_lines.append(f"  - {err}")
 
-            summary_lines.append(
-                f"\nReview via API: `GET /api/bootstrap/{plan_id}`"
-            )
-            summary_lines.append(
-                f"Approve: `POST /api/bootstrap/{plan_id}/approve`"
-            )
+            summary_lines.append(f"\nReview via API: `GET /api/bootstrap/{plan_id}`")
+            summary_lines.append(f"Approve: `POST /api/bootstrap/{plan_id}/approve`")
 
             text = "\n".join(summary_lines)
 
@@ -6318,9 +6384,7 @@ async def bootstrap_workflow(ctx: inngest.Context) -> dict:
                     slack = SlackConnector()
                     slack.send_message(channel=channel_id, text=text)
                 except Exception as slack_exc:
-                    _workflow_logger.warning(
-                        "bootstrap.slack_post_error", error=str(slack_exc)
-                    )
+                    _workflow_logger.warning("bootstrap.slack_post_error", error=str(slack_exc))
 
             return {"plan_id": plan_id, "posted": bool(channel_id)}
 

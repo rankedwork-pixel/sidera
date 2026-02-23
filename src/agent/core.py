@@ -55,6 +55,7 @@ import src.mcp_servers.meta  # noqa: F401, E402
 import src.mcp_servers.orchestration  # noqa: F401, E402
 import src.mcp_servers.slack  # noqa: F401, E402
 import src.mcp_servers.system  # noqa: F401, E402
+import src.mcp_servers.web  # noqa: F401, E402
 from src.agent.api_client import run_agent_loop
 from src.agent.prompts import (
     CONVERSATION_SUPPLEMENT,
@@ -77,6 +78,19 @@ from src.config import settings
 from src.llm.provider import TaskType
 
 logger = structlog.get_logger(__name__)
+
+
+def _thinking_budget() -> int | None:
+    """Return the extended thinking budget if enabled, else ``None``.
+
+    Only Sonnet 4+, Opus 4+, and Haiku 4.5+ support extended thinking.
+    The model capability check happens inside ``run_agent_loop()`` — this
+    helper just resolves the config toggle.
+    """
+    if settings.extended_thinking_enabled:
+        return settings.extended_thinking_budget_tokens
+    return None
+
 
 # Maximum chars of previous skill output injected into the system prompt
 # during pipeline execution. Keeps context window manageable.
@@ -102,6 +116,7 @@ class BriefingResult:
     cost: dict[str, Any] = field(default_factory=dict)
     session_id: str = ""
     degradation_status: str = "full"  # "full" | "partial" | "stale"
+    tool_errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -123,6 +138,7 @@ class ConversationTurnResult:
     cost: dict[str, Any] = field(default_factory=dict)
     session_id: str = ""
     turn_number: int = 0
+    thinking_blocks: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -258,6 +274,7 @@ class SideraAgent:
                 tools=self._get_tools(),
                 max_turns=settings.max_tool_calls_per_cycle,
                 task_type=TaskType.DATA_COLLECTION,
+                thinking_budget=_thinking_budget(),
             )
         except Exception:
             self._log.exception("daily_briefing.error", user_id=user_id)
@@ -289,6 +306,7 @@ class SideraAgent:
                     tools=None,
                     max_turns=1,
                     task_type=TaskType.STRATEGY,
+                    thinking_budget=_thinking_budget(),
                 )
                 collected_text.append(result2.text)
                 cost_info["total_cost_usd"] = cost_info.get(
@@ -508,6 +526,7 @@ class SideraAgent:
                 tools=None,
                 max_turns=1,
                 task_type=TaskType.ANALYSIS,
+                thinking_budget=_thinking_budget(),
             )
             total_cost["phases"]["tactical_analysis"] = phase2_result.cost
             total_cost["total_cost_usd"] += phase2_result.cost.get("total_cost_usd", 0.0)
@@ -562,6 +581,7 @@ class SideraAgent:
                     tools=None,
                     max_turns=1,
                     task_type=TaskType.STRATEGY,
+                    thinking_budget=_thinking_budget(),
                 )
                 total_cost["phases"]["strategic_analysis"] = phase3_result.cost
                 total_cost["total_cost_usd"] += phase3_result.cost.get("total_cost_usd", 0.0)
@@ -656,6 +676,11 @@ class SideraAgent:
         if analysis_date is None:
             analysis_date = date.today()
 
+        # Reset per-turn traversal budget for cross-skill references
+        from src.mcp_servers.context import reset_reference_load_count
+
+        reset_reference_load_count()
+
         self._log.info(
             "skill.start",
             skill_id=skill.id,
@@ -674,7 +699,7 @@ class SideraAgent:
         # For multi-turn skills (max_turns > 1), use lazy loading:
         # inject a manifest instead of full text, agent loads on demand.
         # For single-turn skills, inject full text (no second turn to load).
-        if skill.context_files:
+        if skill.context_files or skill.references:
             from src.skills.schema import load_context_text
 
             use_lazy = skill.max_turns > 1
@@ -749,6 +774,7 @@ class SideraAgent:
                 tools=self._get_tools(list(skill.tools_required)),
                 max_turns=skill.max_turns,
                 task_type=TaskType.SKILL_EXECUTION,
+                thinking_budget=_thinking_budget(),
             )
         except Exception:
             self._log.exception(
@@ -774,6 +800,7 @@ class SideraAgent:
             recommendations=self._extract_recommendations(output_text),
             cost=result.cost,
             session_id="",
+            tool_errors=result.tool_errors,
         )
 
     async def run_query(
@@ -822,6 +849,7 @@ class SideraAgent:
                 tools=self._get_tools(),
                 max_turns=settings.max_tool_calls_per_cycle,
                 task_type=TaskType.ANALYSIS,
+                thinking_budget=_thinking_budget(),
             )
         except Exception:
             self._log.exception("query.error", user_id=user_id)
@@ -901,6 +929,11 @@ class SideraAgent:
             ``ConversationTurnResult`` with the response text, cost metadata,
             and turn number.
         """
+        # Reset per-turn traversal budget for cross-skill references
+        from src.mcp_servers.context import reset_reference_load_count
+
+        reset_reference_load_count()
+
         self._log.info(
             "conversation_turn.start",
             role_id=role_id,
@@ -971,6 +1004,7 @@ class SideraAgent:
                 tools=effective_tools,
                 max_turns=effective_max_turns,
                 task_type=TaskType.CONVERSATION,
+                thinking_budget=_thinking_budget(),
             )
         except Exception:
             self._log.exception(
@@ -996,6 +1030,7 @@ class SideraAgent:
             cost=result.cost,
             session_id="",
             turn_number=turn_number,
+            thinking_blocks=result.thinking_blocks,
         )
 
     # ------------------------------------------------------------------
@@ -1046,6 +1081,11 @@ class SideraAgent:
             MANAGER_DELEGATION_SUPPLEMENT,
             build_heartbeat_prompt,
         )
+
+        # Reset per-turn traversal budget for cross-skill references
+        from src.mcp_servers.context import reset_reference_load_count
+
+        reset_reference_load_count()
 
         self._log.info(
             "heartbeat.start",
@@ -1101,6 +1141,7 @@ class SideraAgent:
                 tools=effective_tools,
                 max_turns=settings.heartbeat_max_tool_calls,
                 task_type=TaskType.HEARTBEAT,
+                thinking_budget=_thinking_budget(),
             )
         except Exception:
             self._log.exception(
@@ -1281,6 +1322,7 @@ class SideraAgent:
         skill_ids: list[str] | None = None,
         principles: tuple[str, ...] | list[str] = (),
         peer_role_ids: tuple[str, ...] | list[str] = (),
+        tool_errors: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Run a cheap Haiku reflection after a role execution.
 
@@ -1297,6 +1339,11 @@ class SideraAgent:
         observations should be shared with those peers as cross-role
         learnings.
 
+        When ``tool_errors`` are provided (errors captured during tool
+        dispatch in the preceding agent run), they are injected into the
+        reflection prompt so the LLM can generate targeted lessons about
+        recurring tool failures and potential workarounds.
+
         Cost: ~$0.005-0.02 per call (Haiku, single turn, no tools,
         ~500 tokens input, ~200 tokens output).
 
@@ -1309,6 +1356,9 @@ class SideraAgent:
             principles: Optional role principles (decision heuristics).
             peer_role_ids: Optional list of role IDs that accept learnings
                 from this role (reverse lookup of ``learning_channels``).
+            tool_errors: Optional list of tool error dicts captured during
+                the agent run. Each dict has ``tool_name``,
+                ``error_message``, and ``input_summary``.
 
         Returns:
             List of memory entry dicts (type ``insight`` or ``lesson``)
@@ -1347,6 +1397,22 @@ class SideraAgent:
                 "observation is genuinely relevant to their domain.\n"
             )
 
+        # Build tool error section if errors were captured
+        error_section = ""
+        if tool_errors:
+            error_lines = []
+            for err in tool_errors[:5]:  # Cap at 5 errors
+                error_lines.append(
+                    f"- Tool '{err.get('tool_name', '?')}': "
+                    f"{err.get('error_message', 'unknown error')[:200]}"
+                )
+            error_section = (
+                "\n\nTool errors encountered during this run:\n"
+                + "\n".join(error_lines)
+                + "\n\nConsider whether these errors suggest a recurring "
+                "pattern or a skill/tool improvement.\n"
+            )
+
         reflection_prompt = (
             f"You just completed a run as '{role_name}' (role_id={role_id}) "
             f"executing skills: {skill_list}.\n\n"
@@ -1354,24 +1420,29 @@ class SideraAgent:
             "Reflect briefly on this run and respond with a JSON array of "
             "observations. Each observation should have:\n"
             '- "type": one of "insight" (a useful pattern or finding), '
-            '"lesson" (something that went wrong or could be improved), or '
+            '"lesson" (something that went wrong or could be improved), '
+            '"error_pattern" (a recurring tool failure worth tracking), or '
             '"gap" (a request or need you encountered that falls outside your '
             "skills and outside any existing role's domain)\n"
             '- "title": a short title (max 100 chars)\n'
             '- "content": a 1-2 sentence explanation\n'
             '- "confidence": 0.0-1.0 how confident you are this is valuable\n'
             f"{principles_section}"
-            f"{peer_section}\n"
+            f"{peer_section}"
+            f"{error_section}\n"
             'For "gap" type observations, also include:\n'
             '- "domain": a 1-3 word label for the missing capability area '
             '(e.g. "compliance", "customer support", "infrastructure")\n\n'
+            'For "error_pattern" observations, also include:\n'
+            '- "error_tools": list of tool names involved in the error\n\n'
             "Focus on:\n"
             "- What data was missing or hard to get?\n"
             "- What assumptions did you have to make?\n"
             "- What would you do differently next time?\n"
             "- Any patterns worth remembering for future runs?\n"
             "- Were there requests or needs that fell completely outside your "
-            "role's capabilities, where no existing role could help?\n\n"
+            "role's capabilities, where no existing role could help?\n"
+            "- Did any tool errors indicate a systemic issue?\n\n"
             "Return ONLY the JSON array. If nothing noteworthy, return []."
         )
 
@@ -1419,7 +1490,7 @@ class SideraAgent:
 
         for obs in observations[:5]:  # Max 5 reflections per run
             obs_type = obs.get("type", "insight")
-            if obs_type not in ("insight", "lesson", "gap"):
+            if obs_type not in ("insight", "lesson", "gap", "error_pattern"):
                 obs_type = "insight"
 
             title = str(obs.get("title", ""))[:100]
@@ -1451,6 +1522,13 @@ class SideraAgent:
                 if gap_domain:
                     evidence["gap_domain"] = gap_domain
 
+            # Capture error tool names for error_pattern observations
+            if obs_type == "error_pattern":
+                error_tools = obs.get("error_tools", [])
+                if isinstance(error_tools, list) and error_tools:
+                    evidence["error_tools"] = error_tools
+                evidence["error_type"] = "tool_failure"
+
             # Capture share_with for cross-role learning
             share_with = obs.get("share_with", [])
             if isinstance(share_with, list) and share_with and peer_role_ids:
@@ -1459,10 +1537,18 @@ class SideraAgent:
                 if valid_peers:
                     evidence["share_with"] = valid_peers
 
-            # Map "gap" to "insight" for DB storage (MemoryType enum).
-            # Gap observations are insights with gap_domain in evidence.
-            db_memory_type = "insight" if obs_type == "gap" else obs_type
-            tag = "[Gap Detection]" if obs_type == "gap" else "[Reflection]"
+            # Map special types to DB MemoryType equivalents:
+            # - "gap" → "insight" (with gap_domain in evidence)
+            # - "error_pattern" → "lesson" (with error_tools in evidence)
+            if obs_type == "gap":
+                db_memory_type = "insight"
+                tag = "[Gap Detection]"
+            elif obs_type == "error_pattern":
+                db_memory_type = "lesson"
+                tag = "[Error Pattern]"
+            else:
+                db_memory_type = obs_type
+                tag = "[Reflection]"
 
             memories.append(
                 {

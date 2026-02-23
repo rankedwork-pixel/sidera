@@ -30,7 +30,7 @@ Usage::
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 _MEMORY_CONTENT_PATTERN = re.compile(
@@ -63,6 +63,57 @@ _ANOMALY_KEYWORDS = re.compile(
 )
 
 _TOKEN_ESTIMATE_RATIO = 4  # ~4 chars per token
+
+# Time decay half-life in days — a memory at this age gets 50% weight.
+# 30 days means a 3-day-old memory is ~93% weight, a 60-day-old is ~25%.
+_DECAY_HALF_LIFE_DAYS = 30.0
+
+
+def _time_decay_score(
+    confidence: float,
+    created_at: Any,
+    *,
+    half_life_days: float = _DECAY_HALF_LIFE_DAYS,
+    now: datetime | None = None,
+) -> float:
+    """Compute a combined relevance score using confidence × time decay.
+
+    Recent memories outrank older ones at equal confidence. The decay
+    follows the formula::
+
+        decay = 1.0 / (1.0 + age_days / half_life_days)
+
+    So a memory at ``half_life_days`` old gets 50% weight, while a
+    brand-new memory gets ~100%. The final score is
+    ``confidence × decay``, ranging from 0.0 to 1.0.
+
+    Steward notes (confidence == 1.0 conventionally) still rank highest
+    because they carry the maximum confidence multiplier.
+
+    Args:
+        confidence: Memory confidence score (0.0 to 1.0).
+        created_at: Datetime object or None.
+        half_life_days: Number of days for 50% decay (default 30).
+        now: Override for current time (useful in tests).
+
+    Returns:
+        Combined score (higher is more relevant).
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    if created_at is None:
+        age_days = half_life_days  # Unknown age → treat as half-life
+    elif isinstance(created_at, datetime):
+        # Handle both tz-aware and tz-naive datetimes
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        age_days = max(0.0, (now - created_at).total_seconds() / 86400)
+    else:
+        age_days = half_life_days
+
+    decay = 1.0 / (1.0 + age_days / half_life_days)
+    return confidence * decay
 
 
 # =====================================================================
@@ -495,16 +546,18 @@ def compose_memory_context(
     if force_index or len(memories) > _MEMORY_INDEX_THRESHOLD:
         return compose_memory_index(memories)
 
-    # Sort: highest confidence first, then newest first
-    def _sort_key(m: Any) -> tuple:
+    # Sort by time-decayed relevance score (confidence × recency).
+    # Recent memories outrank older ones at equal confidence.
+    _now = datetime.now(timezone.utc)
+
+    def _sort_key(m: Any) -> float:
         if isinstance(m, dict):
             conf = m.get("confidence", 0.0)
             created = m.get("created_at")
         else:
             conf = getattr(m, "confidence", 0.0)
             created = getattr(m, "created_at", None)
-        ts = created.timestamp() if created else 0.0
-        return (-conf, -ts)
+        return -_time_decay_score(conf, created, now=_now)
 
     sorted_memories = sorted(memories, key=_sort_key)
 

@@ -63,8 +63,8 @@ _TIER_MODERATE = 5  # + system_supplement
 _TIER_MAJOR = 7  # + prompt_template, output_format, model, max_turns
 
 _TIER_FIELDS: dict[int, frozenset[str]] = {
-    _TIER_MINOR: frozenset({"business_guidance"}),
-    _TIER_MODERATE: frozenset({"business_guidance", "system_supplement"}),
+    _TIER_MINOR: frozenset({"business_guidance", "references"}),
+    _TIER_MODERATE: frozenset({"business_guidance", "system_supplement", "references"}),
     _TIER_MAJOR: frozenset(
         {
             "business_guidance",
@@ -73,6 +73,7 @@ _TIER_FIELDS: dict[int, frozenset[str]] = {
             "output_format",
             "model",
             "max_turns",
+            "references",
         }
     ),
 }
@@ -625,4 +626,334 @@ async def _generate_role_proposal_from_gaps(
             "source": "gap_detection",
         },
         "suggested_role_id": proposed_role_id,
+    }
+
+
+# =========================================================================
+# Gap Detection → Skill Creator Connection
+# =========================================================================
+
+# Lower threshold than roles (2 vs 3): skills are lighter-weight
+_MIN_GAPS_FOR_SKILL_SUGGESTION = 2
+
+# Max skill suggestions per scan
+_MAX_SKILL_SUGGESTIONS_PER_SCAN = 2
+
+# Lookback window for skill gap suggestions (same as role gaps)
+_SKILL_GAP_LOOKBACK_DAYS = 60
+
+
+async def scan_gaps_for_skill_suggestions(
+    role_id: str,
+    department_id: str,
+    user_id: str,
+) -> list[dict[str, Any]]:
+    """Scan gap observations and suggest new skills to the skill_creator.
+
+    Similar to ``scan_gaps_for_role_proposals()`` but:
+    - Lower threshold (2 gaps vs 3 for roles).
+    - Any role can trigger (not just managers).
+    - Uses Haiku to classify each gap domain as "role-level" (broad) or
+      "skill-level" (narrow, specific task).
+    - Returns skill suggestions for async messaging to skill_creator.
+
+    Domains already generating role proposals are excluded (handled by
+    the role proposal pipeline instead).
+
+    Args:
+        role_id: The role scanning for gaps.
+        department_id: The department context.
+        user_id: The advertiser user ID.
+
+    Returns:
+        List of skill suggestion dicts with keys: domain,
+        suggested_skill_name, suggested_description, suggested_category,
+        suggested_role_id, gap_summary, reasoning.
+        Empty on error or if no suggestions warranted.
+    """
+    try:
+        from src.db import service as db_service
+        from src.db.session import get_db_session
+
+        cutoff = date.today() - timedelta(days=_SKILL_GAP_LOOKBACK_DAYS)
+
+        # Load insight memories tagged with [Gap Detection]
+        async with get_db_session() as session:
+            memories = await db_service.search_role_memories(
+                session,
+                user_id=user_id,
+                role_id=role_id,
+                memory_type="insight",
+                limit=100,
+            )
+
+        # Filter to gap detection observations within lookback window
+        gap_observations: list[Any] = []
+        for mem in memories:
+            content = getattr(mem, "content", "") or ""
+            if "[Gap Detection]" not in content:
+                continue
+            created = getattr(mem, "created_at", None)
+            if created is not None:
+                mem_date = created.date() if hasattr(created, "date") else created
+                if mem_date < cutoff:
+                    continue
+            gap_observations.append(mem)
+
+        if len(gap_observations) < _MIN_GAPS_FOR_SKILL_SUGGESTION:
+            return []
+
+        # Group by gap_domain
+        by_domain: dict[str, list[Any]] = defaultdict(list)
+        for mem in gap_observations:
+            evidence = getattr(mem, "evidence", None) or {}
+            if isinstance(evidence, dict):
+                domain = evidence.get("gap_domain", "unknown")
+            else:
+                domain = "unknown"
+            by_domain[domain].append(mem)
+
+        # Find domains with enough observations
+        candidates: list[tuple[str, list[Any]]] = []
+        for domain, domain_gaps in by_domain.items():
+            if domain == "unknown":
+                continue
+            if len(domain_gaps) >= _MIN_GAPS_FOR_SKILL_SUGGESTION:
+                candidates.append((domain, domain_gaps))
+
+        if not candidates:
+            return []
+
+        # Sort by count (most gaps first), limit suggestions
+        candidates.sort(key=lambda x: len(x[1]), reverse=True)
+        candidates = candidates[:_MAX_SKILL_SUGGESTIONS_PER_SCAN]
+
+        suggestions: list[dict[str, Any]] = []
+        for domain, domain_gaps in candidates:
+            # Classify scope: is this a role-level or skill-level gap?
+            scope = await _classify_gap_scope(domain, domain_gaps)
+            if scope == "role":
+                # Role-level gaps are handled by scan_gaps_for_role_proposals
+                logger.info(
+                    "skill_suggestion.role_scope_skip",
+                    domain=domain,
+                    gap_count=len(domain_gaps),
+                )
+                continue
+
+            suggestion = await _generate_skill_suggestion_from_gaps(
+                domain=domain,
+                gaps=domain_gaps,
+                role_id=role_id,
+                department_id=department_id,
+            )
+            if suggestion:
+                suggestions.append(suggestion)
+
+        logger.info(
+            "skill_suggestion.scan_complete",
+            role_id=role_id,
+            gaps_scanned=len(gap_observations),
+            domains=len(by_domain),
+            candidates=len(candidates),
+            suggestions_generated=len(suggestions),
+        )
+
+        return suggestions
+
+    except Exception as exc:
+        logger.warning(
+            "skill_suggestion.scan_error",
+            role_id=role_id,
+            error=str(exc),
+        )
+        return []
+
+
+async def _classify_gap_scope(
+    domain: str,
+    gaps: list[Any],
+) -> str:
+    """Use Haiku to classify a gap domain as 'role' or 'skill'.
+
+    A "role" gap is broad and cross-functional — it needs a whole new
+    agent persona with multiple skills.  A "skill" gap is a narrow,
+    specific task that can be addressed by adding a single skill to
+    an existing role.
+
+    Args:
+        domain: The gap domain label (e.g. "compliance", "weekly report").
+        gaps: Gap observation memories for this domain.
+
+    Returns:
+        Either ``"role"`` or ``"skill"``.  Defaults to ``"skill"`` on
+        error or ambiguity.
+    """
+    from src.agent.api_client import run_agent_loop
+    from src.config import settings
+    from src.llm.provider import TaskType
+
+    # Build compact gap summary
+    gap_titles = [getattr(g, "title", "")[:80] for g in gaps[:5]]
+    titles_text = "\n".join(f"- {t}" for t in gap_titles if t)
+
+    prompt = (
+        f"Classify whether the capability gap domain '{domain}' is "
+        f"better addressed by:\n"
+        f"- A new ROLE (broad, cross-functional domain needing its own "
+        f"persona, tools, and multiple skills)\n"
+        f"- A new SKILL (narrow, specific task that can be added to an "
+        f"existing role as a single capability)\n\n"
+        f"Example gap observations:\n{titles_text}\n\n"
+        f"Respond with ONLY one word: 'role' or 'skill'."
+    )
+
+    try:
+        result = await run_agent_loop(
+            system_prompt="Respond with exactly one word: role or skill.",
+            user_prompt=prompt,
+            model=settings.model_fast,  # Haiku
+            tools=None,
+            max_turns=1,
+            task_type=TaskType.FRICTION_DETECTION,
+        )
+        answer = result.text.strip().lower()
+        if answer in ("role", "skill"):
+            return answer
+        # If ambiguous, default to skill (lighter-weight)
+        return "skill"
+    except Exception:
+        return "skill"
+
+
+async def _generate_skill_suggestion_from_gaps(
+    domain: str,
+    gaps: list[Any],
+    role_id: str,
+    department_id: str,
+) -> dict[str, Any] | None:
+    """Use Haiku to generate a skill suggestion message.
+
+    Creates a structured suggestion that will be sent as a message to
+    the ``skill_creator`` role for interactive skill creation.
+
+    Args:
+        domain: The gap domain label.
+        gaps: Gap observation memories for this domain.
+        role_id: The role that detected the gap.
+        department_id: The department context.
+
+    Returns:
+        Skill suggestion dict or None if no skill is warranted.
+    """
+    from src.agent.api_client import run_agent_loop
+    from src.config import settings
+    from src.llm.provider import TaskType
+
+    # Build gap summary
+    gap_texts: list[str] = []
+    for gap in gaps[:8]:
+        title = getattr(gap, "title", "") or ""
+        content = getattr(gap, "content", "") or ""
+        clean = content
+        if "] " in clean:
+            parts = clean.split("] ", 2)
+            clean = parts[-1] if len(parts) >= 2 else clean
+        gap_texts.append(f"- {title}: {clean[:150]}")
+
+    gap_summary = "\n".join(gap_texts)
+
+    prompt = (
+        f"Role '{role_id}' in department '{department_id}' has detected "
+        f"{len(gaps)} capability gaps in the domain of '{domain}'.\n\n"
+        f"Gap observations:\n{gap_summary}\n\n"
+        "Should a new SKILL be created to address this gap? "
+        "If yes, suggest the skill details.\n\n"
+        "Respond with a JSON object:\n"
+        "{\n"
+        '  "should_create": true,\n'
+        '  "skill_name": "suggested_skill_name_snake_case",\n'
+        '  "display_name": "Human-Readable Skill Name",\n'
+        '  "description": "1-2 sentence description",\n'
+        '  "category": "one of: analysis, optimization, reporting, '
+        'monitoring, creative, operations",\n'
+        '  "suggested_role_id": "which existing role should own this '
+        'skill (or the requesting role)",\n'
+        '  "reasoning": "why this skill is needed"\n'
+        "}\n\n"
+        "Or if the gaps don't warrant a new skill:\n"
+        '{"should_create": false, "reasoning": "why not"}\n\n'
+        "Return ONLY the JSON object."
+    )
+
+    try:
+        result = await run_agent_loop(
+            system_prompt=(
+                "You are a skill design analyst. Respond only with "
+                "a valid JSON object. No markdown, no explanation."
+            ),
+            user_prompt=prompt,
+            model=settings.model_fast,
+            tools=None,
+            max_turns=1,
+            task_type=TaskType.FRICTION_DETECTION,
+        )
+    except Exception:
+        logger.warning(
+            "skill_suggestion.llm_error",
+            domain=domain,
+            role_id=role_id,
+        )
+        return None
+
+    # Parse response
+    try:
+        raw_text = result.text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[-1]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3].strip()
+
+        decision = json.loads(raw_text)
+        if not isinstance(decision, dict):
+            return None
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+    if not decision.get("should_create"):
+        logger.info(
+            "skill_suggestion.not_warranted",
+            domain=domain,
+            reasoning=decision.get("reasoning", ""),
+        )
+        return None
+
+    suggested_name = decision.get(
+        "skill_name",
+        f"{domain.lower().replace(' ', '_')}_skill",
+    )
+    display_name = decision.get("display_name", domain.title())
+    description = decision.get("description", "")
+    category = decision.get("category", "analysis")
+    target_role = decision.get("suggested_role_id", role_id)
+    reasoning = decision.get(
+        "reasoning",
+        f"Auto-suggested from {len(gaps)} gap observations",
+    )
+
+    if not description:
+        return None
+
+    return {
+        "domain": domain,
+        "suggested_skill_name": suggested_name,
+        "display_name": display_name,
+        "suggested_description": description,
+        "suggested_category": category,
+        "suggested_role_id": target_role,
+        "gap_summary": gap_summary,
+        "gap_count": len(gaps),
+        "reasoning": reasoning,
+        "source_role_id": role_id,
+        "department_id": department_id,
     }

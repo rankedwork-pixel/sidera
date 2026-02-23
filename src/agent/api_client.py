@@ -55,6 +55,26 @@ _DEFAULT_PRICING = {"input": 3.00, "output": 15.00}
 
 
 # ---------------------------------------------------------------------------
+# Extended thinking support
+# ---------------------------------------------------------------------------
+
+_THINKING_CAPABLE_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-sonnet-4-20250514",
+        "claude-sonnet-4-0",
+        "claude-opus-4-20250514",
+        "claude-opus-4-0",
+        "claude-haiku-4-5-20251001",
+    }
+)
+
+
+def _model_supports_thinking(model: str) -> bool:
+    """Check if a model supports extended thinking."""
+    return model in _THINKING_CAPABLE_MODELS
+
+
+# ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
 
@@ -70,6 +90,9 @@ class TurnResult:
         turn_count: Number of API round-trips.
         session_id: Placeholder for compatibility (always ``""``).
         is_error: ``True`` if the loop ended due to an exception.
+        thinking_blocks: List of thinking block dicts captured during the
+            run.  Each dict has ``turn`` (int) and ``thinking`` (str).
+            Empty when extended thinking is disabled.
     """
 
     text: str = ""
@@ -77,6 +100,8 @@ class TurnResult:
     turn_count: int = 0
     session_id: str = ""
     is_error: bool = False
+    thinking_blocks: list[dict[str, Any]] = field(default_factory=list)
+    tool_errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +139,7 @@ async def run_agent_loop(
     max_tokens: int | None = None,
     max_cost_usd: float | None = None,
     task_type: TaskType = TaskType.GENERAL,
+    thinking_budget: int | None = None,
 ) -> TurnResult:
     """Run a complete agent loop: prompt ➜ tool calls ➜ final response.
 
@@ -138,6 +164,11 @@ async def run_agent_loop(
             gracefully and returns partial results.
         task_type: Classification of the LLM task (for metrics/logging).
             Defaults to ``TaskType.GENERAL``.
+        thinking_budget: Token budget for extended thinking.  ``None``
+            disables thinking.  When set, the model reasons internally
+            before responding — dramatically improves quality for complex
+            analysis, tool orchestration, and multi-step reasoning.
+            Only supported on Sonnet 4+, Opus 4+, and Haiku 4.5+.
 
     Returns:
         A :class:`TurnResult` with the collected text, cost metadata,
@@ -155,9 +186,11 @@ async def run_agent_loop(
     ]
 
     collected_text: list[str] = []
+    collected_thinking: list[dict[str, Any]] = []
     total_input_tokens = 0
     total_output_tokens = 0
     turn_count = 0
+    collected_tool_errors: list[dict[str, Any]] = []
     start_time = time.monotonic()
 
     # Build kwargs once (tools may be omitted for no-tool turns).
@@ -168,6 +201,22 @@ async def run_agent_loop(
     }
     if tools:
         api_kwargs["tools"] = tools
+
+    # Extended thinking — internal reasoning before responding.
+    # Dramatically improves multi-step analysis, tool orchestration,
+    # and strategic reasoning.  Only on capable models.
+    _thinking_active = bool(thinking_budget and _model_supports_thinking(model))
+    if _thinking_active:
+        api_kwargs["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+        # max_tokens must be > budget_tokens; ensure room for both
+        # thinking and response output.
+        api_kwargs["max_tokens"] = max(resolved_max_tokens, thinking_budget + 4096)
+        # Interleaved thinking: lets the model reason between tool calls
+        # (think → tool call → think about result → next tool call).
+        if tools:
+            api_kwargs["extra_headers"] = {
+                "anthropic-beta": "interleaved-thinking-2025-05-14",
+            }
 
     try:
         for _turn in range(max_turns):
@@ -202,6 +251,9 @@ async def run_agent_loop(
                     break
 
             # Separate text blocks from tool_use blocks.
+            # Thinking and redacted_thinking blocks are internal reasoning —
+            # they're preserved in messages for continuity but NOT included
+            # in the output text.
             text_parts: list[str] = []
             tool_calls: list[dict[str, Any]] = []
 
@@ -216,6 +268,19 @@ async def run_agent_loop(
                             "input": block.input,
                         }
                     )
+                elif block.type == "thinking":
+                    # Extended thinking: internal reasoning block.
+                    # Captured for optional visibility (e.g. Slack thread)
+                    # but NOT included in the output text.
+                    collected_thinking.append(
+                        {
+                            "turn": turn_count,
+                            "thinking": block.thinking,
+                        }
+                    )
+                elif block.type == "redacted_thinking":
+                    # Redacted thinking — content is not available.
+                    pass
 
             if text_parts:
                 collected_text.extend(text_parts)
@@ -240,6 +305,15 @@ async def run_agent_loop(
                     tool=tc["name"],
                     result_chars=len(result_text),
                 )
+                # Capture tool errors for reflection
+                if result_text.startswith("Error:") or result_text.startswith("error:"):
+                    collected_tool_errors.append(
+                        {
+                            "tool_name": tc["name"],
+                            "error_message": result_text[:500],
+                            "input_summary": str(tc["input"])[:200],
+                        }
+                    )
                 tool_results.append(
                     {
                         "type": "tool_result",
@@ -263,10 +337,13 @@ async def run_agent_loop(
                 "output_tokens": total_output_tokens,
                 "model": model,
                 "task_type": task_type.value,
+                "thinking_enabled": _thinking_active,
                 "is_error": True,
             },
             turn_count=turn_count,
             is_error=True,
+            thinking_blocks=collected_thinking,
+            tool_errors=collected_tool_errors,
         )
 
     elapsed_ms = int((time.monotonic() - start_time) * 1000)
@@ -282,10 +359,13 @@ async def run_agent_loop(
             "output_tokens": total_output_tokens,
             "model": model,
             "task_type": task_type.value,
+            "thinking_enabled": _thinking_active,
             "is_error": False,
         },
         turn_count=turn_count,
         is_error=False,
+        thinking_blocks=collected_thinking,
+        tool_errors=collected_tool_errors,
     )
 
 

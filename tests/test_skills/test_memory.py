@@ -12,6 +12,7 @@ from src.skills.memory import (
     _extract_anomaly_memories,
     _extract_decision_memories,
     _format_memory_line,
+    _time_decay_score,
     compose_memory_context,
     extract_memories_from_results,
     filter_superseded_memories,
@@ -63,6 +64,98 @@ class TestEstimateTokens:
 
     def test_four_hundred_chars(self):
         assert _estimate_tokens("a" * 400) == 100
+
+
+# =====================================================================
+# Time decay scoring
+# =====================================================================
+
+
+class TestTimeDecayScore:
+    """Tests for _time_decay_score — confidence × recency ranking."""
+
+    def test_brand_new_memory_full_weight(self):
+        """A memory created just now should get ~100% weight."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        score = _time_decay_score(1.0, now, now=now)
+        assert score > 0.99
+
+    def test_half_life_equals_50_percent(self):
+        """A memory at exactly half_life_days old should get 50% weight."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 21, 12, 0, tzinfo=timezone.utc)  # 30 days ago
+        score = _time_decay_score(1.0, created, now=now)
+        assert abs(score - 0.5) < 0.01
+
+    def test_3_day_old_about_93_percent(self):
+        """A 3-day-old memory should get ~91% weight (1/(1+3/30))."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        created = datetime(2026, 2, 17, 12, 0, tzinfo=timezone.utc)
+        score = _time_decay_score(1.0, created, now=now)
+        # 1 / (1 + 3/30) = 1/1.1 ≈ 0.909
+        assert 0.89 < score < 0.93
+
+    def test_60_day_old_about_33_percent(self):
+        """A 60-day-old memory should get ~33% weight."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        created = datetime(2025, 12, 22, 12, 0, tzinfo=timezone.utc)  # 60 days ago
+        score = _time_decay_score(1.0, created, now=now)
+        # 1 / (1 + 60/30) = 1/3 ≈ 0.333
+        assert 0.30 < score < 0.36
+
+    def test_confidence_multiplier(self):
+        """Score should be confidence × decay."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        full = _time_decay_score(1.0, now, now=now)
+        half = _time_decay_score(0.5, now, now=now)
+        assert abs(half - full * 0.5) < 0.01
+
+    def test_none_created_at_uses_half_life(self):
+        """When created_at is None, age defaults to half_life (50% weight)."""
+        score = _time_decay_score(1.0, None)
+        assert abs(score - 0.5) < 0.01
+
+    def test_non_datetime_created_at_uses_half_life(self):
+        """Non-datetime created_at (e.g. string) defaults to half_life."""
+        score = _time_decay_score(1.0, "not a datetime")
+        assert abs(score - 0.5) < 0.01
+
+    def test_naive_datetime_treated_as_utc(self):
+        """Naive datetime (no tzinfo) should be treated as UTC."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        naive = datetime(2026, 2, 20, 12, 0)  # no tzinfo
+        score = _time_decay_score(1.0, naive, now=now)
+        assert score > 0.99
+
+    def test_custom_half_life(self):
+        """Custom half_life_days should shift the decay curve."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        created = datetime(2026, 2, 10, 12, 0, tzinfo=timezone.utc)  # 10 days ago
+        # With half_life=10, a 10-day-old memory should get 50%
+        score = _time_decay_score(1.0, created, half_life_days=10.0, now=now)
+        assert abs(score - 0.5) < 0.01
+
+    def test_zero_confidence_always_zero(self):
+        """Zero confidence × any decay = 0."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        score = _time_decay_score(0.0, now, now=now)
+        assert score == 0.0
+
+    def test_future_created_at_clamped(self):
+        """A memory with future created_at gets max(0, ...) age = 0 days."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        future = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+        score = _time_decay_score(1.0, future, now=now)
+        assert score > 0.99  # age clamped to 0
+
+    def test_recent_beats_old_same_confidence(self):
+        """At equal confidence, a recent memory should score higher."""
+        now = datetime(2026, 2, 20, 12, 0, tzinfo=timezone.utc)
+        recent = datetime(2026, 2, 18, tzinfo=timezone.utc)
+        old = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        recent_score = _time_decay_score(0.8, recent, now=now)
+        old_score = _time_decay_score(0.8, old, now=now)
+        assert recent_score > old_score
 
 
 # =====================================================================
@@ -424,7 +517,8 @@ class TestComposeMemoryContext:
         count = result.count("Memory entry")
         assert 0 < count < 20
 
-    def test_sorted_by_confidence_desc(self):
+    def test_sorted_by_time_decayed_relevance(self):
+        """Higher confidence wins even if slightly older (time decay)."""
         low = FakeMemory(
             content="Low confidence memory",
             confidence=0.3,
@@ -436,10 +530,30 @@ class TestComposeMemoryContext:
             created_at=datetime(2026, 2, 8, tzinfo=timezone.utc),
         )
         result = compose_memory_context([low, high])
-        # High confidence should appear before low
+        # High confidence should still appear before low even though it's older
         high_pos = result.find("High confidence")
         low_pos = result.find("Low confidence")
         assert high_pos < low_pos
+
+    def test_time_decay_favors_recent_at_similar_confidence(self):
+        """A recent memory can outrank an older one when confidence is close."""
+        # Old high-confidence memory (80 days ago → heavy decay)
+        old = FakeMemory(
+            content="Old memory content",
+            confidence=0.9,
+            created_at=datetime(2025, 12, 2, tzinfo=timezone.utc),
+        )
+        # Recent moderate-confidence memory (1 day ago → minimal decay)
+        recent = FakeMemory(
+            content="Recent memory content",
+            confidence=0.7,
+            created_at=datetime(2026, 2, 19, tzinfo=timezone.utc),
+        )
+        result = compose_memory_context([old, recent])
+        recent_pos = result.find("Recent memory")
+        old_pos = result.find("Old memory")
+        # Recent should rank higher because time decay penalizes the old one
+        assert recent_pos < old_pos
 
     def test_dict_memories_supported(self):
         mem = {
