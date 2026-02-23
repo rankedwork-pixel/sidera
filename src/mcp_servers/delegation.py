@@ -250,6 +250,9 @@ async def delegate_to_role(args: dict[str, Any]) -> dict[str, Any]:
         # Run the sub-role agent
         from src.llm.provider import TaskType
 
+        _budget = (
+            settings.extended_thinking_budget_tokens if settings.extended_thinking_enabled else None
+        )
         result = await run_agent_loop(
             system_prompt=system_prompt,
             user_prompt=task,
@@ -257,6 +260,7 @@ async def delegate_to_role(args: dict[str, Any]) -> dict[str, Any]:
             tools=sub_tools,
             max_turns=settings.conversation_tool_calls_per_turn,
             task_type=TaskType.DELEGATION,
+            thinking_budget=_budget,
         )
 
         # Track cost
@@ -514,6 +518,9 @@ async def consult_peer(args: dict[str, Any]) -> dict[str, Any]:
         caller_name = caller_role.name if caller_role else caller_role_id
 
         # Run the peer agent
+        _budget = (
+            settings.extended_thinking_budget_tokens if settings.extended_thinking_enabled else None
+        )
         result = await run_agent_loop(
             system_prompt=system_prompt,
             user_prompt=(f"[Consultation from {caller_name}]\n\n{question}"),
@@ -521,6 +528,7 @@ async def consult_peer(args: dict[str, Any]) -> dict[str, Any]:
             tools=peer_tools,
             max_turns=settings.conversation_tool_calls_per_turn,
             task_type=TaskType.CONVERSATION,
+            thinking_budget=_budget,
         )
 
         # Track cost (shared counter with delegate_to_role)

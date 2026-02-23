@@ -76,6 +76,7 @@ class SkillResult:
     cost: dict[str, Any] = field(default_factory=dict)
     session_id: str = ""
     chain_next: str | None = None
+    tool_errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 # =============================================================================
@@ -305,6 +306,7 @@ def _briefing_to_skill_result(
         cost=briefing_result.cost,
         session_id=briefing_result.session_id or str(uuid.uuid4()),
         chain_next=chain_after,
+        tool_errors=briefing_result.tool_errors,
     )
 
 

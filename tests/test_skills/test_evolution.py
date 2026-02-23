@@ -107,6 +107,10 @@ class TestConstants:
         """max_turns is in ALLOWED_FIELDS."""
         assert "max_turns" in ALLOWED_FIELDS
 
+    def test_allowed_fields_contains_references(self):
+        """references is in ALLOWED_FIELDS."""
+        assert "references" in ALLOWED_FIELDS
+
     def test_no_overlap_between_forbidden_and_allowed(self):
         """FORBIDDEN_FIELDS and ALLOWED_FIELDS must not overlap."""
         overlap = FORBIDDEN_FIELDS & ALLOWED_FIELDS
@@ -285,6 +289,44 @@ class TestValidateSkillProposal:
         ok, err = validate_skill_proposal({"max_turns": "10"})
         assert ok is False
         assert "max_turns" in err
+
+    # --- references field validation ---
+
+    def test_references_valid_list_of_dicts(self):
+        """Valid references (list of dicts with skill_id) is accepted."""
+        ok, err = validate_skill_proposal(
+            {
+                "references": [
+                    {"skill_id": "other_skill", "relationship": "methodology"},
+                ]
+            }
+        )
+        assert ok is True
+        assert err == ""
+
+    def test_references_not_a_list(self):
+        """references as a string is rejected."""
+        ok, err = validate_skill_proposal({"references": "other_skill"})
+        assert ok is False
+        assert "list" in err.lower()
+
+    def test_references_entry_not_a_dict(self):
+        """references entries must be dicts."""
+        ok, err = validate_skill_proposal({"references": ["other_skill"]})
+        assert ok is False
+        assert "dict" in err.lower()
+
+    def test_references_entry_missing_skill_id(self):
+        """references entries without skill_id are rejected."""
+        ok, err = validate_skill_proposal({"references": [{"relationship": "methodology"}]})
+        assert ok is False
+        assert "skill_id" in err.lower()
+
+    def test_references_empty_list_valid(self):
+        """Empty references list (clearing references) is valid."""
+        ok, err = validate_skill_proposal({"references": []})
+        assert ok is True
+        assert err == ""
 
 
 # =====================================================================

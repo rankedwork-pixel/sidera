@@ -182,6 +182,17 @@ def _skill_to_portable_dict(skill: SkillDefinition) -> dict[str, Any]:
         else:
             del d["context_file_descriptions"]
 
+    # Convert references tuple-of-tuples to list-of-dicts
+    if "references" in d:
+        refs = d["references"]
+        if refs:
+            d["references"] = [
+                {"skill_id": sid, "relationship": rel, "reason": reason}
+                for sid, rel, reason in refs
+            ]
+        else:
+            del d["references"]
+
     # Remove empty/None optional fields for cleaner YAML
     remove_keys = [
         k
@@ -431,8 +442,11 @@ def _verify_integrity(bundle_dir: Path, manifest: SkillManifest) -> list[str]:
 def validate_bundle(bundle_path: str | Path) -> ImportResult:
     """Validate a skill bundle without importing it.
 
+    Auto-detects the bundle format (Sidera or Anthropic) and validates
+    accordingly.
+
     Checks:
-    - Bundle structure (manifest.yaml, skill.yaml)
+    - Bundle structure (manifest.yaml, skill.yaml or SKILL.md)
     - Manifest integrity (SHA-256 hash)
     - Skill definition validation (categories, models, etc.)
     - Context file references
@@ -443,7 +457,14 @@ def validate_bundle(bundle_path: str | Path) -> ImportResult:
     Returns:
         An ``ImportResult`` with validation errors/warnings.
     """
+    from src.skills.anthropic_compat import is_anthropic_bundle
+
     bundle_path = Path(bundle_path)
+
+    # Auto-detect Anthropic format
+    if is_anthropic_bundle(bundle_path):
+        return _validate_anthropic_bundle(bundle_path)
+
     result = ImportResult()
 
     # Handle ZIP files
@@ -527,6 +548,16 @@ def validate_bundle(bundle_path: str | Path) -> ImportResult:
                 if not matches:
                     result.warnings.append(f"context_files pattern '{pattern}' has no matches")
 
+    # Warn about cross-skill references that may not exist in target
+    if skill.references:
+        ref_ids = [r[0] for r in skill.references if r[0]]
+        if ref_ids:
+            result.warnings.append(
+                f"Skill references {len(ref_ids)} other skill(s): "
+                f"{', '.join(ref_ids)}. Verify these exist in the target "
+                f"environment."
+            )
+
     result.success = len(result.errors) == 0
     return result
 
@@ -576,6 +607,23 @@ def _dict_to_skill(
     else:
         cfd = ()
 
+    # Handle references from list-of-dicts format
+    raw_refs = data.get("references", [])
+    if raw_refs and isinstance(raw_refs[0], dict):
+        refs = tuple(
+            (
+                str(r.get("skill_id", "")),
+                str(r.get("relationship", "")),
+                str(r.get("reason", "")),
+            )
+            for r in raw_refs
+            if isinstance(r, dict) and r.get("skill_id")
+        )
+    elif raw_refs and isinstance(raw_refs[0], (list, tuple)):
+        refs = tuple(tuple(str(x) for x in ref) for ref in raw_refs)
+    else:
+        refs = ()
+
     return SkillDefinition(
         id=str(data["id"]),
         name=str(data["name"]),
@@ -593,6 +641,7 @@ def _dict_to_skill(
         business_guidance=str(data.get("business_guidance", "")),
         context_files=tuple(str(cf) for cf in data.get("context_files", [])),
         context_file_descriptions=cfd,
+        references=refs,
         source_dir=str(bundle_dir) if bundle_dir else "",
         schedule=data.get("schedule"),
         chain_after=data.get("chain_after"),
@@ -615,6 +664,9 @@ def import_skill_from_bundle(
 ) -> ImportResult:
     """Import a skill from a portable bundle.
 
+    Auto-detects the bundle format (Sidera or Anthropic) and imports
+    accordingly.
+
     Validates the bundle, then either:
     - Installs to disk (if ``install_to_disk`` is provided)
     - Returns the validated skill data for DB installation
@@ -630,7 +682,23 @@ def import_skill_from_bundle(
     Returns:
         An ``ImportResult`` with success status and details.
     """
+    from src.skills.anthropic_compat import is_anthropic_bundle
+
     bundle_path = Path(bundle_path)
+
+    # Auto-detect Anthropic format
+    if is_anthropic_bundle(bundle_path):
+        from src.skills.anthropic_compat import import_anthropic_skill
+
+        return import_anthropic_skill(
+            source=bundle_path,
+            target_dir=install_to_disk,
+            target_department_id=target_department_id,
+            target_role_id=target_role_id,
+            new_skill_id=new_skill_id,
+            new_author=new_author,
+        )
+
     result = ImportResult(
         target_department_id=target_department_id,
         target_role_id=target_role_id,
@@ -836,3 +904,56 @@ def search_bundles(
         ]
 
     return results
+
+
+# =============================================================================
+# Anthropic format helpers (delegated to anthropic_compat module)
+# =============================================================================
+
+
+def _validate_anthropic_bundle(bundle_path: Path) -> ImportResult:
+    """Validate an Anthropic-format skill bundle."""
+    from src.skills.anthropic_compat import validate_anthropic_bundle
+
+    result = ImportResult()
+    is_valid, errors, warnings = validate_anthropic_bundle(bundle_path)
+    result.errors.extend(errors)
+    result.warnings.extend(warnings)
+    result.success = is_valid
+
+    if is_valid:
+        from src.skills.anthropic_compat import parse_skill_md
+
+        try:
+            bundle = parse_skill_md(bundle_path)
+            result.skill_id = bundle.name.replace("-", "_")
+            result.skill_name = bundle.name.replace("-", " ").title()
+        except Exception:
+            pass
+
+    return result
+
+
+def export_skill_to_anthropic(
+    skill: SkillDefinition,
+    output_dir: str | Path,
+    exported_by: str = "sidera",
+) -> Path:
+    """Export a Sidera skill as an Anthropic-compatible SKILL.md bundle.
+
+    Args:
+        skill: The skill to export.
+        output_dir: Parent directory for the output.
+        exported_by: Attribution for the export.
+
+    Returns:
+        Path to the created Anthropic skill directory.
+    """
+    from src.skills.anthropic_compat import export_to_anthropic_dir
+
+    skill_dict = asdict(skill)
+    return export_to_anthropic_dir(
+        skill_dict,
+        output_dir,
+        source_skill_dir=skill.source_dir or None,
+    )

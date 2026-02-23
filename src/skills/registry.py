@@ -89,6 +89,8 @@ class SkillRegistry:
         self._roles: dict[str, RoleDefinition] = {}
         self._rulesets: dict[str, AutoExecuteRuleSet] = {}
         self._sources: dict[str, str] = {}  # "dept:X" / "role:X" / "skill:X" -> "disk" | "db"
+        # referenced_skill_id -> set of referencing skill_ids
+        self._reverse_references: dict[str, set[str]] = {}
         self._log = logger.bind(component="skill_registry")
 
     # ------------------------------------------------------------------
@@ -156,6 +158,9 @@ class SkillRegistry:
 
         # Phase 3: Cross-validate manager → managed role references
         self._validate_manager_references()
+
+        # Phase 4: Build cross-skill reference index
+        self._build_reverse_references()
 
         self._log.info(
             "registry.loaded",
@@ -523,6 +528,74 @@ class SkillRegistry:
             if managed is not None and managed.manages:
                 self._check_circular(managed_id, depth + 1, visited_next)
 
+    def _build_reverse_references(self) -> None:
+        """Build reverse index: which skills reference which other skills.
+
+        Also warns about dangling references (referenced skill_id not in
+        registry). Similar to ``_validate_manager_references()`` for
+        manager→managed role cross-references.
+        """
+        self._reverse_references.clear()
+
+        for skill_id, skill in self._skills.items():
+            if not skill.references:
+                continue
+            for ref_skill_id, relationship, _reason in skill.references:
+                if ref_skill_id not in self._skills:
+                    self._log.warning(
+                        "skill.dangling_reference",
+                        skill_id=skill_id,
+                        referenced_skill_id=ref_skill_id,
+                        relationship=relationship,
+                    )
+                    continue
+                if ref_skill_id not in self._reverse_references:
+                    self._reverse_references[ref_skill_id] = set()
+                self._reverse_references[ref_skill_id].add(skill_id)
+
+        ref_count = sum(len(v) for v in self._reverse_references.values())
+        if ref_count:
+            self._log.info(
+                "registry.reverse_references_built",
+                referenced_skills=len(self._reverse_references),
+                total_reference_edges=ref_count,
+            )
+
+    def get_references_for(
+        self,
+        skill_id: str,
+    ) -> list[tuple["SkillDefinition", str, str]]:
+        """Get the skills that a skill references, with relationship metadata.
+
+        Args:
+            skill_id: The skill whose references to look up.
+
+        Returns:
+            List of ``(referenced_skill_def, relationship, reason)`` tuples.
+            Only includes references whose target exists in the registry.
+        """
+        skill = self._skills.get(skill_id)
+        if skill is None or not skill.references:
+            return []
+
+        result: list[tuple[SkillDefinition, str, str]] = []
+        for ref_skill_id, relationship, reason in skill.references:
+            ref_skill = self._skills.get(ref_skill_id)
+            if ref_skill is not None:
+                result.append((ref_skill, relationship, reason))
+        return result
+
+    def get_referenced_by(self, skill_id: str) -> set[str]:
+        """Get skill IDs that reference a given skill (reverse index).
+
+        Args:
+            skill_id: The skill to check.
+
+        Returns:
+            Set of skill IDs that declare a reference to this skill.
+        """
+        return self._reverse_references.get(skill_id, set()).copy()
+
     # ------------------------------------------------------------------
     # DB Merge
     # ------------------------------------------------------------------
@@ -673,6 +746,15 @@ class SkillRegistry:
                     chain_after=s.get("chain_after"),
                     requires_approval=bool(s.get("requires_approval", True)),
                     min_clearance=str(s.get("min_clearance", "public")),
+                    references=tuple(
+                        (
+                            str(r.get("skill_id", "")),
+                            str(r.get("relationship", "")),
+                            str(r.get("reason", "")),
+                        )
+                        for r in (s.get("references") or [])
+                        if isinstance(r, dict) and r.get("skill_id")
+                    ),
                     department_id=str(s.get("department_id", "")),
                     role_id=str(s.get("role_id", "")),
                     author=str(s.get("author", "sidera")),
@@ -697,6 +779,9 @@ class SkillRegistry:
 
         # Re-validate manager references after merge
         self._validate_manager_references()
+
+        # Rebuild cross-skill reference index
+        self._build_reverse_references()
 
         self._log.info(
             "registry.db_merged",

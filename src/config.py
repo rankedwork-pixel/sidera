@@ -178,6 +178,10 @@ class Settings(BaseSettings):
     model_standard: str = "claude-sonnet-4-20250514"
     model_reasoning: str = "claude-opus-4-20250514"
 
+    # Extended thinking — gives agents deep reasoning between tool calls
+    extended_thinking_enabled: bool = True  # Global toggle — default ON
+    extended_thinking_budget_tokens: int = 10000  # Token budget for internal reasoning
+
     # Hybrid LLM routing (external providers for cheap structured tasks)
     external_llm_enabled: bool = False  # Global kill switch — default OFF
     external_llm_provider: str = "openai_compatible"  # Provider identifier

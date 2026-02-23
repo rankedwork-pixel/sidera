@@ -146,6 +146,9 @@ class SkillDefinition:
     # --- Information clearance ---
     min_clearance: str = "public"  # Minimum clearance to run/view this skill's output
 
+    # --- Cross-skill references (skill graphs) ---
+    references: tuple[tuple[str, str, str], ...] = ()  # (skill_id, relationship, reason)
+
     # --- Hierarchy (set by registry based on disk location, not in YAML) ---
     department_id: str = ""
     role_id: str = ""
@@ -350,6 +353,15 @@ def load_skill_from_yaml(path: Path) -> SkillDefinition:
             code_entrypoint=str(data.get("code_entrypoint", "")),
             code_timeout_seconds=int(data.get("code_timeout_seconds", 300)),
             code_output_patterns=tuple(str(p) for p in data.get("code_output_patterns", [])),
+            references=tuple(
+                (
+                    str(r.get("skill_id", "")),
+                    str(r.get("relationship", "")),
+                    str(r.get("reason", "")),
+                )
+                for r in data.get("references", [])
+                if isinstance(r, dict) and r.get("skill_id")
+            ),
             author=str(data.get("author", "sidera")),
             created_at=str(data.get("created_at", "")),
             updated_at=str(data.get("updated_at", "")),
@@ -483,6 +495,20 @@ def validate_skill(skill: SkillDefinition) -> list[str]:
             f"Skill '{skill.id}' has chain_after pointing to itself (would cause infinite loop)"
         )
 
+    # --- References validation ---
+    if skill.references:
+        seen_refs: set[str] = set()
+        for ref_tuple in skill.references:
+            ref_skill_id = ref_tuple[0] if ref_tuple else ""
+            if not ref_skill_id:
+                errors.append("Reference skill_id cannot be empty")
+            elif ref_skill_id == skill.id:
+                errors.append(f"Skill '{skill.id}' references itself (self-reference not allowed)")
+            elif ref_skill_id in seen_refs:
+                errors.append(f"Duplicate reference to skill '{ref_skill_id}'")
+            if ref_skill_id:
+                seen_refs.add(ref_skill_id)
+
     # --- Code-backed skill validation ---
     valid_skill_types = ("llm", "code_backed")
     if skill.skill_type not in valid_skill_types:
@@ -579,7 +605,7 @@ def load_context_text(skill: SkillDefinition, lazy: bool = False) -> str:
         return skill.context_text
 
     files = resolve_context_files(skill)
-    if not files:
+    if not files and not skill.references:
         return ""
 
     # Lazy mode: return manifest instead of full content
@@ -596,6 +622,7 @@ def load_context_text(skill: SkillDefinition, lazy: bool = False) -> str:
             source_dir=skill.source_dir,
             context_files=skill.context_files,
             descriptions=descriptions,
+            references=skill.references,
         )
         return manifest
 

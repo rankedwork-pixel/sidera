@@ -4,6 +4,7 @@ Verifies that:
 - load_skill_context tool loads files on demand
 - build_context_manifest creates correct manifests
 - Edge cases (no files, missing skill, etc.) handled gracefully
+- Cross-skill references manifest and traversal budget
 """
 
 from __future__ import annotations
@@ -12,7 +13,16 @@ from pathlib import Path
 
 import pytest
 
-from src.mcp_servers.context import build_context_manifest, load_skill_context_handler
+from src.mcp_servers.context import (
+    _MAX_REFERENCE_CHARS_PER_TURN,
+    _MAX_REFERENCE_LOADS_PER_TURN,
+    build_context_manifest,
+    get_reference_chars_loaded,
+    get_reference_load_count,
+    load_referenced_skill_context_handler,
+    load_skill_context_handler,
+    reset_reference_load_count,
+)
 
 
 class TestBuildContextManifest:
@@ -191,3 +201,178 @@ class TestLoadContextTextLazy:
 
         result = load_context_text(skill, lazy=True)
         assert result == "Pre-rendered DB context"
+
+
+# ===========================================================================
+# Manifest with references
+# ===========================================================================
+
+
+class TestBuildContextManifestReferences:
+    """build_context_manifest renders a Related Skills section."""
+
+    def test_references_only(self):
+        """Manifest with references but no context_files."""
+        result = build_context_manifest(
+            skill_id="my_skill",
+            source_dir="",
+            context_files=(),
+            references=(
+                ("attribution_analysis", "methodology", "attribution windows"),
+                ("brand_guidelines", "context", "brand voice"),
+            ),
+        )
+        assert "# Related Skills" in result
+        assert "**attribution_analysis**" in result
+        assert "(methodology)" in result
+        assert "attribution windows" in result
+        assert "**brand_guidelines**" in result
+        assert "load_referenced_skill_context" in result
+        assert 'skill_id="my_skill"' in result
+        # No context files section
+        assert "# Available Context Files" not in result
+
+    def test_both_context_and_references(self, tmp_path: Path):
+        """Manifest includes both context files AND references."""
+        (tmp_path / "example.md").write_text("example content")
+
+        result = build_context_manifest(
+            skill_id="dual_skill",
+            source_dir=str(tmp_path),
+            context_files=("*.md",),
+            references=(("other_skill", "data", "needs their data"),),
+        )
+
+        assert "# Available Context Files" in result
+        assert "example.md" in result
+        assert "# Related Skills" in result
+        assert "**other_skill**" in result
+
+    def test_references_empty_tuple(self):
+        """Empty references tuple produces no Related Skills section."""
+        result = build_context_manifest(
+            skill_id="test",
+            source_dir="",
+            context_files=(),
+            references=(),
+        )
+        assert result == ""
+
+    def test_references_without_relationship(self):
+        """References with empty relationship still render."""
+        result = build_context_manifest(
+            skill_id="test",
+            source_dir="",
+            context_files=(),
+            references=(("other", "", "just a reason"),),
+        )
+        assert "**other**" in result
+        assert "just a reason" in result
+        assert "()" not in result  # No empty parens
+
+    def test_references_without_reason(self):
+        """References with empty reason still render."""
+        result = build_context_manifest(
+            skill_id="test",
+            source_dir="",
+            context_files=(),
+            references=(("other", "methodology", ""),),
+        )
+        assert "**other**" in result
+        assert "(methodology)" in result
+
+
+# ===========================================================================
+# Traversal budget
+# ===========================================================================
+
+
+class TestTraversalBudget:
+    """Tests for reference load counter and budget enforcement."""
+
+    def test_reset_sets_to_zero(self):
+        """reset_reference_load_count sets counter to 0."""
+        reset_reference_load_count()
+        assert get_reference_load_count() == 0
+
+    def test_max_constant(self):
+        """Budget constant is 3."""
+        assert _MAX_REFERENCE_LOADS_PER_TURN == 3
+
+    def test_char_budget_constant(self):
+        """Char budget constant is 12,000."""
+        assert _MAX_REFERENCE_CHARS_PER_TURN == 12_000
+
+    def test_reset_clears_char_counter(self):
+        """reset_reference_load_count also resets char counter."""
+        from src.mcp_servers.context import _reference_chars_loaded
+
+        _reference_chars_loaded.set(5000)
+        reset_reference_load_count()
+        assert get_reference_chars_loaded() == 0
+
+    def test_get_reference_chars_loaded_default(self):
+        """Default char counter is 0."""
+        reset_reference_load_count()
+        assert get_reference_chars_loaded() == 0
+
+
+# ===========================================================================
+# load_referenced_skill_context handler
+# ===========================================================================
+
+
+class TestLoadReferencedSkillContext:
+    """Tests for the load_referenced_skill_context MCP tool handler."""
+
+    def test_missing_skill_id(self):
+        """Missing skill_id returns error."""
+        result = load_referenced_skill_context_handler({"reference_skill_id": "other"})
+        assert "Error" in result["content"][0]["text"]
+
+    def test_missing_reference_skill_id(self):
+        """Missing reference_skill_id returns error."""
+        result = load_referenced_skill_context_handler({"skill_id": "mine"})
+        assert "Error" in result["content"][0]["text"]
+
+    def test_budget_exhausted(self):
+        """Exceeding traversal budget returns error."""
+        from src.mcp_servers.context import _reference_load_count
+
+        # Set counter to max
+        _reference_load_count.set(_MAX_REFERENCE_LOADS_PER_TURN)
+        try:
+            result = load_referenced_skill_context_handler(
+                {"skill_id": "mine", "reference_skill_id": "other"}
+            )
+            assert "budget exhausted" in result["content"][0]["text"].lower()
+        finally:
+            reset_reference_load_count()
+
+    def test_char_budget_exhausted_at_limit(self):
+        """Char budget at limit returns error before registry lookup."""
+        from src.mcp_servers.context import _reference_chars_loaded
+
+        _reference_chars_loaded.set(_MAX_REFERENCE_CHARS_PER_TURN)
+        try:
+            result = load_referenced_skill_context_handler(
+                {"skill_id": "mine", "reference_skill_id": "other"}
+            )
+            text = result["content"][0]["text"]
+            assert "character budget exhausted" in text.lower()
+        finally:
+            reset_reference_load_count()
+
+    def test_char_budget_exhausted_over_limit(self):
+        """Char budget over limit also returns error."""
+        from src.mcp_servers.context import _reference_chars_loaded
+
+        _reference_chars_loaded.set(_MAX_REFERENCE_CHARS_PER_TURN + 5000)
+        try:
+            result = load_referenced_skill_context_handler(
+                {"skill_id": "mine", "reference_skill_id": "other"}
+            )
+            text = result["content"][0]["text"]
+            assert "character budget exhausted" in text.lower()
+        finally:
+            reset_reference_load_count()

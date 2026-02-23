@@ -285,3 +285,113 @@ class TestValidateSkill:
         skill = self._make_skill(id="loop_skill", chain_after="loop_skill")
         errors = validate_skill(skill)
         assert any("chain_after pointing to itself" in e for e in errors)
+
+    # --- references validation ---
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_references_defaults_empty(self):
+        """references defaults to empty tuple."""
+        skill = self._make_skill()
+        assert skill.references == ()
+        errors = validate_skill(skill)
+        assert not errors
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_references_valid(self):
+        """Valid references pass validation."""
+        skill = self._make_skill(
+            references=(("other_skill", "methodology", "attribution windows"),)
+        )
+        errors = validate_skill(skill)
+        assert not errors
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_references_self_reference_rejected(self):
+        """Self-reference is rejected."""
+        skill = self._make_skill(
+            id="my_skill",
+            references=(("my_skill", "methodology", "reason"),),
+        )
+        errors = validate_skill(skill)
+        assert any("references itself" in e for e in errors)
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_references_duplicate_rejected(self):
+        """Duplicate references are rejected."""
+        skill = self._make_skill(
+            references=(
+                ("other", "methodology", "reason 1"),
+                ("other", "methodology", "reason 2"),
+            ),
+        )
+        errors = validate_skill(skill)
+        assert any("Duplicate reference" in e for e in errors)
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_references_empty_skill_id_rejected(self):
+        """Reference with empty skill_id is rejected."""
+        skill = self._make_skill(
+            references=(("", "methodology", "reason"),),
+        )
+        errors = validate_skill(skill)
+        assert any("skill_id cannot be empty" in e for e in errors)
+
+
+# ===========================================================================
+# 4. YAML parsing of references
+# ===========================================================================
+
+
+class TestReferencesYamlParsing:
+    """References are parsed correctly from YAML."""
+
+    def test_references_from_yaml(self, tmp_path: Path):
+        """references list-of-dicts in YAML becomes tuple-of-tuples."""
+        import yaml
+
+        d = dict(_VALID_SKILL_DICT)
+        d["references"] = [
+            {
+                "skill_id": "attribution_analysis",
+                "relationship": "methodology",
+                "reason": "pull attribution windows",
+            },
+            {
+                "skill_id": "brand_guidelines",
+                "relationship": "context",
+                "reason": "brand voice",
+            },
+        ]
+        path = _write_yaml(tmp_path, "ref_skill.yaml", yaml.dump(d))
+        skill = load_skill_from_yaml(path)
+        assert len(skill.references) == 2
+        assert skill.references[0] == (
+            "attribution_analysis",
+            "methodology",
+            "pull attribution windows",
+        )
+        assert skill.references[1] == (
+            "brand_guidelines",
+            "context",
+            "brand voice",
+        )
+
+    def test_references_empty_by_default(self, tmp_path: Path):
+        """No references key in YAML → empty tuple."""
+        path = _write_yaml(tmp_path, "no_refs.yaml", _valid_yaml_content())
+        skill = load_skill_from_yaml(path)
+        assert skill.references == ()
+
+    def test_references_skips_entries_without_skill_id(self, tmp_path: Path):
+        """Entries without skill_id are silently skipped."""
+        import yaml
+
+        d = dict(_VALID_SKILL_DICT)
+        d["references"] = [
+            {"relationship": "methodology", "reason": "no skill_id"},
+            {"skill_id": "valid_ref", "relationship": "context", "reason": "ok"},
+        ]
+        path = _write_yaml(tmp_path, "partial_refs.yaml", yaml.dump(d))
+        skill = load_skill_from_yaml(path)
+        assert len(skill.references) == 1
+        assert skill.references[0][0] == "valid_ref"

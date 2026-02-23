@@ -24,6 +24,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextvars
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,47 @@ import structlog
 from src.agent.tool_registry import tool
 
 logger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Traversal budget: max referenced skills loaded per agent turn
+# ---------------------------------------------------------------------------
+_MAX_REFERENCE_LOADS_PER_TURN = 3
+_MAX_REFERENCE_CHARS_PER_TURN = 12_000  # Total chars across ALL loads
+
+_reference_load_count: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "reference_load_count",
+    default=0,
+)
+_reference_chars_loaded: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "reference_chars_loaded",
+    default=0,
+)
+
+
+def reset_reference_load_count() -> None:
+    """Reset the per-turn reference load and char counters.
+
+    Call at the start of each agent turn (``run_skill``,
+    ``run_conversation_turn``, ``run_heartbeat_turn``).
+    """
+    _reference_load_count.set(0)
+    _reference_chars_loaded.set(0)
+
+
+def get_reference_load_count() -> int:
+    """Return the current number of reference loads this turn."""
+    try:
+        return _reference_load_count.get()
+    except LookupError:
+        return 0
+
+
+def get_reference_chars_loaded() -> int:
+    """Return the total chars loaded from references this turn."""
+    try:
+        return _reference_chars_loaded.get()
+    except LookupError:
+        return 0
 
 
 @tool(
@@ -211,13 +253,179 @@ async def load_skill_context_handler(args: dict) -> dict[str, Any]:
         }
 
 
+@tool(
+    name="load_referenced_skill_context",
+    description=(
+        "Load context from a skill that the current skill references. "
+        "Use this when you need methodology, guidelines, or domain knowledge "
+        "from a related skill to handle the current situation. "
+        "The reference must be declared in the current skill's references list. "
+        "Limited to 3 referenced skills AND 12,000 total chars per turn. "
+        "Load the most relevant reference first."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "skill_id": {
+                "type": "string",
+                "description": "The ID of the CURRENT skill you are executing.",
+            },
+            "reference_skill_id": {
+                "type": "string",
+                "description": "The ID of the REFERENCED skill to load context from.",
+            },
+        },
+        "required": ["skill_id", "reference_skill_id"],
+    },
+)
+def load_referenced_skill_context_handler(args: dict) -> dict[str, Any]:
+    """Load context from a referenced skill on demand.
+
+    Validates that the reference exists in the skill's references list,
+    then loads the referenced skill's system_supplement, business_guidance,
+    and context files. Enforces a per-turn traversal budget.
+    """
+    skill_id = args.get("skill_id", "")
+    reference_skill_id = args.get("reference_skill_id", "")
+
+    if not skill_id:
+        return _error("skill_id is required")
+    if not reference_skill_id:
+        return _error("reference_skill_id is required")
+
+    # Check traversal budget (load count)
+    current_count = get_reference_load_count()
+    if current_count >= _MAX_REFERENCE_LOADS_PER_TURN:
+        return _error(
+            f"Reference load budget exhausted ({_MAX_REFERENCE_LOADS_PER_TURN} "
+            f"per turn). Prioritize the most relevant references."
+        )
+
+    # Check traversal budget (total chars)
+    chars_so_far = get_reference_chars_loaded()
+    if chars_so_far >= _MAX_REFERENCE_CHARS_PER_TURN:
+        return _error(
+            f"Character budget exhausted "
+            f"({chars_so_far}/{_MAX_REFERENCE_CHARS_PER_TURN} chars "
+            f"used this turn). Prioritize the most relevant references."
+        )
+
+    try:
+        from src.skills.registry import SkillRegistry
+
+        registry = SkillRegistry()
+        registry.load_all()
+
+        # Validate the source skill exists
+        skill = registry.get(skill_id)
+        if skill is None:
+            return _error(f"Skill '{skill_id}' not found")
+
+        # Validate the reference is declared
+        valid_ref = False
+        ref_relationship = ""
+        ref_reason = ""
+        for ref_sid, rel, reason in skill.references:
+            if ref_sid == reference_skill_id:
+                valid_ref = True
+                ref_relationship = rel
+                ref_reason = reason
+                break
+
+        if not valid_ref:
+            declared_refs = [r[0] for r in skill.references] if skill.references else []
+            return _error(
+                f"Skill '{skill_id}' does not reference '{reference_skill_id}'. "
+                f"Declared references: {declared_refs}"
+            )
+
+        # Load the referenced skill
+        ref_skill = registry.get(reference_skill_id)
+        if ref_skill is None:
+            return _error(f"Referenced skill '{reference_skill_id}' not found in registry")
+
+        # Load context from the referenced skill
+        from src.skills.schema import load_context_text
+
+        context = load_context_text(ref_skill, lazy=False)
+
+        # Build combined output
+        sections: list[str] = []
+        header = f"# Referenced Skill: {ref_skill.name}"
+        if ref_relationship:
+            header += f" (relationship: {ref_relationship})"
+        sections.append(header)
+
+        if ref_reason:
+            sections.append(f"*Reference reason: {ref_reason}*")
+
+        if ref_skill.system_supplement:
+            supplement = ref_skill.system_supplement[:2000]
+            sections.append(f"## System Context\n\n{supplement}")
+
+        if ref_skill.business_guidance:
+            guidance = ref_skill.business_guidance[:2000]
+            sections.append(f"## Business Guidance\n\n{guidance}")
+
+        if context:
+            # Cap context at 4000 chars to avoid token explosion
+            if len(context) > 4000:
+                context = context[:4000] + "\n\n[... truncated ...]"
+            sections.append(f"## Context Files\n\n{context}")
+
+        result_text = "\n\n".join(sections)
+
+        # Truncate if this load would exceed the remaining char budget
+        remaining_budget = _MAX_REFERENCE_CHARS_PER_TURN - chars_so_far
+        if len(result_text) > remaining_budget:
+            result_text = (
+                result_text[:remaining_budget] + f"\n\n[Truncated — char budget reached "
+                f"({_MAX_REFERENCE_CHARS_PER_TURN}"
+                f"/{_MAX_REFERENCE_CHARS_PER_TURN} chars this turn)]"
+            )
+
+        # Increment load and char counters
+        _reference_load_count.set(current_count + 1)
+        _reference_chars_loaded.set(chars_so_far + len(result_text))
+
+        logger.info(
+            "reference_context.loaded",
+            skill_id=skill_id,
+            reference_skill_id=reference_skill_id,
+            relationship=ref_relationship,
+            result_chars=len(result_text),
+            total_chars_this_turn=chars_so_far + len(result_text),
+            loads_this_turn=current_count + 1,
+        )
+
+        return {"content": [{"type": "text", "text": result_text}]}
+
+    except Exception as exc:
+        logger.warning(
+            "reference_context.load_error",
+            skill_id=skill_id,
+            reference_skill_id=reference_skill_id,
+            error=str(exc),
+        )
+        return _error(f"Error loading referenced context: {exc}")
+
+
+def _error(msg: str) -> dict[str, Any]:
+    """Return a tool error response."""
+    return {"content": [{"type": "text", "text": f"Error: {msg}"}]}
+
+
 def build_context_manifest(
     skill_id: str,
     source_dir: str,
     context_files: tuple[str, ...],
     descriptions: dict[str, str] | None = None,
+    references: tuple[tuple[str, str, str], ...] = (),
 ) -> str:
     """Build a lightweight manifest of available context files.
+
+    Optionally includes a "Related Skills" section listing cross-skill
+    references when ``references`` is provided.
 
     Instead of injecting all context file content into the system prompt,
     this creates a small manifest listing available files and their sizes.
@@ -235,41 +443,71 @@ def build_context_manifest(
         Manifest string to inject into the system prompt, or empty string
         if no context files are configured.
     """
-    if not context_files or not source_dir:
+    sections: list[str] = []
+
+    # --- Context files section ---
+    if context_files and source_dir:
+        source = Path(source_dir)
+        if source.exists():
+            entries: list[str] = []
+            for pattern in context_files:
+                # Look up description for this pattern
+                desc = descriptions.get(pattern, "") if descriptions else ""
+                for match in sorted(source.glob(pattern)):
+                    if match.is_file():
+                        try:
+                            size_bytes = match.stat().st_size
+                            relative = match.relative_to(source)
+                            if size_bytes < 1024:
+                                size_str = f"{size_bytes}B"
+                            else:
+                                size_str = f"{size_bytes / 1024:.1f}KB"
+                            entry = f"  - {relative} ({size_str})"
+                            if desc:
+                                entry += f" — {desc}"
+                            entries.append(entry)
+                        except OSError:
+                            continue
+
+            if entries:
+                sections.append(
+                    "# Available Context Files\n\n"
+                    "This skill has reference files you can load on demand:\n"
+                    + "\n".join(entries)
+                    + "\n\n"
+                    f'Use the `load_skill_context` tool with skill_id="{skill_id}" '
+                    f"to load these when you need examples, guidelines, or reference "
+                    f"material to handle complex situations. You don't always need "
+                    f"them — use your judgment."
+                )
+
+    # --- Related skills section ---
+    if references:
+        ref_entries: list[str] = []
+        for ref_skill_id, relationship, reason in references:
+            if not ref_skill_id:
+                continue
+            parts = [f"  - **{ref_skill_id}**"]
+            if relationship:
+                parts.append(f" ({relationship})")
+            if reason:
+                parts.append(f" — {reason}")
+            ref_entries.append("".join(parts))
+
+        if ref_entries:
+            sections.append(
+                "# Related Skills\n\n"
+                "This skill references domain knowledge from other skills. "
+                "Load their context when you need their methodology or "
+                "guidelines:\n" + "\n".join(ref_entries) + "\n\n"
+                f"Use the `load_referenced_skill_context` tool with "
+                f'skill_id="{skill_id}" and the target reference_skill_id '
+                f"to load their context on demand. Limited to 3 loads "
+                f"and 12,000 total chars per turn — load the most "
+                f"relevant reference first."
+            )
+
+    if not sections:
         return ""
 
-    source = Path(source_dir)
-    if not source.exists():
-        return ""
-
-    entries: list[str] = []
-    for pattern in context_files:
-        # Look up description for this pattern
-        desc = descriptions.get(pattern, "") if descriptions else ""
-        for match in sorted(source.glob(pattern)):
-            if match.is_file():
-                try:
-                    size_bytes = match.stat().st_size
-                    relative = match.relative_to(source)
-                    if size_bytes < 1024:
-                        size_str = f"{size_bytes}B"
-                    else:
-                        size_str = f"{size_bytes / 1024:.1f}KB"
-                    entry = f"  - {relative} ({size_str})"
-                    if desc:
-                        entry += f" — {desc}"
-                    entries.append(entry)
-                except OSError:
-                    continue
-
-    if not entries:
-        return ""
-
-    return (
-        "\n# Available Context Files\n\n"
-        "This skill has reference files you can load on demand:\n" + "\n".join(entries) + "\n\n"
-        f'Use the `load_skill_context` tool with skill_id="{skill_id}" '
-        f"to load these when you need examples, guidelines, or reference "
-        f"material to handle complex situations. You don't always need them — "
-        f"use your judgment.\n"
-    )
+    return "\n" + "\n\n".join(sections) + "\n"

@@ -389,3 +389,94 @@ class TestDunderMethods:
     def test_contains_missing(self, loaded_registry: SkillRegistry):
         """__contains__ returns False for unknown skill ID."""
         assert "nonexistent" not in loaded_registry
+
+
+# ===========================================================================
+# Reverse references (cross-skill references / skill graphs)
+# ===========================================================================
+
+
+class TestReverseReferences:
+    """Tests for reverse reference index and lookup methods."""
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_reverse_index_built_on_load(self, tmp_path: Path):
+        """Reverse index is built when skills have references."""
+        # skill_a references skill_b
+        data_a = yaml.safe_load(_skill_yaml(skill_id="skill_a", name="Skill A"))
+        data_a["references"] = [
+            {"skill_id": "skill_b", "relationship": "methodology", "reason": "testing"}
+        ]
+        _write_skill(tmp_path, "skill_a.yaml", yaml.dump(data_a))
+        _write_skill(
+            tmp_path,
+            "skill_b.yaml",
+            _skill_yaml(skill_id="skill_b", name="Skill B"),
+        )
+
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()
+
+        # Forward lookup
+        refs = reg.get_references_for("skill_a")
+        assert len(refs) == 1
+        ref_skill, rel, reason = refs[0]
+        assert ref_skill.id == "skill_b"
+        assert rel == "methodology"
+        assert reason == "testing"
+
+        # Reverse lookup
+        referenced_by = reg.get_referenced_by("skill_b")
+        assert "skill_a" in referenced_by
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_get_references_for_no_refs(self, tmp_path: Path):
+        """Skills without references return empty list."""
+        _write_skill(
+            tmp_path,
+            "solo.yaml",
+            _skill_yaml(skill_id="solo_skill", name="Solo"),
+        )
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()
+        assert reg.get_references_for("solo_skill") == []
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_get_referenced_by_not_referenced(self, tmp_path: Path):
+        """Skills not referenced by any other skill return empty set."""
+        _write_skill(
+            tmp_path,
+            "alone.yaml",
+            _skill_yaml(skill_id="alone_skill", name="Alone"),
+        )
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()
+        assert reg.get_referenced_by("alone_skill") == set()
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_get_references_for_unknown_skill(self, tmp_path: Path):
+        """get_references_for with unknown skill_id returns empty list."""
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()
+        assert reg.get_references_for("nonexistent") == []
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_get_referenced_by_unknown_skill(self, tmp_path: Path):
+        """get_referenced_by with unknown skill_id returns empty set."""
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()
+        assert reg.get_referenced_by("nonexistent") == set()
+
+    @patch("src.skills.schema.ALL_TOOLS", _MOCK_ALL_TOOLS)
+    def test_dangling_reference_does_not_crash(self, tmp_path: Path):
+        """Skill referencing a non-existent skill doesn't break load_all."""
+        data = yaml.safe_load(_skill_yaml(skill_id="orphan_ref", name="Orphan Ref"))
+        data["references"] = [{"skill_id": "nonexistent_skill", "relationship": "x", "reason": "y"}]
+        _write_skill(tmp_path, "orphan.yaml", yaml.dump(data))
+
+        reg = SkillRegistry(skills_dir=tmp_path)
+        reg.load_all()  # Should not raise
+        assert reg.get("orphan_ref") is not None
+        refs = reg.get_references_for("orphan_ref")
+        # Dangling references return empty (target not in registry)
+        assert len(refs) == 0

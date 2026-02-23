@@ -614,3 +614,73 @@ class TestImportResult:
         )
         assert r.success
         assert r.skill_id == "test"
+
+
+# ===========================================================================
+# 13. References export/import
+# ===========================================================================
+
+
+class TestReferencesPortability:
+    """References are exported as list-of-dicts and imported back correctly."""
+
+    def test_export_converts_to_list_of_dicts(self):
+        """Tuple-of-tuples references become list-of-dicts on export."""
+        skill = _make_skill(
+            references=(
+                ("other_skill", "methodology", "attribution windows"),
+                ("brand_skill", "context", "brand voice"),
+            ),
+        )
+        d = _skill_to_portable_dict(skill)
+        assert "references" in d
+        assert isinstance(d["references"], list)
+        assert len(d["references"]) == 2
+        assert d["references"][0] == {
+            "skill_id": "other_skill",
+            "relationship": "methodology",
+            "reason": "attribution windows",
+        }
+        assert d["references"][1] == {
+            "skill_id": "brand_skill",
+            "relationship": "context",
+            "reason": "brand voice",
+        }
+
+    def test_export_empty_references_stripped(self):
+        """Empty references are not included in export."""
+        skill = _make_skill(references=())
+        d = _skill_to_portable_dict(skill)
+        assert "references" not in d
+
+    def test_round_trip_preserves_references(self, tmp_path):
+        """Export → import preserves references."""
+        original = _make_skill(
+            references=(("target_skill", "methodology", "the reason"),),
+        )
+        bundle = export_skill_to_dir(original, tmp_path / "export")
+        installed = tmp_path / "import"
+
+        result = import_skill_from_bundle(
+            bundle,
+            install_to_disk=installed,
+        )
+        assert result.success
+
+        # Read back the installed skill.yaml
+        data = yaml.safe_load((installed / original.id / "skill.yaml").read_text())
+        assert "references" in data
+        assert len(data["references"]) == 1
+        assert data["references"][0]["skill_id"] == "target_skill"
+        assert data["references"][0]["relationship"] == "methodology"
+        assert data["references"][0]["reason"] == "the reason"
+
+    def test_import_warns_about_references(self, tmp_path):
+        """Importing a skill with references generates a warning."""
+        skill_dict = _minimal_skill_dict()
+        skill_dict["references"] = [
+            {"skill_id": "external_skill", "relationship": "data", "reason": "x"},
+        ]
+        bundle_dir = _write_bundle(tmp_path, skill_yaml=skill_dict)
+        result = validate_bundle(bundle_dir)
+        assert any("references" in w.lower() for w in result.warnings)

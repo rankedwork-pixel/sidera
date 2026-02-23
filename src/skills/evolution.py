@@ -78,6 +78,7 @@ ALLOWED_FIELDS = frozenset(
         "department_id",
         "role_id",
         "author",
+        "references",
     }
 )
 
@@ -178,6 +179,16 @@ def validate_skill_proposal(
                 f"Invalid category '{proposed_changes['category']}'. "
                 f"Must be one of: {', '.join(sorted(VALID_CATEGORIES))}"
             )
+
+    if "references" in proposed_changes:
+        refs = proposed_changes["references"]
+        if not isinstance(refs, list):
+            return False, "references must be a list of dicts with 'skill_id'."
+        for ref in refs:
+            if not isinstance(ref, dict):
+                return False, "Each reference must be a dict with 'skill_id'."
+            if not ref.get("skill_id"):
+                return False, "Each reference must have a non-empty 'skill_id'."
 
     return True, ""
 

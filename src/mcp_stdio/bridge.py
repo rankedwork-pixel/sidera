@@ -56,6 +56,9 @@ DIRECT_TOOLS: frozenset[str] = frozenset(
         "load_memory_detail",
         # Code execution (stateless) — 1
         "run_skill_code",
+        # Web research — 2
+        "fetch_web_page",
+        "web_search",
         # System introspection — 8
         "get_system_health",
         "get_failed_runs",
@@ -106,6 +109,7 @@ CONTEXT_DEPENDENT_TOOLS: frozenset[str] = frozenset(
         "orchestrate_task",
         # Context loading (needs skill context)
         "load_skill_context",
+        "load_referenced_skill_context",
         # Meeting (needs active session)
         "get_meeting_transcript",
         "get_meeting_participants",
@@ -126,6 +130,7 @@ HEADLESS_CONTEXT_TOOLS: frozenset[str] = frozenset(
         "reply_to_message",
         "send_message_to_role",
         "load_skill_context",
+        "load_referenced_skill_context",
     ]
 )
 
