@@ -157,9 +157,7 @@ async def _crawl_recursive(
         )
 
 
-def _read_file_content(
-    drive: GoogleDriveConnector, file_id: str, mime_type: str
-) -> str:
+def _read_file_content(drive: GoogleDriveConnector, file_id: str, mime_type: str) -> str:
     """Read content from a supported file type, returning plain text."""
     try:
         if mime_type == "application/vnd.google-apps.document":

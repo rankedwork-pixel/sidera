@@ -101,9 +101,7 @@ class TestApprovePlan:
         plan = BootstrapPlan(status=BootstrapStatus.DRAFT.value)
         _plans[plan.id] = plan
 
-        mock_execute.return_value = ExecutionResult(
-            plan_id=plan.id, departments_created=1
-        )
+        mock_execute.return_value = ExecutionResult(plan_id=plan.id, departments_created=1)
 
         response = client.post(f"/api/bootstrap/{plan.id}/approve")
         assert response.status_code == 200
@@ -159,32 +157,48 @@ def _make_draft_plan() -> BootstrapPlan:
         ],
         roles=[
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
-                description="Codes", manages=["qa"],
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Codes",
+                manages=["qa"],
             ),
             ExtractedRole(
-                id="qa", name="QA", department_id="eng",
+                id="qa",
+                name="QA",
+                department_id="eng",
                 description="Tests",
             ),
             ExtractedRole(
-                id="ae", name="Account Exec", department_id="sales",
+                id="ae",
+                name="Account Exec",
+                department_id="sales",
                 description="Sells",
             ),
         ],
         skills=[
             ExtractedSkill(
-                id="code_review", name="Code Review", role_id="swe",
-                department_id="eng", description="Reviews PRs",
+                id="code_review",
+                name="Code Review",
+                role_id="swe",
+                department_id="eng",
+                description="Reviews PRs",
             ),
             ExtractedSkill(
-                id="test_plan", name="Test Plan", role_id="qa",
-                department_id="eng", description="Plans tests",
+                id="test_plan",
+                name="Test Plan",
+                role_id="qa",
+                department_id="eng",
+                description="Plans tests",
             ),
         ],
         memories=[
             ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="insight", title="Fact", content="Detail",
+                role_id="swe",
+                department_id="eng",
+                memory_type="insight",
+                title="Fact",
+                content="Detail",
             ),
         ],
     )

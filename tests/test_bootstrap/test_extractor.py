@@ -99,11 +99,7 @@ class TestPrepareDocContent:
 
 class TestMergeContextIntoRoles:
     def test_merge_goals(self):
-        roles = [
-            ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description=""
-            )
-        ]
+        roles = [ExtractedRole(id="swe", name="SWE", department_id="eng", description="")]
         context = {
             "role_goals": [{"role_id": "swe", "goals": ["Ship fast", "Test everything"]}],
             "role_principles": [],
@@ -113,26 +109,16 @@ class TestMergeContextIntoRoles:
         assert "Test everything" in roles[0].goals
 
     def test_merge_principles(self):
-        roles = [
-            ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description=""
-            )
-        ]
+        roles = [ExtractedRole(id="swe", name="SWE", department_id="eng", description="")]
         context = {
             "role_goals": [],
-            "role_principles": [
-                {"role_id": "swe", "principles": ["Always review code"]}
-            ],
+            "role_principles": [{"role_id": "swe", "principles": ["Always review code"]}],
         }
         _merge_context_into_roles(roles, context)
         assert "Always review code" in roles[0].principles
 
     def test_skip_unknown_role(self):
-        roles = [
-            ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description=""
-            )
-        ]
+        roles = [ExtractedRole(id="swe", name="SWE", department_id="eng", description="")]
         context = {
             "role_goals": [{"role_id": "unknown", "goals": ["Goal"]}],
             "role_principles": [],
@@ -176,64 +162,66 @@ class TestExtractKnowledge:
         mock_api.side_effect = [
             # Pass 1: Org structure
             {
-                "text": json.dumps({
-                    "departments": [
-                        {"id": "eng", "name": "Engineering", "description": "Builds stuff"}
-                    ],
-                    "roles": [
-                        {
-                            "id": "swe",
-                            "name": "Software Engineer",
-                            "department_id": "eng",
-                            "description": "Writes code",
-                            "persona": "A careful engineer",
-                        }
-                    ],
-                }),
+                "text": json.dumps(
+                    {
+                        "departments": [
+                            {"id": "eng", "name": "Engineering", "description": "Builds stuff"}
+                        ],
+                        "roles": [
+                            {
+                                "id": "swe",
+                                "name": "Software Engineer",
+                                "department_id": "eng",
+                                "description": "Writes code",
+                                "persona": "A careful engineer",
+                            }
+                        ],
+                    }
+                ),
                 "cost": {"total_cost_usd": 0.05},
             },
             # Pass 2: Skills
             {
-                "text": json.dumps({
-                    "skills": [
-                        {
-                            "id": "code_review",
-                            "name": "Code Review",
-                            "role_id": "swe",
-                            "department_id": "eng",
-                            "description": "Review pull requests",
-                            "category": "analysis",
-                            "model": "sonnet",
-                            "system_supplement": "Review code carefully",
-                            "prompt_template": "Review the latest PRs",
-                            "output_format": "## Review Summary",
-                            "business_guidance": "Focus on correctness",
-                        }
-                    ]
-                }),
+                "text": json.dumps(
+                    {
+                        "skills": [
+                            {
+                                "id": "code_review",
+                                "name": "Code Review",
+                                "role_id": "swe",
+                                "department_id": "eng",
+                                "description": "Review pull requests",
+                                "category": "analysis",
+                                "model": "sonnet",
+                                "system_supplement": "Review code carefully",
+                                "prompt_template": "Review the latest PRs",
+                                "output_format": "## Review Summary",
+                                "business_guidance": "Focus on correctness",
+                            }
+                        ]
+                    }
+                ),
                 "cost": {"total_cost_usd": 0.08},
             },
             # Pass 3: Context
             {
-                "text": json.dumps({
-                    "role_goals": [
-                        {"role_id": "swe", "goals": ["Ship quality code"]}
-                    ],
-                    "role_principles": [
-                        {"role_id": "swe", "principles": ["Test first"]}
-                    ],
-                    "department_vocabulary": [],
-                    "memories": [
-                        {
-                            "role_id": "swe",
-                            "department_id": "eng",
-                            "memory_type": "insight",
-                            "title": "Migration note",
-                            "content": "Migrated to Python 3.12 in Q1",
-                            "confidence": 0.9,
-                        }
-                    ],
-                }),
+                "text": json.dumps(
+                    {
+                        "role_goals": [{"role_id": "swe", "goals": ["Ship quality code"]}],
+                        "role_principles": [{"role_id": "swe", "principles": ["Test first"]}],
+                        "department_vocabulary": [],
+                        "memories": [
+                            {
+                                "role_id": "swe",
+                                "department_id": "eng",
+                                "memory_type": "insight",
+                                "title": "Migration note",
+                                "content": "Migrated to Python 3.12 in Q1",
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ),
                 "cost": {"total_cost_usd": 0.04},
             },
         ]
@@ -285,20 +273,22 @@ class TestExtractKnowledge:
     async def test_extraction_multi_batch(self, mock_api):
         """Large docs should be split into batches with multiple API calls."""
         mock_api.return_value = {
-            "text": json.dumps({
-                "departments": [
-                    {"id": "eng", "name": "Engineering", "description": "Builds stuff"}
-                ],
-                "roles": [
-                    {
-                        "id": "swe",
-                        "name": "Software Engineer",
-                        "department_id": "eng",
-                        "description": "Writes code",
-                        "persona": "A careful engineer",
-                    }
-                ],
-            }),
+            "text": json.dumps(
+                {
+                    "departments": [
+                        {"id": "eng", "name": "Engineering", "description": "Builds stuff"}
+                    ],
+                    "roles": [
+                        {
+                            "id": "swe",
+                            "name": "Software Engineer",
+                            "department_id": "eng",
+                            "description": "Writes code",
+                            "persona": "A careful engineer",
+                        }
+                    ],
+                }
+            ),
             "cost": {"total_cost_usd": 0.05},
         }
 
@@ -376,20 +366,14 @@ class TestPrepareDocBatches:
         assert "(part 1/" in batches[0]
 
     def test_multiple_small_docs_packed(self):
-        docs = [
-            _make_classified(f"d{i}", content="Small content")
-            for i in range(5)
-        ]
+        docs = [_make_classified(f"d{i}", content="Small content") for i in range(5)]
         batches = _prepare_doc_batches(docs)
         # All small docs should fit in one batch
         assert len(batches) == 1
 
     def test_batches_respect_char_limit(self):
         """Each batch should stay within the character limit."""
-        docs = [
-            _make_classified(f"d{i}", content="x" * 10_000)
-            for i in range(5)
-        ]
+        docs = [_make_classified(f"d{i}", content="x" * 10_000) for i in range(5)]
         batches = _prepare_doc_batches(docs, max_chars_per_batch=30_000)
         for batch in batches:
             assert len(batch) <= 35_000  # slight overhead from formatting

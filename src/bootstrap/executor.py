@@ -61,12 +61,8 @@ async def execute_plan(
 
             # Phase 2: Roles (depends on departments)
             for role in plan.roles:
-                skills_for_role = [
-                    s.id for s in plan.skills if s.role_id == role.id
-                ]
-                await _create_role(
-                    session, role, skills_for_role, user_id, result
-                )
+                skills_for_role = [s.id for s in plan.skills if s.role_id == role.id]
+                await _create_role(session, role, skills_for_role, user_id, result)
 
             # Phase 3: Skills (depends on roles)
             for skill in plan.skills:
@@ -82,11 +78,7 @@ async def execute_plan(
         result.errors.append(f"Execution failed: {exc}")
         logger.error("bootstrap.execute_error", error=str(exc), plan_id=plan.id)
 
-    plan.status = (
-        BootstrapStatus.EXECUTED.value
-        if result.success
-        else BootstrapStatus.FAILED.value
-    )
+    plan.status = BootstrapStatus.EXECUTED.value if result.success else BootstrapStatus.FAILED.value
 
     summary = result.summary()
     summary.pop("plan_id", None)  # avoid duplicate kwarg
@@ -114,9 +106,7 @@ async def _create_department(
     try:
         existing = await db_service.get_org_department(session, dept.id)
         if existing:
-            logger.debug(
-                "bootstrap.dept_exists", dept_id=dept.id, action="skip"
-            )
+            logger.debug("bootstrap.dept_exists", dept_id=dept.id, action="skip")
             result.departments_skipped += 1
             return
 
@@ -142,9 +132,7 @@ async def _create_department(
         # Set vocabulary if the DB model supports it
         if vocab_json:
             try:
-                await db_service.update_org_department(
-                    session, dept.id, vocabulary=vocab_json
-                )
+                await db_service.update_org_department(session, dept.id, vocabulary=vocab_json)
             except Exception:
                 # Vocabulary column may not exist in older schemas
                 pass
@@ -197,18 +185,14 @@ async def _create_role(
             update_kwargs["principles"] = role.principles
         if update_kwargs:
             try:
-                await db_service.update_org_role(
-                    session, role.id, **update_kwargs
-                )
+                await db_service.update_org_role(session, role.id, **update_kwargs)
             except Exception:
                 # Goals/principles columns may not exist in older schemas
                 pass
 
     except Exception as exc:
         result.errors.append(f"Failed to create role '{role.id}': {exc}")
-        logger.warning(
-            "bootstrap.role_create_error", role_id=role.id, error=str(exc)
-        )
+        logger.warning("bootstrap.role_create_error", role_id=role.id, error=str(exc))
 
 
 async def _create_skill(
@@ -221,9 +205,7 @@ async def _create_skill(
     try:
         existing = await db_service.get_org_skill(session, skill.id)
         if existing:
-            logger.debug(
-                "bootstrap.skill_exists", skill_id=skill.id, action="skip"
-            )
+            logger.debug("bootstrap.skill_exists", skill_id=skill.id, action="skip")
             result.skills_skipped += 1
             return
 
@@ -284,9 +266,7 @@ async def _seed_memory(
         result.memories_seeded += 1
 
     except Exception as exc:
-        result.errors.append(
-            f"Failed to seed memory '{memory.title}': {exc}"
-        )
+        result.errors.append(f"Failed to seed memory '{memory.title}': {exc}")
         logger.warning(
             "bootstrap.memory_seed_error",
             title=memory.title,

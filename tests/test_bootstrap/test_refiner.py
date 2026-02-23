@@ -154,20 +154,22 @@ class TestFormatPlanForLLM:
 
 class TestParseRefinementResponse:
     def test_clean_json(self):
-        text = json.dumps({
-            "changes": [
-                {"action": "add", "entity_type": "department", "entity_id": "ops"}
-            ],
-            "explanation": "Added ops team",
-        })
+        text = json.dumps(
+            {
+                "changes": [{"action": "add", "entity_type": "department", "entity_id": "ops"}],
+                "explanation": "Added ops team",
+            }
+        )
         result = _parse_refinement_response(text)
         assert "changes" in result
         assert len(result["changes"]) == 1
 
     def test_json_with_markdown_fences(self):
-        inner = json.dumps({
-            "changes": [{"action": "remove", "entity_type": "role", "entity_id": "qa"}],
-        })
+        inner = json.dumps(
+            {
+                "changes": [{"action": "remove", "entity_type": "role", "entity_id": "qa"}],
+            }
+        )
         text = f"```json\n{inner}\n```"
         result = _parse_refinement_response(text)
         assert "changes" in result
@@ -198,14 +200,18 @@ class TestParseRefinementResponse:
         assert result == {}
 
     def test_whitespace_around_fences(self):
-        inner = json.dumps({
-            "changes": [{
-                "action": "modify",
-                "entity_type": "department",
-                "entity_id": "eng",
-                "fields": {"name": "Eng"},
-            }],
-        })
+        inner = json.dumps(
+            {
+                "changes": [
+                    {
+                        "action": "modify",
+                        "entity_type": "department",
+                        "entity_id": "eng",
+                        "fields": {"name": "Eng"},
+                    }
+                ],
+            }
+        )
         text = f"  ```json\n{inner}\n```  "
         result = _parse_refinement_response(text)
         assert "changes" in result
@@ -371,11 +377,7 @@ class TestApplyModificationsAdd:
 class TestApplyModificationsRemove:
     def test_remove_department_cascades(self):
         plan = _make_plan()
-        mods = {
-            "changes": [
-                {"action": "remove", "entity_type": "department", "entity_id": "eng"}
-            ]
-        }
+        mods = {"changes": [{"action": "remove", "entity_type": "department", "entity_id": "eng"}]}
         changes = _apply_modifications(plan, mods)
         assert any("Removed department 'eng'" in c for c in changes)
         assert any("cascaded 2 roles" in c for c in changes)
@@ -395,11 +397,7 @@ class TestApplyModificationsRemove:
 
     def test_remove_role_cascades(self):
         plan = _make_plan()
-        mods = {
-            "changes": [
-                {"action": "remove", "entity_type": "role", "entity_id": "swe"}
-            ]
-        }
+        mods = {"changes": [{"action": "remove", "entity_type": "role", "entity_id": "swe"}]}
         changes = _apply_modifications(plan, mods)
         assert any("Removed role 'swe'" in c for c in changes)
         assert not any(r.id == "swe" for r in plan.roles)
@@ -410,9 +408,7 @@ class TestApplyModificationsRemove:
     def test_remove_skill(self):
         plan = _make_plan()
         mods = {
-            "changes": [
-                {"action": "remove", "entity_type": "skill", "entity_id": "code_review"}
-            ]
+            "changes": [{"action": "remove", "entity_type": "skill", "entity_id": "code_review"}]
         }
         changes = _apply_modifications(plan, mods)
         assert any("Removed skill 'code_review'" in c for c in changes)
@@ -433,11 +429,7 @@ class TestApplyModificationsRemove:
 
     def test_remove_unknown_entity_type(self):
         plan = _make_plan()
-        mods = {
-            "changes": [
-                {"action": "remove", "entity_type": "widget", "entity_id": "w1"}
-            ]
-        }
+        mods = {"changes": [{"action": "remove", "entity_type": "widget", "entity_id": "w1"}]}
         changes = _apply_modifications(plan, mods)
         assert any("Unknown entity type" in c for c in changes)
 
@@ -445,11 +437,7 @@ class TestApplyModificationsRemove:
         plan = _make_plan()
         # swe manages qa
         assert "qa" in plan.roles[0].manages
-        mods = {
-            "changes": [
-                {"action": "remove", "entity_type": "role", "entity_id": "qa"}
-            ]
-        }
+        mods = {"changes": [{"action": "remove", "entity_type": "role", "entity_id": "qa"}]}
         _apply_modifications(plan, mods)
         swe = next(r for r in plan.roles if r.id == "swe")
         assert "qa" not in swe.manages
@@ -607,11 +595,7 @@ class TestApplyModificationsMixed:
 
     def test_unknown_action(self):
         plan = _make_plan()
-        mods = {
-            "changes": [
-                {"action": "merge", "entity_type": "department", "entity_id": "eng"}
-            ]
-        }
+        mods = {"changes": [{"action": "merge", "entity_type": "department", "entity_id": "eng"}]}
         changes = _apply_modifications(plan, mods)
         assert any("Unknown action" in c for c in changes)
 
@@ -656,17 +640,19 @@ class TestRefinePlan:
     async def test_successful_refinement(self, mock_api):
         plan = _make_plan()
         mock_api.return_value = {
-            "text": json.dumps({
-                "changes": [
-                    {
-                        "action": "add",
-                        "entity_type": "department",
-                        "entity_id": "ops",
-                        "fields": {"name": "Operations", "description": "Runs things"},
-                    }
-                ],
-                "explanation": "Added ops team as requested.",
-            }),
+            "text": json.dumps(
+                {
+                    "changes": [
+                        {
+                            "action": "add",
+                            "entity_type": "department",
+                            "entity_id": "ops",
+                            "fields": {"name": "Operations", "description": "Runs things"},
+                        }
+                    ],
+                    "explanation": "Added ops team as requested.",
+                }
+            ),
             "cost": {"total_cost_usd": 0.005},
         }
 
@@ -749,16 +735,18 @@ class TestRefinePlan:
     async def test_markdown_fenced_response(self, mock_api):
         """LLM wraps response in markdown fences — should still work."""
         plan = _make_plan()
-        inner = json.dumps({
-            "changes": [
-                {
-                    "action": "modify",
-                    "entity_type": "department",
-                    "entity_id": "eng",
-                    "fields": {"description": "Engineering excellence"},
-                }
-            ]
-        })
+        inner = json.dumps(
+            {
+                "changes": [
+                    {
+                        "action": "modify",
+                        "entity_type": "department",
+                        "entity_id": "eng",
+                        "fields": {"description": "Engineering excellence"},
+                    }
+                ]
+            }
+        )
         mock_api.return_value = {
             "text": f"```json\n{inner}\n```",
             "cost": {"total_cost_usd": 0.004},

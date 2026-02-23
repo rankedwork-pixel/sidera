@@ -49,9 +49,7 @@ async def refine_plan(
         and the LLM cost.
     """
     plan_summary = _format_plan_for_llm(plan)
-    user_message = REFINE_USER_TEMPLATE.format(
-        plan_summary=plan_summary, feedback=feedback
-    )
+    user_message = REFINE_USER_TEMPLATE.format(plan_summary=plan_summary, feedback=feedback)
 
     try:
         result = await call_claude_api(
@@ -135,9 +133,7 @@ def _parse_refinement_response(text: str) -> dict[str, Any]:
         return {}
 
 
-def _apply_modifications(
-    plan: BootstrapPlan, mods: dict[str, Any]
-) -> list[str]:
+def _apply_modifications(plan: BootstrapPlan, mods: dict[str, Any]) -> list[str]:
     """Apply add/remove/modify operations to the plan.
 
     Returns a list of human-readable change descriptions.
@@ -236,11 +232,13 @@ def _apply_remove(
         plan.departments = [d for d in plan.departments if d.id != entity_id]
         plan.roles = [r for r in plan.roles if r.department_id != entity_id]
         plan.skills = [
-            s for s in plan.skills
+            s
+            for s in plan.skills
             if s.department_id != entity_id and s.role_id not in cascade_role_ids
         ]
         plan.memories = [
-            m for m in plan.memories
+            m
+            for m in plan.memories
             if m.department_id != entity_id and m.role_id not in cascade_role_ids
         ]
         return f"Removed department '{entity_id}' (cascaded {len(cascade_role_ids)} roles)"

@@ -65,9 +65,7 @@ async def extract_knowledge(
     knowledge = ExtractedKnowledge()
 
     # --- Pass 1: Org structure ---
-    org_docs = _filter_by_categories(
-        classified, {DocumentCategory.ORG_STRUCTURE.value}
-    )
+    org_docs = _filter_by_categories(classified, {DocumentCategory.ORG_STRUCTURE.value})
     if org_docs:
         depts, roles, cost = await _extract_org_structure(org_docs)
         knowledge.departments = depts
@@ -114,9 +112,7 @@ async def extract_knowledge(
         # Merge goals/principles into existing roles
         _merge_context_into_roles(knowledge.roles, goals_vocab_memories)
         # Merge vocabulary into existing departments
-        _merge_vocabulary_into_departments(
-            knowledge.departments, goals_vocab_memories
-        )
+        _merge_vocabulary_into_departments(knowledge.departments, goals_vocab_memories)
         knowledge.memories = goals_vocab_memories.get("memories", [])
         total_cost += cost
         logger.info(
@@ -225,8 +221,7 @@ async def _extract_skills(
 
     # Format existing roles for context
     roles_summary = "\n".join(
-        f"- {r.id} ({r.name}): {r.description} [dept: {r.department_id}]"
-        for r in roles
+        f"- {r.id} ({r.name}): {r.description} [dept: {r.department_id}]" for r in roles
     )
 
     all_skills: list[ExtractedSkill] = []
@@ -317,9 +312,7 @@ async def _extract_context(
     org_summary_parts.append("\nRoles:")
     for r in roles:
         manages_str = f", manages: [{', '.join(r.manages)}]" if r.manages else ""
-        org_summary_parts.append(
-            f"  - {r.id} ({r.name}) [dept: {r.department_id}]{manages_str}"
-        )
+        org_summary_parts.append(f"  - {r.id} ({r.name}) [dept: {r.department_id}]{manages_str}")
 
     org_structure = "\n".join(org_summary_parts)
 
@@ -384,9 +377,7 @@ async def _extract_context(
 # =====================================================================
 
 
-def _merge_context_into_roles(
-    roles: list[ExtractedRole], context: dict[str, Any]
-) -> None:
+def _merge_context_into_roles(roles: list[ExtractedRole], context: dict[str, Any]) -> None:
     """Merge extracted goals and principles into existing role objects."""
     role_map = {r.id: r for r in roles}
 
@@ -542,11 +533,7 @@ def _prepare_doc_batches(
     current_chars = 0
 
     for title, folder, content in fragments:
-        part = (
-            f'---\nDocument: "{title}"\n'
-            f"Folder: {folder}\n"
-            f"Content:\n{wrap_untrusted(content)}\n"
-        )
+        part = f'---\nDocument: "{title}"\nFolder: {folder}\nContent:\n{wrap_untrusted(content)}\n'
         part_len = len(part)
 
         if current_chars + part_len > max_chars_per_batch and current_parts:

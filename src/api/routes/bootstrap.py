@@ -273,9 +273,7 @@ async def update_department(
 
 
 @router.patch("/{plan_id}/roles/{role_id}")
-async def update_role(
-    plan_id: str, role_id: str, body: RolePlanUpdate
-) -> dict[str, Any]:
+async def update_role(plan_id: str, role_id: str, body: RolePlanUpdate) -> dict[str, Any]:
     """Update fields on a role in a draft plan."""
     plan = _get_draft_plan(plan_id)
 
@@ -303,9 +301,7 @@ async def update_role(
 
 
 @router.patch("/{plan_id}/skills/{skill_id}")
-async def update_skill(
-    plan_id: str, skill_id: str, body: SkillPlanUpdate
-) -> dict[str, Any]:
+async def update_skill(plan_id: str, skill_id: str, body: SkillPlanUpdate) -> dict[str, Any]:
     """Update fields on a skill in a draft plan."""
     plan = _get_draft_plan(plan_id)
 
@@ -345,12 +341,10 @@ async def delete_department(plan_id: str, dept_id: str) -> dict[str, Any]:
     plan.departments = [d for d in plan.departments if d.id != dept_id]
     plan.roles = [r for r in plan.roles if r.department_id != dept_id]
     plan.skills = [
-        s for s in plan.skills
-        if s.department_id != dept_id and s.role_id not in cascade_role_ids
+        s for s in plan.skills if s.department_id != dept_id and s.role_id not in cascade_role_ids
     ]
     plan.memories = [
-        m for m in plan.memories
-        if m.department_id != dept_id and m.role_id not in cascade_role_ids
+        m for m in plan.memories if m.department_id != dept_id and m.role_id not in cascade_role_ids
     ]
 
     # Clean manages references
@@ -409,9 +403,7 @@ async def delete_skill(plan_id: str, skill_id: str) -> dict[str, Any]:
 
 
 @router.post("/{plan_id}/departments")
-async def add_department(
-    plan_id: str, body: NewDepartmentRequest
-) -> dict[str, Any]:
+async def add_department(plan_id: str, body: NewDepartmentRequest) -> dict[str, Any]:
     """Add a new department to a draft plan."""
     plan = _get_draft_plan(plan_id)
 
@@ -442,9 +434,7 @@ async def add_role(plan_id: str, body: NewRoleRequest) -> dict[str, Any]:
 
     # Check for duplicate ID
     if any(r.id == body.id for r in plan.roles):
-        raise HTTPException(
-            status_code=409, detail=f"Role '{body.id}' already exists in plan"
-        )
+        raise HTTPException(status_code=409, detail=f"Role '{body.id}' already exists in plan")
 
     # Validate department exists
     valid_dept_ids = {d.id for d in plan.departments}
@@ -481,9 +471,7 @@ class RefineRequest(BaseModel):
 
 
 @router.post("/{plan_id}/refine")
-async def refine_plan_endpoint(
-    plan_id: str, body: RefineRequest
-) -> dict[str, Any]:
+async def refine_plan_endpoint(plan_id: str, body: RefineRequest) -> dict[str, Any]:
     """Refine a draft plan using natural language feedback.
 
     Sends the current plan + feedback to Sonnet, which returns

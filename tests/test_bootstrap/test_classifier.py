@@ -16,7 +16,9 @@ from src.bootstrap.models import DocumentCategory, RawDocument
 
 
 def _make_raw_doc(
-    file_id: str = "doc1", title: str = "Test", content: str = "Content",
+    file_id: str = "doc1",
+    title: str = "Test",
+    content: str = "Content",
 ) -> RawDocument:
     return RawDocument(
         file_id=file_id,
@@ -29,17 +31,14 @@ def _make_raw_doc(
 
 class TestParseClassificationResponse:
     def test_clean_json(self):
-        text = json.dumps([
-            {"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.9}
-        ])
+        text = json.dumps([{"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.9}])
         result = _parse_classification_response(text)
         assert len(result) == 1
         assert result[0]["file_id"] == "doc1"
 
     def test_with_markdown_fences(self):
         text = (
-            '```json\n[{"file_id": "doc1", "categories":'
-            ' ["sop_playbook"], "confidence": 0.8}]\n```'
+            '```json\n[{"file_id": "doc1", "categories": ["sop_playbook"], "confidence": 0.8}]\n```'
         )
         result = _parse_classification_response(text)
         assert len(result) == 1
@@ -68,10 +67,12 @@ class TestClassifyDocuments:
     @patch("src.bootstrap.classifier.call_claude_api", new_callable=AsyncMock)
     async def test_classify_batch(self, mock_api):
         mock_api.return_value = {
-            "text": json.dumps([
-                {"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.9},
-                {"file_id": "doc2", "categories": ["irrelevant"], "confidence": 0.7},
-            ]),
+            "text": json.dumps(
+                [
+                    {"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.9},
+                    {"file_id": "doc2", "categories": ["irrelevant"], "confidence": 0.7},
+                ]
+            ),
             "cost": {"total_cost_usd": 0.001},
         }
 
@@ -100,10 +101,12 @@ class TestClassifyDocuments:
     async def test_classify_batching(self, mock_api):
         # With batch_size=2, 5 docs should make 3 API calls
         mock_api.return_value = {
-            "text": json.dumps([
-                {"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.8},
-                {"file_id": "doc2", "categories": ["sop_playbook"], "confidence": 0.7},
-            ]),
+            "text": json.dumps(
+                [
+                    {"file_id": "doc1", "categories": ["org_structure"], "confidence": 0.8},
+                    {"file_id": "doc2", "categories": ["sop_playbook"], "confidence": 0.7},
+                ]
+            ),
             "cost": {"total_cost_usd": 0.001},
         }
 
@@ -114,9 +117,11 @@ class TestClassifyDocuments:
     @patch("src.bootstrap.classifier.call_claude_api", new_callable=AsyncMock)
     async def test_classify_validates_categories(self, mock_api):
         mock_api.return_value = {
-            "text": json.dumps([
-                {"file_id": "doc1", "categories": ["fake_category"], "confidence": 0.9},
-            ]),
+            "text": json.dumps(
+                [
+                    {"file_id": "doc1", "categories": ["fake_category"], "confidence": 0.9},
+                ]
+            ),
             "cost": {"total_cost_usd": 0.001},
         }
 
@@ -129,9 +134,11 @@ class TestClassifyDocuments:
     async def test_classify_handles_missing_file_ids(self, mock_api):
         # API returns classification for unknown file_id
         mock_api.return_value = {
-            "text": json.dumps([
-                {"file_id": "unknown", "categories": ["org_structure"], "confidence": 0.9},
-            ]),
+            "text": json.dumps(
+                [
+                    {"file_id": "unknown", "categories": ["org_structure"], "confidence": 0.9},
+                ]
+            ),
             "cost": {"total_cost_usd": 0.001},
         }
 

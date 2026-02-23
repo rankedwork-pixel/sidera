@@ -55,11 +55,15 @@ class TestDeduplicateDepartments:
     def test_merge_duplicates(self):
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering", description="Builds",
+                id="eng",
+                name="Engineering",
+                description="Builds",
                 vocabulary=[{"term": "CI", "definition": "Continuous Integration"}],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering", description="",
+                id="eng",
+                name="Engineering",
+                description="",
                 vocabulary=[{"term": "CD", "definition": "Continuous Deployment"}],
             ),
         ]
@@ -73,7 +77,9 @@ class TestDeduplicateDepartments:
     def test_dedup_vocabulary_within_dept(self):
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering", description="",
+                id="eng",
+                name="Engineering",
+                description="",
                 vocabulary=[
                     {"term": "SLA", "definition": "Service Level Agreement"},
                     {"term": "SLA", "definition": "Duplicate"},
@@ -97,11 +103,17 @@ class TestDeduplicateRoles:
     def test_merge_duplicates(self):
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description="Codes",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Codes",
                 principles=["Test first"],
             ),
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description="",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="",
                 principles=["Ship fast"],
                 goals=["Zero bugs"],
             ),
@@ -115,7 +127,10 @@ class TestDeduplicateRoles:
     def test_dedup_principles(self):
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description="",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="",
                 principles=["Test first", "Test first", "Ship fast"],
             ),
         ]
@@ -148,9 +163,13 @@ class TestValidateSkills:
     def test_valid_skills(self):
         skills = [
             ExtractedSkill(
-                id="deploy", name="Deploy", role_id="swe",
-                department_id="eng", description="Deploy stuff",
-                category="operations", model="haiku",
+                id="deploy",
+                name="Deploy",
+                role_id="swe",
+                department_id="eng",
+                description="Deploy stuff",
+                category="operations",
+                model="haiku",
             ),
         ]
         errors: list[str] = []
@@ -161,8 +180,11 @@ class TestValidateSkills:
     def test_invalid_category_fixed(self):
         skills = [
             ExtractedSkill(
-                id="deploy", name="Deploy", role_id="swe",
-                department_id="eng", description="Deploy",
+                id="deploy",
+                name="Deploy",
+                role_id="swe",
+                department_id="eng",
+                description="Deploy",
                 category="fake_category",
             ),
         ]
@@ -173,8 +195,11 @@ class TestValidateSkills:
     def test_invalid_model_fixed(self):
         skills = [
             ExtractedSkill(
-                id="deploy", name="Deploy", role_id="swe",
-                department_id="eng", description="Deploy",
+                id="deploy",
+                name="Deploy",
+                role_id="swe",
+                department_id="eng",
+                description="Deploy",
                 model="gpt4",
             ),
         ]
@@ -185,8 +210,11 @@ class TestValidateSkills:
     def test_unknown_role_logged(self):
         skills = [
             ExtractedSkill(
-                id="deploy", name="Deploy", role_id="unknown_role",
-                department_id="eng", description="Deploy",
+                id="deploy",
+                name="Deploy",
+                role_id="unknown_role",
+                department_id="eng",
+                description="Deploy",
             ),
         ]
         errors: list[str] = []
@@ -196,12 +224,18 @@ class TestValidateSkills:
     def test_id_collision(self):
         skills = [
             ExtractedSkill(
-                id="deploy", name="Deploy 1", role_id="swe",
-                department_id="eng", description="D1",
+                id="deploy",
+                name="Deploy 1",
+                role_id="swe",
+                department_id="eng",
+                description="D1",
             ),
             ExtractedSkill(
-                id="deploy", name="Deploy 2", role_id="swe",
-                department_id="eng", description="D2",
+                id="deploy",
+                name="Deploy 2",
+                role_id="swe",
+                department_id="eng",
+                description="D2",
             ),
         ]
         errors: list[str] = []
@@ -214,8 +248,10 @@ class TestValidateMemories:
     def test_valid_memory(self):
         memories = [
             ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="insight", title="Key fact",
+                role_id="swe",
+                department_id="eng",
+                memory_type="insight",
+                title="Key fact",
                 content="Important detail",
             ),
         ]
@@ -225,8 +261,11 @@ class TestValidateMemories:
     def test_invalid_role_filtered(self):
         memories = [
             ExtractedMemory(
-                role_id="unknown", department_id="eng",
-                memory_type="insight", title="Fact", content="Detail",
+                role_id="unknown",
+                department_id="eng",
+                memory_type="insight",
+                title="Fact",
+                content="Detail",
             ),
         ]
         result = _validate_memories(memories, {"swe"}, {"eng"})
@@ -235,8 +274,11 @@ class TestValidateMemories:
     def test_invalid_type_fixed(self):
         memories = [
             ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="fake_type", title="Fact", content="Detail",
+                role_id="swe",
+                department_id="eng",
+                memory_type="fake_type",
+                title="Fact",
+                content="Detail",
             ),
         ]
         result = _validate_memories(memories, {"swe"}, {"eng"})
@@ -245,8 +287,11 @@ class TestValidateMemories:
     def test_empty_title_filtered(self):
         memories = [
             ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="insight", title="", content="Detail",
+                role_id="swe",
+                department_id="eng",
+                memory_type="insight",
+                title="",
+                content="Detail",
             ),
         ]
         result = _validate_memories(memories, {"swe"}, {"eng"})
@@ -257,16 +302,22 @@ class TestDetectManagers:
     def test_detect_by_name(self):
         roles = [
             ExtractedRole(
-                id="head_of_engineering", name="Head of Engineering",
-                department_id="eng", description="Leads eng",
+                id="head_of_engineering",
+                name="Head of Engineering",
+                department_id="eng",
+                description="Leads eng",
             ),
             ExtractedRole(
-                id="backend_engineer", name="Backend Engineer",
-                department_id="eng", description="Writes code",
+                id="backend_engineer",
+                name="Backend Engineer",
+                department_id="eng",
+                description="Writes code",
             ),
             ExtractedRole(
-                id="frontend_engineer", name="Frontend Engineer",
-                department_id="eng", description="Builds UI",
+                id="frontend_engineer",
+                name="Frontend Engineer",
+                department_id="eng",
+                description="Builds UI",
             ),
         ]
         _detect_managers(roles)
@@ -277,13 +328,17 @@ class TestDetectManagers:
     def test_existing_manages_preserved(self):
         roles = [
             ExtractedRole(
-                id="head_of_engineering", name="Head of Engineering",
-                department_id="eng", description="",
+                id="head_of_engineering",
+                name="Head of Engineering",
+                department_id="eng",
+                description="",
                 manages=["backend_engineer"],
             ),
             ExtractedRole(
-                id="backend_engineer", name="Backend Engineer",
-                department_id="eng", description="",
+                id="backend_engineer",
+                name="Backend Engineer",
+                department_id="eng",
+                description="",
             ),
         ]
         _detect_managers(roles)
@@ -293,8 +348,10 @@ class TestDetectManagers:
     def test_self_reference_removed(self):
         roles = [
             ExtractedRole(
-                id="lead", name="Lead",
-                department_id="eng", description="",
+                id="lead",
+                name="Lead",
+                department_id="eng",
+                description="",
                 manages=["lead"],  # self-reference
             ),
         ]
@@ -306,27 +363,33 @@ class TestGeneratePlan:
     def test_basic_plan(self):
         knowledge = ExtractedKnowledge(
             departments=[
-                ExtractedDepartment(
-                    id="eng", name="Engineering", description="Builds products"
-                )
+                ExtractedDepartment(id="eng", name="Engineering", description="Builds products")
             ],
             roles=[
                 ExtractedRole(
-                    id="swe", name="Software Engineer",
-                    department_id="eng", description="Writes code",
+                    id="swe",
+                    name="Software Engineer",
+                    department_id="eng",
+                    description="Writes code",
                 )
             ],
             skills=[
                 ExtractedSkill(
-                    id="code_review", name="Code Review",
-                    role_id="swe", department_id="eng",
-                    description="Reviews PRs", category="analysis",
+                    id="code_review",
+                    name="Code Review",
+                    role_id="swe",
+                    department_id="eng",
+                    description="Reviews PRs",
+                    category="analysis",
                 )
             ],
             memories=[
                 ExtractedMemory(
-                    role_id="swe", department_id="eng",
-                    memory_type="insight", title="Fact", content="Detail",
+                    role_id="swe",
+                    department_id="eng",
+                    memory_type="insight",
+                    title="Fact",
+                    content="Detail",
                 )
             ],
         )
@@ -351,12 +414,14 @@ class TestGeneratePlan:
         knowledge = ExtractedKnowledge(
             departments=[
                 ExtractedDepartment(
-                    id="eng", name="Engineering",
+                    id="eng",
+                    name="Engineering",
                     description="Builds products",
                     source_docs=["doc1"],
                 ),
                 ExtractedDepartment(
-                    id="eng", name="Engineering",
+                    id="eng",
+                    name="Engineering",
                     description="Ships software",
                     source_docs=["doc2"],
                 ),
@@ -375,12 +440,14 @@ class TestConflictDetectionDepartments:
         """Two depts same ID, different descriptions → conflict detected."""
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="Builds products",
                 source_docs=["doc1"],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="Ships software",
                 source_docs=["doc2"],
             ),
@@ -399,13 +466,17 @@ class TestConflictDetectionDepartments:
         """Two depts same ID, different contexts → conflict detected."""
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering",
-                description="", context="Context A",
+                id="eng",
+                name="Engineering",
+                description="",
+                context="Context A",
                 source_docs=["doc1"],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering",
-                description="", context="Context B",
+                id="eng",
+                name="Engineering",
+                description="",
+                context="Context B",
                 source_docs=["doc2"],
             ),
         ]
@@ -418,12 +489,14 @@ class TestConflictDetectionDepartments:
         """Same description across sources → no conflict."""
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="Builds products",
                 source_docs=["doc1"],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="Builds products",
                 source_docs=["doc2"],
             ),
@@ -436,12 +509,14 @@ class TestConflictDetectionDepartments:
         """Second dept has empty description → no conflict (just merge)."""
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="Builds products",
                 source_docs=["doc1"],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering",
+                id="eng",
+                name="Engineering",
                 description="",
                 source_docs=["doc2"],
             ),
@@ -455,13 +530,17 @@ class TestConflictDetectionDepartments:
         """Both description and context conflict on same dept."""
         depts = [
             ExtractedDepartment(
-                id="eng", name="Engineering",
-                description="Builds products", context="Context A",
+                id="eng",
+                name="Engineering",
+                description="Builds products",
+                context="Context A",
                 source_docs=["doc1"],
             ),
             ExtractedDepartment(
-                id="eng", name="Engineering",
-                description="Ships software", context="Context B",
+                id="eng",
+                name="Engineering",
+                description="Ships software",
+                context="Context B",
                 source_docs=["doc2"],
             ),
         ]
@@ -478,12 +557,16 @@ class TestConflictDetectionRoles:
         """Two roles same ID, different descriptions → conflict detected."""
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
+                id="swe",
+                name="SWE",
+                department_id="eng",
                 description="Writes code",
                 source_docs=["doc1"],
             ),
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
+                id="swe",
+                name="SWE",
+                department_id="eng",
                 description="Builds features",
                 source_docs=["doc2"],
             ),
@@ -496,13 +579,19 @@ class TestConflictDetectionRoles:
         """Two roles same ID, different personas → conflict detected."""
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
-                description="Codes", persona="Careful engineer",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Codes",
+                persona="Careful engineer",
                 source_docs=["doc1"],
             ),
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
-                description="", persona="Fast builder",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="",
+                persona="Fast builder",
                 source_docs=["doc2"],
             ),
         ]
@@ -516,12 +605,16 @@ class TestConflictDetectionRoles:
         """Same role from two docs, different department_id → conflict."""
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
+                id="swe",
+                name="SWE",
+                department_id="eng",
                 description="Codes",
                 source_docs=["doc1"],
             ),
             ExtractedRole(
-                id="swe", name="SWE", department_id="product",
+                id="swe",
+                name="SWE",
+                department_id="product",
                 description="",
                 source_docs=["doc2"],
             ),
@@ -535,13 +628,19 @@ class TestConflictDetectionRoles:
         """Same persona across sources → no conflict."""
         roles = [
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
-                description="Codes", persona="Careful engineer",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Codes",
+                persona="Careful engineer",
                 source_docs=["doc1"],
             ),
             ExtractedRole(
-                id="swe", name="SWE", department_id="eng",
-                description="Codes", persona="Careful engineer",
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Codes",
+                persona="Careful engineer",
                 source_docs=["doc2"],
             ),
         ]

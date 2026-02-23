@@ -59,17 +59,13 @@ class TestReadFileContent:
         mock_drive = MagicMock()
         mock_drive.read_document.return_value = {"content": "Hello world"}
 
-        result = _read_file_content(
-            mock_drive, "file123", "application/vnd.google-apps.document"
-        )
+        result = _read_file_content(mock_drive, "file123", "application/vnd.google-apps.document")
         assert result == "Hello world"
         mock_drive.read_document.assert_called_once_with("file123")
 
     def test_read_spreadsheet(self):
         mock_drive = MagicMock()
-        mock_drive.read_spreadsheet.return_value = {
-            "values": [["A", "B"], ["1", "2"]]
-        }
+        mock_drive.read_spreadsheet.return_value = {"values": [["A", "B"], ["1", "2"]]}
 
         result = _read_file_content(
             mock_drive, "file456", "application/vnd.google-apps.spreadsheet"
@@ -80,18 +76,14 @@ class TestReadFileContent:
         mock_drive = MagicMock()
         mock_drive.read_document.side_effect = Exception("API error")
 
-        result = _read_file_content(
-            mock_drive, "file789", "application/vnd.google-apps.document"
-        )
+        result = _read_file_content(mock_drive, "file789", "application/vnd.google-apps.document")
         assert result == ""
 
     def test_read_doc_returns_empty_when_no_content(self):
         mock_drive = MagicMock()
         mock_drive.read_document.return_value = {"content": ""}
 
-        result = _read_file_content(
-            mock_drive, "file000", "application/vnd.google-apps.document"
-        )
+        result = _read_file_content(mock_drive, "file000", "application/vnd.google-apps.document")
         assert result == ""
 
 
@@ -112,9 +104,7 @@ class TestCrawlFolder:
             },
         ]
         mock_drive.read_document.return_value = {"content": "Handbook content"}
-        mock_drive.read_spreadsheet.return_value = {
-            "values": [["Goal", "Target"]]
-        }
+        mock_drive.read_spreadsheet.return_value = {"values": [["Goal", "Target"]]}
 
         docs = await crawl_folder("folder_id", connector=mock_drive)
         assert len(docs) == 2
@@ -242,9 +232,7 @@ class TestReadFileContentSlides:
         mock_drive = MagicMock()
         mock_drive.export_presentation_text.return_value = "Slide text"
 
-        result = _read_file_content(
-            mock_drive, "pres1", "application/vnd.google-apps.presentation"
-        )
+        result = _read_file_content(mock_drive, "pres1", "application/vnd.google-apps.presentation")
         assert result == "Slide text"
         mock_drive.export_presentation_text.assert_called_once_with("pres1")
 
@@ -252,18 +240,14 @@ class TestReadFileContentSlides:
         mock_drive = MagicMock()
         mock_drive.export_presentation_text.return_value = None
 
-        result = _read_file_content(
-            mock_drive, "pres1", "application/vnd.google-apps.presentation"
-        )
+        result = _read_file_content(mock_drive, "pres1", "application/vnd.google-apps.presentation")
         assert result == ""
 
     def test_read_presentation_error(self):
         mock_drive = MagicMock()
         mock_drive.export_presentation_text.side_effect = Exception("API error")
 
-        result = _read_file_content(
-            mock_drive, "pres1", "application/vnd.google-apps.presentation"
-        )
+        result = _read_file_content(mock_drive, "pres1", "application/vnd.google-apps.presentation")
         assert result == ""
 
 
@@ -306,9 +290,7 @@ class TestReadPdfContent:
 
         mock_page = MagicMock()
         mock_page.extract_text.return_value = "Text"
-        mock_page.extract_tables.return_value = [
-            [["Name", "Age"], ["Alice", "30"]]
-        ]
+        mock_page.extract_tables.return_value = [[["Name", "Age"], ["Alice", "30"]]]
 
         mock_pdf = _make_mock_pdf(mock_page)
         mock_pdfplumber = _mock_pdfplumber_module(mock_pdf)

@@ -44,9 +44,7 @@ Documents:
 {documents}"""
 
 
-def format_doc_for_classification(
-    file_id: str, title: str, content_preview: str
-) -> str:
+def format_doc_for_classification(file_id: str, title: str, content_preview: str) -> str:
     """Format a single document for the classification prompt."""
     # Use first 2000 chars as preview to keep costs low
     preview = content_preview[:2000]

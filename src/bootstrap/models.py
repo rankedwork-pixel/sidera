@@ -208,9 +208,7 @@ class BootstrapPlan:
     memories: list[ExtractedMemory] = field(default_factory=list)
     conflicts: list[PlanConflict] = field(default_factory=list)
     estimated_cost: float = 0.0
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     status: str = BootstrapStatus.DRAFT.value
     errors: list[str] = field(default_factory=list)
 

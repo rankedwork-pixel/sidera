@@ -153,14 +153,8 @@ class TestBootstrapPlan:
 
     def test_summary(self):
         plan = BootstrapPlan(
-            departments=[
-                ExtractedDepartment(id="eng", name="Engineering", description="")
-            ],
-            roles=[
-                ExtractedRole(
-                    id="swe", name="SWE", department_id="eng", description=""
-                )
-            ],
+            departments=[ExtractedDepartment(id="eng", name="Engineering", description="")],
+            roles=[ExtractedRole(id="swe", name="SWE", department_id="eng", description="")],
             skills=[],
             memories=[],
             estimated_cost=0.35,
@@ -288,14 +282,8 @@ class TestExtractedKnowledge:
 
     def test_populated(self):
         k = ExtractedKnowledge(
-            departments=[
-                ExtractedDepartment(id="eng", name="Eng", description="")
-            ],
-            roles=[
-                ExtractedRole(
-                    id="swe", name="SWE", department_id="eng", description=""
-                )
-            ],
+            departments=[ExtractedDepartment(id="eng", name="Eng", description="")],
+            roles=[ExtractedRole(id="swe", name="SWE", department_id="eng", description="")],
             skills=[
                 ExtractedSkill(
                     id="deploy",

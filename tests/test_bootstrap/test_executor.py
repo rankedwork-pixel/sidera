@@ -51,7 +51,9 @@ class TestCreateDepartment:
             mock_db.update_org_department = AsyncMock()
 
             dept = ExtractedDepartment(
-                id="eng", name="Engineering", description="Builds products",
+                id="eng",
+                name="Engineering",
+                description="Builds products",
                 vocabulary=[{"term": "CI", "definition": "Continuous Integration"}],
             )
             result = ExecutionResult(plan_id="test")
@@ -93,8 +95,12 @@ class TestCreateRole:
             mock_db.update_org_role = AsyncMock()
 
             role = ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description="Writes code",
-                persona="A careful engineer", goals=["Ship quality"],
+                id="swe",
+                name="SWE",
+                department_id="eng",
+                description="Writes code",
+                persona="A careful engineer",
+                goals=["Ship quality"],
                 principles=["Test first"],
             )
             result = ExecutionResult(plan_id="test")
@@ -110,9 +116,7 @@ class TestCreateRole:
         with patch("src.bootstrap.executor.db_service") as mock_db:
             mock_db.get_org_role = AsyncMock(return_value=MagicMock())
 
-            role = ExtractedRole(
-                id="swe", name="SWE", department_id="eng", description=""
-            )
+            role = ExtractedRole(id="swe", name="SWE", department_id="eng", description="")
             result = ExecutionResult(plan_id="test")
             await _create_role(mock_session, role, [], "user1", result)
 
@@ -127,9 +131,13 @@ class TestCreateSkill:
             mock_db.create_org_skill = AsyncMock()
 
             skill = ExtractedSkill(
-                id="review", name="Code Review", role_id="swe",
-                department_id="eng", description="Review PRs",
-                category="analysis", model="sonnet",
+                id="review",
+                name="Code Review",
+                role_id="swe",
+                department_id="eng",
+                description="Review PRs",
+                category="analysis",
+                model="sonnet",
                 system_supplement="Review carefully",
                 prompt_template="Review latest PRs",
                 output_format="## Summary",
@@ -147,8 +155,11 @@ class TestCreateSkill:
             mock_db.get_org_skill = AsyncMock(return_value=MagicMock())
 
             skill = ExtractedSkill(
-                id="review", name="Review", role_id="swe",
-                department_id="eng", description="",
+                id="review",
+                name="Review",
+                role_id="swe",
+                department_id="eng",
+                description="",
             )
             result = ExecutionResult(plan_id="test")
             await _create_skill(mock_session, skill, "user1", result)
@@ -163,9 +174,12 @@ class TestSeedMemory:
             mock_db.save_memory = AsyncMock()
 
             memory = ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="insight", title="Key fact",
-                content="Important detail", confidence=0.9,
+                role_id="swe",
+                department_id="eng",
+                memory_type="insight",
+                title="Key fact",
+                content="Important detail",
+                confidence=0.9,
             )
             result = ExecutionResult(plan_id="test")
             await _seed_memory(mock_session, memory, "user1", result)
@@ -174,9 +188,7 @@ class TestSeedMemory:
             mock_db.save_memory.assert_called_once()
             call_kwargs = mock_db.save_memory.call_args
             # Title should be prefixed with [Bootstrap]
-            assert "[Bootstrap]" in call_kwargs.kwargs.get(
-                "title", call_kwargs[1].get("title", "")
-            )
+            assert "[Bootstrap]" in call_kwargs.kwargs.get("title", call_kwargs[1].get("title", ""))
 
     @pytest.mark.asyncio
     async def test_seed_error(self, mock_session):
@@ -184,8 +196,11 @@ class TestSeedMemory:
             mock_db.save_memory = AsyncMock(side_effect=Exception("DB error"))
 
             memory = ExtractedMemory(
-                role_id="swe", department_id="eng",
-                memory_type="insight", title="Fact", content="Detail",
+                role_id="swe",
+                department_id="eng",
+                memory_type="insight",
+                title="Fact",
+                content="Detail",
             )
             result = ExecutionResult(plan_id="test")
             await _seed_memory(mock_session, memory, "user1", result)
@@ -216,26 +231,24 @@ class TestExecutePlan:
 
             plan = BootstrapPlan(
                 status=BootstrapStatus.APPROVED.value,
-                departments=[
-                    ExtractedDepartment(
-                        id="eng", name="Engineering", description=""
-                    )
-                ],
-                roles=[
-                    ExtractedRole(
-                        id="swe", name="SWE", department_id="eng", description=""
-                    )
-                ],
+                departments=[ExtractedDepartment(id="eng", name="Engineering", description="")],
+                roles=[ExtractedRole(id="swe", name="SWE", department_id="eng", description="")],
                 skills=[
                     ExtractedSkill(
-                        id="review", name="Review", role_id="swe",
-                        department_id="eng", description="",
+                        id="review",
+                        name="Review",
+                        role_id="swe",
+                        department_id="eng",
+                        description="",
                     )
                 ],
                 memories=[
                     ExtractedMemory(
-                        role_id="swe", department_id="eng",
-                        memory_type="insight", title="Fact", content="Detail",
+                        role_id="swe",
+                        department_id="eng",
+                        memory_type="insight",
+                        title="Fact",
+                        content="Detail",
                     )
                 ],
             )

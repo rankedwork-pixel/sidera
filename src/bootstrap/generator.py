@@ -83,9 +83,7 @@ def generate_plan(
 
     # Update manager references to use normalized role IDs
     for role in roles:
-        role.manages = [
-            role_id_map.get(m, m) for m in role.manages if role_id_map.get(m, m)
-        ]
+        role.manages = [role_id_map.get(m, m) for m in role.manages if role_id_map.get(m, m)]
 
     # --- Step 3: Validate department references ---
     valid_dept_ids = {d.id for d in departments}
@@ -98,9 +96,7 @@ def generate_plan(
                     f" -- assigned to '{departments[0].id}'"
                 )
             else:
-                errors.append(
-                    f"Role '{role.id}' has unknown dept and no departments exist"
-                )
+                errors.append(f"Role '{role.id}' has unknown dept and no departments exist")
 
     # --- Step 4: Validate and fix skills ---
     valid_role_ids = {r.id for r in roles}
@@ -273,17 +269,15 @@ def _deduplicate_roles(
 
             # Track conflicting department_ids
             if role.department_id:
-                field_values.setdefault(key, {}).setdefault(
-                    "department_id", []
-                ).append({"source_docs": source, "value": role.department_id})
+                field_values.setdefault(key, {}).setdefault("department_id", []).append(
+                    {"source_docs": source, "value": role.department_id}
+                )
 
             existing.principles.extend(role.principles)
             existing.goals.extend(role.goals)
             existing.source_docs.extend(role.source_docs)
             if role.manages:
-                existing.manages = list(
-                    set(existing.manages) | set(role.manages)
-                )
+                existing.manages = list(set(existing.manages) | set(role.manages))
         else:
             role.id = key
             seen[key] = role
@@ -297,9 +291,9 @@ def _deduplicate_roles(
                     {"source_docs": source, "value": role.persona}
                 )
             if role.department_id:
-                field_values.setdefault(key, {}).setdefault(
-                    "department_id", []
-                ).append({"source_docs": source, "value": role.department_id})
+                field_values.setdefault(key, {}).setdefault("department_id", []).append(
+                    {"source_docs": source, "value": role.department_id}
+                )
 
     # Detect conflicts: fields where multiple distinct values were provided
     for entity_id, fields in field_values.items():
@@ -353,9 +347,7 @@ def _compute_agreement_confidence(entries: list[dict[str, Any]]) -> float:
     return most_common_count / len(entries)
 
 
-def _normalize_entity_ids(
-    entities: list[Any], entity_type: str
-) -> dict[str, str]:
+def _normalize_entity_ids(entities: list[Any], entity_type: str) -> dict[str, str]:
     """Normalize IDs on a list of entities.  Returns old->new ID mapping."""
     id_map: dict[str, str] = {}
     seen_ids: set[str] = set()
@@ -412,15 +404,11 @@ def _validate_skills(
 
         # Validate role reference
         if skill.role_id not in valid_role_ids:
-            errors.append(
-                f"Skill '{skill.id}' references unknown role '{skill.role_id}'"
-            )
+            errors.append(f"Skill '{skill.id}' references unknown role '{skill.role_id}'")
 
         # Validate department reference
         if skill.department_id not in valid_dept_ids:
-            errors.append(
-                f"Skill '{skill.id}' references unknown dept '{skill.department_id}'"
-            )
+            errors.append(f"Skill '{skill.id}' references unknown dept '{skill.department_id}'")
 
         validated.append(skill)
 
@@ -486,9 +474,7 @@ def _detect_managers(roles: list[ExtractedRole]) -> None:
                 role.manages = dept_roles
 
 
-def _assign_briefing_skills(
-    roles: list[ExtractedRole], skills: list[ExtractedSkill]
-) -> None:
+def _assign_briefing_skills(roles: list[ExtractedRole], skills: list[ExtractedSkill]) -> None:
     """No-op in the data model (briefing_skills lives in RoleDefinition).
 
     This prepares the mapping but the actual assignment happens during

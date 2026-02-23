@@ -81,9 +81,7 @@ async def _classify_batch(
     # Format documents for the prompt
     doc_texts = []
     for doc in batch:
-        doc_texts.append(
-            format_doc_for_classification(doc.file_id, doc.title, doc.content)
-        )
+        doc_texts.append(format_doc_for_classification(doc.file_id, doc.title, doc.content))
     documents_block = "\n\n".join(doc_texts)
 
     user_message = CLASSIFY_USER_TEMPLATE.format(documents=documents_block)
@@ -100,8 +98,7 @@ async def _classify_batch(
         logger.warning("bootstrap.classify_batch_error", error=str(exc))
         # On failure, mark all docs as irrelevant so pipeline continues
         return [
-            _make_classified(doc, [DocumentCategory.IRRELEVANT.value], 0.0)
-            for doc in batch
+            _make_classified(doc, [DocumentCategory.IRRELEVANT.value], 0.0) for doc in batch
         ], 0.0
 
     cost = result.get("cost", {}).get("total_cost_usd", 0.0)
@@ -122,18 +119,14 @@ async def _classify_batch(
         if file_id in doc_lookup:
             doc = doc_lookup.pop(file_id)
             # Validate categories against the enum
-            valid_cats = [
-                c for c in categories if c in {e.value for e in DocumentCategory}
-            ]
+            valid_cats = [c for c in categories if c in {e.value for e in DocumentCategory}]
             if not valid_cats:
                 valid_cats = [DocumentCategory.IRRELEVANT.value]
             classified.append(_make_classified(doc, valid_cats, confidence))
 
     # Any docs not in the response get classified as irrelevant
     for doc in doc_lookup.values():
-        classified.append(
-            _make_classified(doc, [DocumentCategory.IRRELEVANT.value], 0.0)
-        )
+        classified.append(_make_classified(doc, [DocumentCategory.IRRELEVANT.value], 0.0))
 
     return classified, cost
 
