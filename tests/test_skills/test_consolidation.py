@@ -818,3 +818,267 @@ class TestConsolidateRoleMemories:
         assert stats["consolidated_count"] == 0
         assert stats["originals_marked"] == 0
         assert stats["errors"] == []
+
+
+# =====================================================================
+# Contradiction detection in consolidation
+# =====================================================================
+
+
+class TestContradictionDetection:
+    """Tests for contradiction detection during memory consolidation.
+
+    The _CONSOLIDATION_PROMPT instructs the LLM to detect contradictions
+    and flag groups with "is_contradiction": true.  In
+    consolidate_role_memories(), contradictions are saved with
+    [Contradiction] prefix, confidence=0.3, as "insight" type, and
+    stats["contradictions_found"] is incremented.
+    """
+
+    @pytest.mark.asyncio
+    async def test_contradiction_detected_and_saved(self):
+        """When LLM returns a group with is_contradiction=true, it gets saved
+        with [Contradiction] prefix, confidence 0.3, type 'insight'."""
+        mems = [
+            _make_memory(
+                id=100,
+                title="Weekday performance",
+                content="Campaign X works best on weekdays",
+                confidence=0.8,
+            ),
+            _make_memory(
+                id=101,
+                title="Weekend performance",
+                content="Campaign X works best on weekends",
+                confidence=0.7,
+            ),
+        ]
+
+        llm_response = json.dumps(
+            [
+                {
+                    "source_ids": [100, 101],
+                    "type": "pattern",
+                    "title": "Campaign X timing conflict",
+                    "content": "Conflicting claims about when Campaign X performs best: "
+                    "weekdays vs weekends.",
+                    "confidence": 0.9,
+                    "is_summary": False,
+                    "is_contradiction": True,
+                }
+            ]
+        )
+
+        mock_result = _make_turn_result(text=llm_response)
+        patches = _patch_consolidation_deps(llm_return=mock_result)
+
+        with (
+            patches["llm"],
+            patches["db_session"],
+            patches["save"] as mock_save,
+            patches["settings"] as mock_settings,
+        ):
+            mock_settings.model_fast = "claude-3-haiku-20240307"
+            await consolidate_role_memories("u1", "role1", "dept1", mems)
+
+        # Contradiction should be saved
+        mock_save.assert_awaited_once()
+        save_kwargs = mock_save.call_args[1]
+
+        # Title must have [Contradiction] prefix
+        assert save_kwargs["title"].startswith("[Contradiction]")
+        assert "Campaign X timing conflict" in save_kwargs["title"]
+
+        # Confidence fixed at 0.3 (not the LLM's 0.9)
+        assert save_kwargs["confidence"] == 0.3
+
+        # Type forced to "insight"
+        assert save_kwargs["memory_type"] == "insight"
+
+        # Source IDs preserved
+        assert save_kwargs["source_ids"] == [100, 101]
+
+    @pytest.mark.asyncio
+    async def test_contradiction_counted_in_stats(self):
+        """stats['contradictions_found'] is incremented correctly."""
+        mems = [
+            _make_memory(id=200, title="A", content="Claim A"),
+            _make_memory(id=201, title="B", content="Claim B"),
+            _make_memory(id=202, title="C", content="Claim C"),
+        ]
+
+        llm_response = json.dumps(
+            [
+                {
+                    "source_ids": [200, 201],
+                    "type": "insight",
+                    "title": "Contradiction one",
+                    "content": "Conflicting claims between A and B.",
+                    "confidence": 0.8,
+                    "is_contradiction": True,
+                },
+                {
+                    "source_ids": [201, 202],
+                    "type": "insight",
+                    "title": "Contradiction two",
+                    "content": "Conflicting claims between B and C.",
+                    "confidence": 0.7,
+                    "is_contradiction": True,
+                },
+            ]
+        )
+
+        mock_result = _make_turn_result(text=llm_response)
+        patches = _patch_consolidation_deps(llm_return=mock_result)
+
+        with (
+            patches["llm"],
+            patches["db_session"],
+            patches["save"],
+            patches["settings"] as mock_settings,
+        ):
+            mock_settings.model_fast = "claude-3-haiku-20240307"
+            stats = await consolidate_role_memories("u1", "role1", "dept1", mems)
+
+        assert stats["contradictions_found"] == 2
+        # Contradictions do NOT count as consolidated_count
+        assert stats["consolidated_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_contradiction_skips_confidence_boosting(self):
+        """Contradictions use fixed 0.3 confidence, not the boosted value.
+
+        Even though both source memories have high confidence, the
+        contradiction should always be saved with 0.3."""
+        mems = [
+            _make_memory(id=300, title="High conf A", content="X is true", confidence=0.9),
+            _make_memory(id=301, title="High conf B", content="X is false", confidence=0.85),
+            _make_memory(id=302, title="High conf C", content="X is uncertain", confidence=0.88),
+        ]
+
+        llm_response = json.dumps(
+            [
+                {
+                    "source_ids": [300, 301, 302],
+                    "type": "pattern",
+                    "title": "X truth conflict",
+                    "content": "Conflicting claims about X.",
+                    "confidence": 0.5,
+                    "is_contradiction": True,
+                }
+            ]
+        )
+
+        mock_result = _make_turn_result(text=llm_response)
+        patches = _patch_consolidation_deps(llm_return=mock_result)
+
+        with (
+            patches["llm"],
+            patches["db_session"],
+            patches["save"] as mock_save,
+            patches["settings"] as mock_settings,
+        ):
+            mock_settings.model_fast = "claude-3-haiku-20240307"
+            await consolidate_role_memories("u1", "role1", "dept1", mems)
+
+        save_kwargs = mock_save.call_args[1]
+        # Confidence must be exactly 0.3 — not boosted (0.9 + 0.10 = 1.0)
+        assert save_kwargs["confidence"] == 0.3
+
+    def test_contradiction_prompt_mentions_detection(self):
+        """Verify _CONSOLIDATION_PROMPT contains 'CONTRADICTION DETECTION'."""
+        from src.skills.consolidation import _CONSOLIDATION_PROMPT
+
+        assert "CONTRADICTION DETECTION" in _CONSOLIDATION_PROMPT
+        assert "is_contradiction" in _CONSOLIDATION_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_mixed_contradictions_and_merges(self):
+        """When response has both normal merges and contradictions, both
+        are handled correctly: merges increment consolidated_count,
+        contradictions increment contradictions_found."""
+        mems = [
+            _make_memory(
+                id=400,
+                title="Budget up",
+                content="Budget increased",
+                confidence=0.8,
+            ),
+            _make_memory(
+                id=401,
+                title="Budget raise",
+                content="Budget was raised",
+                confidence=0.7,
+            ),
+            _make_memory(
+                id=402,
+                title="Weekday best",
+                content="Best on weekdays",
+                confidence=0.75,
+            ),
+            _make_memory(
+                id=403,
+                title="Weekend best",
+                content="Best on weekends",
+                confidence=0.72,
+            ),
+        ]
+
+        llm_response = json.dumps(
+            [
+                # Normal merge group
+                {
+                    "source_ids": [400, 401],
+                    "type": "decision",
+                    "title": "Budget increase decision",
+                    "content": "Budget was raised.",
+                    "confidence": 0.85,
+                    "is_summary": False,
+                    "is_contradiction": False,
+                },
+                # Contradiction group
+                {
+                    "source_ids": [402, 403],
+                    "type": "pattern",
+                    "title": "Timing conflict",
+                    "content": "Conflicting claims about best days.",
+                    "confidence": 0.8,
+                    "is_summary": False,
+                    "is_contradiction": True,
+                },
+            ]
+        )
+
+        mock_result = _make_turn_result(text=llm_response)
+        patches = _patch_consolidation_deps(llm_return=mock_result)
+
+        with (
+            patches["llm"],
+            patches["db_session"],
+            patches["save"] as mock_save,
+            patches["settings"] as mock_settings,
+        ):
+            mock_settings.model_fast = "claude-3-haiku-20240307"
+            stats = await consolidate_role_memories("u1", "role1", "dept1", mems)
+
+        # Normal merge
+        assert stats["consolidated_count"] == 1
+        assert stats["originals_marked"] == 2
+
+        # Contradiction
+        assert stats["contradictions_found"] == 1
+
+        # Two saves total: one for merge, one for contradiction
+        assert mock_save.await_count == 2
+
+        # Verify the contradiction save has correct properties
+        contradiction_call = mock_save.call_args_list[1][1]
+        assert contradiction_call["title"].startswith("[Contradiction]")
+        assert contradiction_call["confidence"] == 0.3
+        assert contradiction_call["memory_type"] == "insight"
+
+        # Verify the normal merge has boosted confidence
+        merge_call = mock_save.call_args_list[0][1]
+        assert not merge_call["title"].startswith("[Contradiction]")
+        # 2 sources: max(0.8, 0.7) + 0.05 = 0.85
+        assert merge_call["confidence"] == pytest.approx(0.85)

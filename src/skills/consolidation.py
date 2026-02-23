@@ -285,6 +285,12 @@ Rules:
 - SUMMARY GENERATION: when a cluster has 5+ memories about the same topic,
   create a high-level summary that captures the key pattern across all of them.
   Prefix the title with "[Summary]".
+- CONTRADICTION DETECTION: when two or more memories in a cluster make
+  directly conflicting claims (e.g., "Campaign X works best on weekdays" vs
+  "Campaign X works best on weekends"), do NOT merge them.  Instead, flag
+  the group as a contradiction.  Set "is_contradiction" to true, and in the
+  content explain what the conflicting claims are.  Contradictions need human
+  review rather than silent merging.
 - For "relationship" type memories: merge all relationship observations about
   the same person into a single updated relationship profile.  Keep the most
   recent behavioral observations.  This is a living portrait, not a log.
@@ -298,7 +304,8 @@ Respond with ONLY a JSON array (no markdown fences).  Each element:
   "title": "<concise title, max 100 chars>",
   "content": "<merged content, max 500 chars>",
   "confidence": <float 0.0-1.0>,
-  "is_summary": <boolean, true if this is a high-level summary of 5+ memories>
+  "is_summary": <boolean, true if this is a high-level summary of 5+ memories>,
+  "is_contradiction": <boolean, true if sources contain conflicting claims>
 }}
 """
 
@@ -426,6 +433,7 @@ async def consolidate_role_memories(
         "consolidated_count": 0,
         "originals_marked": 0,
         "summaries_created": 0,
+        "contradictions_found": 0,
         "cost_usd": 0.0,
         "errors": [],
     }
@@ -511,6 +519,8 @@ async def consolidate_role_memories(
         if len(source_ids) < 2:
             continue
 
+        is_contradiction = bool(group.get("is_contradiction", False))
+
         mtype = group.get("type", "insight")
         if mtype not in valid_types:
             mtype = "insight"
@@ -519,7 +529,44 @@ async def consolidate_role_memories(
         content = str(group.get("content", ""))[:500]
         is_summary = bool(group.get("is_summary", False))
 
-        # Step 4: Apply confidence boosting post-hoc
+        # Step 4a: Handle contradictions — save as insight with
+        # [Contradiction] tag, low confidence, and skip normal merging.
+        # The steward should review these rather than the system
+        # silently merging conflicting information.
+        if is_contradiction:
+            if not title.startswith("[Contradiction]"):
+                title = f"[Contradiction] {title}"[:100]
+            # Low confidence signals "needs human review"
+            confidence = 0.3
+
+            if not title or not content:
+                continue
+
+            try:
+                async with get_db_session() as session:
+                    await db_service.save_consolidated_memory(
+                        session=session,
+                        user_id=user_id,
+                        role_id=role_id,
+                        department_id=department_id,
+                        memory_type="insight",
+                        title=title,
+                        content=content,
+                        source_ids=source_ids,
+                        confidence=confidence,
+                    )
+                stats["contradictions_found"] += 1
+            except Exception as exc:
+                logger.warning(
+                    "consolidation.contradiction_save_error",
+                    user_id=user_id,
+                    role_id=role_id,
+                    error=str(exc),
+                )
+                stats["errors"].append(f"Contradiction save error: {exc}")
+            continue
+
+        # Step 4b: Apply confidence boosting post-hoc
         max_source_conf = max(
             (confidence_by_id.get(sid, 0.5) for sid in source_ids),
             default=0.5,

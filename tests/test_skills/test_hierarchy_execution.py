@@ -1063,3 +1063,132 @@ class TestPipelineOutputPassing:
         assert len(result.skill_results) == 1
         call_kwargs = mock_skill_exec.execute.call_args.kwargs
         assert call_kwargs.get("params") is None
+
+
+# ===========================================================================
+# 10. Context-aware prompt reordering in compose_role_context
+# ===========================================================================
+
+
+class TestComposeRoleContextOrdering:
+    """Verify stable identity sections come before dynamic per-run sections.
+
+    compose_role_context() was refactored to separate stable identity
+    (department context, vocabulary, role persona, principles, goals,
+    context files, team awareness, peer heads) from dynamic per-run
+    sections (memory_context, pending_messages).  Dynamic sections now
+    come AFTER stable sections at the end of the composed string.
+    """
+
+    def _make_role_with_extras(self, **kw):
+        defaults = {
+            "id": "buyer",
+            "name": "Media Buyer",
+            "department_id": "mktg",
+            "description": "Buys media",
+            "persona": "You are a media buyer specialist.",
+            "principles": ("Always verify data before acting",),
+            "goals": ("Achieve 4x ROAS",),
+            "briefing_skills": ("s1",),
+        }
+        defaults.update(kw)
+        return RoleDefinition(**defaults)
+
+    def _make_dept(self, **kw):
+        defaults = {
+            "id": "mktg",
+            "name": "Marketing",
+            "description": "Marketing dept",
+            "context": "Department context: Q1 focus.",
+        }
+        defaults.update(kw)
+        return DepartmentDefinition(**defaults)
+
+    def test_memory_context_at_end(self):
+        """memory_context appears AFTER role persona, principles, and goals."""
+        role = self._make_role_with_extras()
+        dept = self._make_dept()
+        memory_ctx = "# Memories\n\nRemember: CPA was $25 last week."
+
+        ctx = compose_role_context(dept, role, memory_context=memory_ctx)
+
+        persona_pos = ctx.index("You are a media buyer specialist")
+        principles_pos = ctx.index("Always verify data before acting")
+        goals_pos = ctx.index("Achieve 4x ROAS")
+        memory_pos = ctx.index("Remember: CPA was $25 last week")
+
+        assert persona_pos < memory_pos
+        assert principles_pos < memory_pos
+        assert goals_pos < memory_pos
+
+    def test_pending_messages_at_end(self):
+        """pending_messages appears AFTER role persona."""
+        role = self._make_role_with_extras()
+        messages = "# Inbox\n\nMessage from Head of IT: check Redis."
+
+        ctx = compose_role_context(None, role, pending_messages=messages)
+
+        persona_pos = ctx.index("You are a media buyer specialist")
+        messages_pos = ctx.index("Message from Head of IT")
+
+        assert persona_pos < messages_pos
+
+    def test_stable_before_dynamic(self):
+        """Department context and role persona appear BEFORE memory_context
+        and pending_messages."""
+        role = self._make_role_with_extras()
+        dept = self._make_dept()
+        memory_ctx = "# Role Memory\n\nBudget was increased."
+        messages = "# Pending Messages\n\nNote from analyst."
+
+        ctx = compose_role_context(
+            dept,
+            role,
+            memory_context=memory_ctx,
+            pending_messages=messages,
+        )
+
+        dept_pos = ctx.index("Department context: Q1 focus")
+        persona_pos = ctx.index("You are a media buyer specialist")
+        memory_pos = ctx.index("Budget was increased")
+        messages_pos = ctx.index("Note from analyst")
+
+        assert dept_pos < memory_pos
+        assert dept_pos < messages_pos
+        assert persona_pos < memory_pos
+        assert persona_pos < messages_pos
+
+    def test_dynamic_sections_ordering(self):
+        """memory_context appears before pending_messages (both dynamic,
+        but memory comes first)."""
+        role = self._make_role_with_extras()
+        memory_ctx = "# Memories\n\nRecent lesson learned."
+        messages = "# Messages\n\nPending peer message."
+
+        ctx = compose_role_context(
+            None,
+            role,
+            memory_context=memory_ctx,
+            pending_messages=messages,
+        )
+
+        memory_pos = ctx.index("Recent lesson learned")
+        messages_pos = ctx.index("Pending peer message")
+
+        assert memory_pos < messages_pos
+
+    def test_empty_dynamic_sections(self):
+        """When no memory or messages, the output is the same as the
+        stable-only case (backward compatibility)."""
+        role = self._make_role_with_extras()
+        dept = self._make_dept()
+
+        ctx_with_empty = compose_role_context(
+            dept,
+            role,
+            memory_context="",
+            pending_messages="",
+        )
+        ctx_without = compose_role_context(dept, role)
+
+        assert ctx_with_empty == ctx_without

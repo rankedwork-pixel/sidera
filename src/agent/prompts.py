@@ -1151,6 +1151,44 @@ it into their thinking.
 """
 
 
+# -- Observation masking for conversation history ----------------------------
+# Bot responses older than this many turns from the end get compressed.
+# Research shows tool outputs consume 80%+ of tokens in agent trajectories;
+# masking old outputs dramatically reduces context waste while preserving
+# the conversational flow.
+_OBSERVATION_MASK_TURN_AGE = 3
+
+# Bot messages longer than this threshold (chars) are candidates for masking.
+_OBSERVATION_MASK_MIN_LENGTH = 500
+
+
+def _mask_observation(text: str) -> str:
+    """Compress a verbose bot response to a compact summary reference.
+
+    Extracts the first meaningful sentence (up to 150 chars) as a
+    representative summary.  Tables, metric dumps, and long analyses
+    get replaced with a ``[Earlier response summarized]`` marker.
+
+    Args:
+        text: The full bot response text.
+
+    Returns:
+        A compact version suitable for conversation history.
+    """
+    # Find the first sentence boundary
+    for end_marker in (". ", ".\n", "!\n", "? "):
+        idx = text.find(end_marker)
+        if 0 < idx < 200:
+            summary = text[: idx + 1].strip()
+            return f"[Earlier response summarized] {summary}"
+
+    # Fallback: first 150 chars
+    truncated = text[:150].strip()
+    if len(text) > 150:
+        truncated += "..."
+    return f"[Earlier response summarized] {truncated}"
+
+
 def build_conversation_prompt(
     thread_history: list[dict],
     current_message: str,
@@ -1163,6 +1201,13 @@ def build_conversation_prompt(
     Thread history is formatted as a chronological conversation log where
     bot messages become ``[You]`` turns and human messages become labeled
     user turns. The current message is appended at the end.
+
+    **Observation masking:** Bot responses older than
+    ``_OBSERVATION_MASK_TURN_AGE`` turns that exceed
+    ``_OBSERVATION_MASK_MIN_LENGTH`` characters are compressed to compact
+    summaries.  This prevents verbose tool output dumps from consuming the
+    context window in long conversations while preserving the conversational
+    flow and all human messages in full.
 
     The Claude API receives this as a single user message. The system
     prompt instructs the agent to treat the history as a conversation
@@ -1188,13 +1233,27 @@ def build_conversation_prompt(
 
     if thread_history:
         parts.append("## Conversation History\n")
-        for msg in thread_history:
+
+        # Determine which messages are "old" enough to mask.
+        # Count from the end: the last N messages are "recent".
+        total = len(thread_history)
+        recent_cutoff = max(0, total - _OBSERVATION_MASK_TURN_AGE)
+
+        for i, msg in enumerate(thread_history):
             is_self = (bot_user_id and msg.get("user") == bot_user_id) or msg.get("is_bot", False)
+
+            text = msg.get("text", "")
+
             if is_self:
-                parts.append(f"[You]: {msg['text']}")
+                # Mask old, verbose bot responses
+                if i < recent_cutoff and len(text) > _OBSERVATION_MASK_MIN_LENGTH:
+                    parts.append(f"[You]: {_mask_observation(text)}")
+                else:
+                    parts.append(f"[You]: {text}")
             else:
+                # Human messages always kept in full
                 user_label = f"<@{msg['user']}>" if msg.get("user") else "[User]"
-                parts.append(f"[{user_label}]: {wrap_untrusted(msg['text'])}")
+                parts.append(f"[{user_label}]: {wrap_untrusted(text)}")
         parts.append("")  # blank line separator
 
     parts.append("## Current Message\n")

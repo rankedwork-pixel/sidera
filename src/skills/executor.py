@@ -722,51 +722,63 @@ def compose_role_context(
     This context is injected between BASE_SYSTEM_PROMPT and the skill's
     system_supplement when skills are run as part of a role.
 
+    **Context ordering follows the attention-edge principle:** stable
+    identity context (department, persona, principles, goals, team) goes
+    first for KV-cache prefix reuse.  Dynamic per-run content (memories,
+    messages) goes last where it receives stronger attention due to the
+    U-shaped attention curve (models attend most to beginning and end of
+    context, with reduced recall in the middle).
+
     Args:
         department: The department definition (may be None for loose roles).
         role: The role definition.
-        memory_context: Pre-composed memory string to inject after role
-            persona (default empty — backward compatible).
+        memory_context: Pre-composed memory string to inject at the end
+            of context (default empty — backward compatible).
         registry: Optional skill registry. When provided and the role is a
             manager, a "Your Team" section is appended listing each managed
             role's name, skills, and persona summary.
         pending_messages: Pre-composed message inbox string to inject
-            after memory context (default empty — no messages).
+            at the end of context (default empty — no messages).
 
     Returns:
         Combined context string. Empty string if no context to add.
     """
     from src.skills.schema import load_hierarchy_context_text
 
-    sections: list[str] = []
+    # ---- Stable identity layer (top — KV-cache friendly) ----
+    # These sections are identical across runs for the same role,
+    # maximizing prefix cache hits.
+    stable_sections: list[str] = []
 
     # Department context
     if department:
         if department.context:
-            sections.append(f"# Department Context: {department.name}\n\n{department.context}")
+            stable_sections.append(
+                f"# Department Context: {department.name}\n\n{department.context}"
+            )
         if department.context_files:
             dept_text = load_hierarchy_context_text(
                 department.context_files,
                 department.source_dir,
             )
             if dept_text:
-                sections.append(dept_text)
+                stable_sections.append(dept_text)
         # Department vocabulary (domain-native terminology)
         if department.vocabulary:
             vocab_lines = [f"- **{term}**: {defn}" for term, defn in department.vocabulary]
-            sections.append(
+            stable_sections.append(
                 "# Department Vocabulary\n\n"
                 "Use these terms consistently:\n" + "\n".join(vocab_lines)
             )
 
     # Role persona
     if role.persona:
-        sections.append(f"# Role: {role.name}\n\n{role.persona}")
+        stable_sections.append(f"# Role: {role.name}\n\n{role.persona}")
 
     # Decision-making principles (injected after persona, before goals)
     if role.principles:
         principles_text = "\n".join(f"- {p}" for p in role.principles)
-        sections.append(
+        stable_sections.append(
             f"# Decision-Making Principles\n\n"
             f"When facing ambiguous situations or trade-offs, apply these "
             f"principles to guide your reasoning:\n\n{principles_text}"
@@ -775,7 +787,7 @@ def compose_role_context(
     # Active goals (always-present decision filters)
     if role.goals:
         goal_lines = [f"- {g}" for g in role.goals]
-        sections.append(
+        stable_sections.append(
             "# Active Goals\n\nFilter every decision through these goals:\n" + "\n".join(goal_lines)
         )
 
@@ -785,17 +797,9 @@ def compose_role_context(
             role.source_dir,
         )
         if role_text:
-            sections.append(role_text)
+            stable_sections.append(role_text)
 
-    # Persistent memory (injected after role persona, before skills)
-    if memory_context:
-        sections.append(memory_context)
-
-    # Pending peer messages (injected after memory, before team awareness)
-    if pending_messages:
-        sections.append(pending_messages)
-
-    # Team awareness for manager roles
+    # Team awareness for manager roles (stable across runs)
     if getattr(role, "manages", ()) and registry is not None:
         team_lines: list[str] = ["# Your Team\n"]
         for managed_id in role.manages:
@@ -811,7 +815,7 @@ def compose_role_context(
                 persona_summary = f"\n{first_sentence}."
             team_lines.append(f"## {managed_role.name}\nSkills: {skill_names}{persona_summary}")
         if len(team_lines) > 1:  # More than just the header
-            sections.append("\n\n".join(team_lines))
+            stable_sections.append("\n\n".join(team_lines))
 
     # Peer department heads (other managers the role can consult)
     if getattr(role, "manages", ()) and registry is not None:
@@ -825,9 +829,22 @@ def compose_role_context(
                 dept = registry.get_department(peer.department_id)
                 dept_name = dept.name if dept else peer.department_id
                 peer_lines.append(f"- **{peer.name}** (`{peer.id}`) — {dept_name}")
-            sections.append("\n".join(peer_lines))
+            stable_sections.append("\n".join(peer_lines))
 
-    return "\n\n".join(sections)
+    # ---- Dynamic per-run layer (end — attention edge) ----
+    # Memories and messages change every run. Placing them at the end
+    # ensures they sit near the attention edge where the model's recall
+    # is strongest (U-shaped attention curve).
+    dynamic_sections: list[str] = []
+
+    if memory_context:
+        dynamic_sections.append(memory_context)
+
+    if pending_messages:
+        dynamic_sections.append(pending_messages)
+
+    all_sections = stable_sections + dynamic_sections
+    return "\n\n".join(all_sections)
 
 
 # =============================================================================
