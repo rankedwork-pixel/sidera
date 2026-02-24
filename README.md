@@ -1,279 +1,360 @@
-# Sidera — AI Agent Framework
+<p align="center">
+  <h1 align="center">Sidera</h1>
+  <p align="center"><strong>The open-source framework for building AI employees</strong></p>
+  <p align="center">
+    Connect APIs &middot; Teach skills via YAML &middot; Approve actions in Slack &middot; Automate any role
+  </p>
+  <p align="center">
+    <a href="#quickstart">Quickstart</a> &middot;
+    <a href="docs/onboarding/01-Executive-Overview.md">Docs</a> &middot;
+    <a href="#architecture">Architecture</a> &middot;
+    <a href="QUICKSTART.md">Full Setup Guide</a>
+  </p>
+</p>
 
-> Connect APIs. Teach skills. Approve actions. Automate any role.
+---
 
-Sidera is a framework for building **AI employees** — autonomous agents that connect to external systems, analyze data on a schedule, recommend actions, and execute with human approval via Slack.
+Sidera lets you build **autonomous AI agents** that connect to your company's tools, analyze data on a schedule, recommend actions via Slack, and execute with human approval. Think of it as the operating system for an AI workforce.
 
-The pattern is domain-agnostic: connect data sources, teach the agent via YAML skills (with examples, context, and guidelines), get structured briefings in Slack with approve/reject buttons, and log every action. Swap the connectors and skills, and Sidera becomes a different employee.
+The core pattern is domain-agnostic: connect any data source, teach skills via YAML, get structured Slack briefings with approve/reject buttons, and log every action. Swap the connectors and skills, and Sidera becomes a different employee.
+
+## Why Sidera
+
+Enterprise AI agent platforms charge six figures and lock you into their ecosystem. Sidera gives you the same capabilities for **~$0.50/day per role** in API costs:
+
+| | Sidera | Enterprise Platforms |
+|---|---|---|
+| **Cost** | ~$0.50/day per role (API costs only) | $100K+/year SaaS contracts |
+| **Models** | Any model (Claude, GPT, Llama, Gemini) | Locked to vendor |
+| **Customization** | Full source code, YAML skills | Config UI, limited |
+| **Data** | Self-hosted, your infrastructure | Vendor cloud |
+| **Skills** | Write YAML, drop in a folder | Vendor-defined templates |
+| **Approval flow** | Built-in Slack buttons | Varies |
+
+**You own everything.** The code, the data, the skills, the deployment.
+
+## What It Does
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        YOUR COMPANY                              │
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│  │ Google   │  │  Meta    │  │ BigQuery │  │  Slack   │        │
+│  │   Ads    │  │   Ads    │  │ (backend)│  │          │        │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘        │
+│       │              │              │              │              │
+│       └──────────────┴──────────────┴──────┐       │              │
+│                                            │       │              │
+│                    ┌───────────────────┐    │       │              │
+│                    │                   │◄───┘       │              │
+│                    │   Sidera Agent    │            │              │
+│                    │    (Claude)       │───────────►│              │
+│                    │                   │  Briefings │              │
+│                    └────────┬──────────┘  + Approve │              │
+│                             │             / Reject  │              │
+│                    ┌────────▼──────────┐  Buttons   │              │
+│                    │   PostgreSQL +    │            │              │
+│                    │     Redis         │            │              │
+│                    └──────────────────┘            │              │
+│                      Audit log, memory,            │              │
+│                      approvals, skills             │              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Every morning, your AI employees:**
+1. Pull data from connected APIs
+2. Analyze performance against your goals
+3. Post a briefing to Slack with recommendations
+4. Wait for you to approve or reject each action
+5. Execute approved actions and log everything
+
+**Throughout the day, you can:**
+- `@Sidera talk to the media buyer` — chat with any role in a Slack thread
+- `/sidera run anomaly_detector` — trigger any skill on demand
+- Approve actions from your phone — Slack buttons work everywhere
+
+## Core Features
+
+### Skill System — YAML-Defined Intelligence
+
+Skills are how you teach agents. No code required — just YAML:
+
+```yaml
+# src/skills/library/marketing/performance_media_buyer/anomaly_detector.yaml
+name: Anomaly Detector
+category: analysis
+model: sonnet
+schedule: "0 7 * * 1-5"  # 7 AM weekdays
+
+system_supplement: |
+  MANDATORY ANALYSIS SEQUENCE:
+  1. Pull 30 days of data from Google Ads AND Meta
+  2. Compute baselines for all KPIs (CPA, ROAS, CTR, CPC, CPM, CVR, spend, conversions)
+  3. Flag anything beyond 2 standard deviations
+  4. Cross-reference against backend BigQuery data
+  5. Rank anomalies by financial impact
+
+business_guidance: |
+  HARD RULES:
+  - Backend data ALWAYS overrides platform-reported metrics
+  - Never recommend pausing a campaign based on a single day
+  - Always check day-of-week patterns before flagging
+```
+
+Three-level hierarchy with context inheritance:
+
+```
+Department (Marketing)
+  └── vocabulary, shared context
+       └── Role (Performance Media Buyer)
+            └── persona, principles, goals, memory
+                 └── Skill (Anomaly Detector)
+                      └── specific instructions, schedule, model
+```
+
+Context flows down. A skill inherits everything above it.
+
+### Human-in-the-Loop — Three Trust Tiers
+
+| Tier | How It Works | Example |
+|------|-------------|---------|
+| **Tier 1: Read-Only** | Agent reads data, reports findings. No write actions. | Daily briefings, anomaly reports |
+| **Tier 2: Auto-Execute** | Pre-approved rules for low-risk, repetitive actions. Caps, cooldowns, kill switch. | Pause campaigns with CPA > 3x target |
+| **Tier 3: Manual Approval** | Every action gets an Approve/Reject button in Slack. | Budget changes, bid strategy updates |
+
+Auto-execute is **off by default**. When enabled, every rule has daily caps, cooldown periods, and a global kill switch. All actions are logged to an immutable audit trail.
+
+### Manager Roles — AI That Delegates
+
+Manager roles run their own analysis, then decide which sub-roles to activate:
+
+```
+Head of Marketing (Manager)
+  ├── runs executive_summary skill
+  ├── LLM decides: "activate media buyer + analyst today"
+  ├── Media Buyer runs anomaly_detector, creative_analysis
+  ├── Reporting Analyst runs weekly_report
+  └── Manager synthesizes everything into one unified briefing
+```
+
+Recursive managers supported (CEO manages department heads who manage individual contributors).
+
+### Persistent Memory — Agents That Learn
+
+Eight memory types, tiered hot/cold architecture:
+
+| Type | What It Stores | Example |
+|------|---------------|---------|
+| **Decision** | Past approval outcomes | "Budget increase for Campaign X was approved and improved ROAS by 15%" |
+| **Anomaly** | Detected spikes/drops | "Meta CPM spike on Black Friday — seasonal, not a problem" |
+| **Lesson** | Mistakes and learnings | "Don't recommend pausing branded campaigns during sales events" |
+| **Commitment** | Promises made in conversation | "I said I'd investigate the CTR drop tomorrow" |
+| **Steward Note** | Human-injected guidance | "Always prioritize Campaign X — it's the CEO's pet project" |
+
+Hot memories (last 90 days) are auto-injected into every agent run. Cold memories are searchable. Agents learn from every execution.
+
+### Conversational Mode — Talk to Any Role
+
+Every role is both autonomous (scheduled) and conversational (Slack threads):
+
+```
+You:     @Sidera talk to the media buyer
+Sidera:  Hey! I'm the Performance Media Buyer. I've been monitoring your
+         campaigns — what would you like to dig into?
+
+You:     What's going on with the Meta CPM spike this week?
+Sidera:  [pulls data, analyzes, responds in character with findings]
+
+You:     Can you pause the underperforming ad sets?
+Sidera:  I'd recommend pausing these 3 ad sets:
+         [Approve] [Reject]  ← buttons appear in-thread
+```
+
+Write operations work in conversations — the agent proposes actions, you approve or reject inline.
 
 ## Built-In Connectors
 
-Sidera ships with 8 connectors ready to use out of the box:
+| Connector | Read Methods | Write Methods | What It Does |
+|-----------|-------------|---------------|-------------|
+| **Google Ads** | 7 | 6 | Campaigns, keywords, budgets, bids, schedules |
+| **Meta Ads** | 7 | 6 | Campaigns, ad sets, ads, budgets, targeting |
+| **BigQuery** | 7 | — | Backend source of truth (revenue, orders, attribution) |
+| **Google Drive** | 13 | — | Docs, Sheets, Slides creation and management |
+| **Slack** | 19 | — | Briefings, approvals, conversations, reactions |
+| **Recall.ai** | 5 | — | Meeting transcript capture (Google Meet, Zoom) |
+| **SSH** | 7 | — | Remote server execution with safety filter |
+| **Computer Use** | 3 | — | Desktop automation via Anthropic Computer Use |
 
-- Google Ads (7 read + 6 write methods)
-- Meta Marketing API (7 read + 6 write methods)
-- BigQuery for backend business data
-- Google Drive (Docs, Sheets, Slides)
-- Slack (notifications, approvals, conversations)
-- Recall.ai (meeting transcript capture)
-- SSH (remote server execution with command safety filter)
-- Computer Use (Anthropic desktop automation via Docker containers)
-
-11 example skills across 3 departments demonstrate the skill system. Add your own connectors and skills for any domain — customer support, engineering management, e-commerce, finance, or anything with APIs and decisions.
-
-## Framework Capabilities
-
-### Core Agent Loop
-- **Multi-source data analysis** — Connect any API, pull data on a schedule or on-demand, cross-reference across sources
-- **Scheduled Slack briefings** — Automated reports with actionable insights and interactive approve/reject buttons
-- **Three-phase model routing** — Haiku collects data (~$0.02), Sonnet analyzes (~$0.15), Opus adds strategy (~$0.35). ~$0.50/day per account
-- **Full audit trail** — Every agent action logged for compliance and debugging
-- **Cost controls** — Circuit breakers ($10/day LLM cap, 20 tool calls/cycle)
-
-### Conversational Mode
-- **Talk to any role** in a Slack thread (`@Sidera talk to the analyst`). The agent stays in character, uses tools, and can propose write operations with in-thread Approve/Reject buttons
-- **Write operations in conversations** — Agent generates action proposals → Approve/Reject buttons appear in-thread → approved actions execute and post results back
-- **Slash command** — `/sidera run <skill_id>`, `/sidera run manager:<role_id>`, `/sidera chat <role_id>`, or describe what you need in natural language
-
-### Skill System
-- **YAML-defined skills** (flat files or rich folders with examples/context/guidelines) with Haiku-powered semantic routing
-- **Three-level hierarchy** — Department → Role → Skill. Context flows down: department context → role persona → skill instructions
-- **Manager roles** — Hierarchical delegation: a manager role runs its own analysis, decides which sub-roles to activate via LLM, runs them, and synthesizes everything into a unified report
-- **Skill evolution** — Agents propose improvements to their own skill definitions. Changes go through human approval with diff view in Slack
-- **Dynamic org chart** — Add, update, or remove departments, roles, and skills at runtime via Slack commands or REST API. No code changes or restarts needed
-
-### Claude Code Integration
-- **Approval-gated Claude Code tasks** — Agents propose Claude Code task execution for complex, multi-step work (file editing, bash commands, multi-turn investigation). Proposals show in Slack with task preview (skill, prompt, budget, permission mode) and Approve/Reject buttons
-- **Graduated trust** — Auto-execute rules for trusted Claude Code patterns (e.g., health checks under $5 with file-edit permissions). Hard safety blocks: `bypassPermissions` always requires human approval, budget over $10 always requires human approval
-- **Skill-based execution** — Claude Code tasks map to skills in the registry, inheriting their system prompts, context, and constraints
-
-### Safety & Trust
-- **Human-in-the-loop** — Every write action requires explicit human approval. Read everything, change nothing without permission
-- **Graduated trust** — Define auto-execute rules per role for low-risk, repetitive actions. Global kill switch, daily caps, cooldowns
-- **Persistent role memory** — Agents remember past decisions, anomalies, and patterns. Hot memories auto-injected into context; cold archive searchable via Slack
-- **Post-run reflection** — Haiku call after each role run captures insights and lessons as memories. Agents learn from every execution
-- **Information security** — Clearance levels (PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED) on users and skills, role-scoped agent-to-agent filtering
-
-### Listen-Only Meetings
-- **Meeting participation** — Manager roles join live video calls (Google Meet, Zoom) as listen-only participants via Recall.ai bot
-- **Transcript capture** — Real-time transcript via webhooks. Post-call: transcript summary → action item extraction → manager delegation
-
-### Infrastructure Control
-- **SSH remote execution** — Agents can SSH into servers to run commands, read logs, check system health, and diagnose issues. 20+ blocked command patterns prevent destructive operations (rm -rf, shutdown, etc.)
-- **Desktop automation** — Via Anthropic Computer Use, agents control isolated Docker desktops with mouse/keyboard. Full screenshot-action-screenshot loop for anything that needs a GUI (dashboards, legacy tools, report downloads)
-
-### Agent Collaboration
-- **Peer-to-peer messaging** — Roles send asynchronous messages to each other without manager mediation. Anti-loop protection (max 3 per run, max 5 chain depth)
-- **Agent-to-agent learning** — Structured knowledge transfer between roles via learning channels with confidence thresholds
-- **Proactive heartbeats** — Roles wake up on configurable cron schedules and freely investigate their domain
-- **Google Drive integration** — Auto-generate reports in Docs, Sheets, and Slides
+Adding a new connector: copy the template from `src/templates/`, implement your methods, register MCP tools. The agent loop, approval flow, and audit trail stay identical.
 
 ## What You Can Build
 
-| Domain | Connectors | Example Skills |
-|--------|-----------|---------------|
-| **Customer Support Ops** | Zendesk, Stripe, product DB | Ticket triage, churn risk detection, refund recommendations |
-| **Engineering Management** | GitHub, Jira, PagerDuty, Datadog | Sprint health, incident postmortem, tech debt prioritization |
-| **E-Commerce Ops** | Shopify, inventory system, shipping API | Reorder alerts, return analysis, demand forecasting |
-| **Finance / Accounting** | QuickBooks, Stripe, bank API | Cash flow monitor, invoice follow-up, anomaly detection |
-| **Digital Marketing** | Google Ads, Meta, BigQuery | Creative analysis, budget reallocation, pacing monitor |
+| Domain | Connectors You'd Add | Example Skills |
+|--------|---------------------|---------------|
+| **Customer Support** | Zendesk, Stripe, product DB | Ticket triage, churn risk, refund recommendations |
+| **Engineering** | GitHub, Jira, PagerDuty, Datadog | Sprint health, incident postmortem, tech debt prioritization |
+| **E-Commerce** | Shopify, inventory, shipping API | Reorder alerts, return analysis, demand forecasting |
+| **Finance** | QuickBooks, Stripe, bank API | Cash flow monitor, invoice follow-up, anomaly detection |
+| **HR / Recruiting** | Greenhouse, Lever, HRIS | Pipeline health, interview scheduling, offer analysis |
 
-Each new domain = new connectors + new skills. The agent loop, Slack interaction, approval queue, audit trail, cron scheduling, cost controls, encryption, and error handling stay identical.
+Each domain = new connectors + new YAML skills. Everything else stays the same.
 
 ## Architecture
 
 ```
-                          ┌──────────────┐
-┌─────────────┐           │              │           ┌─────────────┐
-│ Data Source  │──────────▶│   Sidera     │──────────▶│    Slack     │
-│   APIs       │           │   Agent      │           │  Briefing +  │
-│ (any domain) │           │  (Claude)    │           │  Approvals   │
-└─────────────┘           │              │           └─────────────┘
-                          └──────┬───────┘
-┌─────────────┐                 │              ┌─────────────┐
-│  Backend DB  │──────────▶     │         ────▶│ Google Drive │
-│ (source of   │          ┌──────▼───────┐     │ Docs/Sheets  │
-│   truth)     │          │  PostgreSQL   │     └─────────────┘
-└─────────────┘           │  + Redis      │
-                          └──────────────┘
+src/
+  agent/        Core AI agent loop, prompts, three-phase model routing
+  skills/       YAML skill definitions, registry, router, executor, auto-execute rules
+  connectors/   API clients (8 connectors + retry utility)
+  mcp_servers/  74 MCP tools the agent can use
+  workflows/    18 Inngest durable workflows (cron, approval, execution)
+  db/           Async SQLAlchemy + 115-method CRUD service
+  api/          FastAPI app, OAuth routes, webhooks, Slack commands
+  cache/        Redis caching with @cached decorator
+  middleware/   Sentry, rate limiting, auth, RBAC
+  mcp_stdio/    MCP server for Claude Code integration
+  meetings/     Listen-only meeting participation
+  templates/    Templates for adding new connectors and tools
+dashboard/      Streamlit admin UI (6 pages)
+tests/          4221+ unit and integration tests
+alembic/        29 database migrations
 ```
 
-**Built-in connectors:** Google Ads, Meta, BigQuery, Google Drive, Slack, Recall.ai, SSH, Computer Use (8 total)
-**Adding new connectors:** Copy templates from `src/templates/`, implement read/write methods, register MCP tools.
+**Stack:** Python 3.13 &middot; FastAPI &middot; Anthropic API &middot; Inngest &middot; PostgreSQL &middot; Redis &middot; Slack Bolt &middot; SQLAlchemy
 
-**Stack:** Python 3.13 · FastAPI · Anthropic API · Inngest · SQLAlchemy · Slack Bolt · asyncssh · Streamlit
+**Model Routing:** Haiku ($0.02) collects data &rarr; Sonnet ($0.15) analyzes &rarr; Opus ($0.35) adds strategy. Total ~$0.50/day per role. Opus auto-skips on stable days.
 
-## Quick Start
+### The Agent Loop
 
-### Prerequisites
-- Python 3.12+
-- PostgreSQL (or use Docker Compose)
-- Redis (or use Docker Compose)
+```
+Cron Trigger (configurable)
+    │
+    ▼
+Phase 1: Data Collection (Haiku — fast, cheap)
+    │   Pull from Google Ads, Meta, BigQuery via MCP tools
+    │
+    ▼
+Phase 2: Analysis (Sonnet — accurate, efficient)
+    │   Cross-reference platforms against backend truth
+    │   Flag anomalies, compute trends, rank by impact
+    │
+    ▼
+Phase 3: Strategy (Opus — deep reasoning, optional)
+    │   Strategic recommendations, goal attainment, forecasting
+    │   Skipped automatically on stable/low-volatility days
+    │
+    ▼
+Slack Briefing
+    │   Formatted report + [Approve] / [Reject] per recommendation
+    │
+    ▼
+Human Decision
+    │
+    ├── Approve → Execute via connector → Audit log
+    └── Reject  → Log reason → Agent learns for next time
+```
 
-### Setup
+### Safety
+
+- **50% budget cap** — no single write operation can change a budget by more than 50%
+- **Double-execution prevention** — approved actions can only execute once
+- **Circuit breakers** — 20 tool calls per cycle, $10/day LLM cost cap per account
+- **Clearance levels** — PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED on users and skills
+- **Immutable audit trail** — every agent action logged with timestamps, costs, and steward attribution
+- **Stewardship** — every AI role has a designated human accountable for its behavior
+
+## Quickstart
+
+### Option A: Docker Compose (recommended)
 
 ```bash
-# Clone and enter project
-git clone https://github.com/your-org/sidera.git
+git clone https://github.com/mzola/sidera.git
 cd sidera
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -e ".[dev,dashboard]"
-
-# Copy environment config
+# Configure
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env — minimum: ANTHROPIC_API_KEY
 
-# Set up database
-python -m scripts.create_tables
-
-# (Optional) Seed sample data
-python -m scripts.seed_test_data
-```
-
-### Run with Docker Compose
-
-```bash
+# Start everything
 docker compose up -d
 ```
 
-This starts: API server (port 8000), PostgreSQL, Redis, Streamlit dashboard (port 8501), and Inngest dev server (port 8288).
+This starts: API server (`:8000`), PostgreSQL, Redis, Streamlit dashboard (`:8501`), Inngest dev server (`:8288`).
 
-### Run Locally
-
-```bash
-# Start the API server
-uvicorn src.api.app:app --reload --port 8000
-
-# Start the Streamlit dashboard (separate terminal)
-streamlit run dashboard/app.py
-
-# Start Inngest dev server (separate terminal)
-npx inngest-cli@latest dev
-```
-
-## Running Tests
+### Option B: Local Development
 
 ```bash
-# Full test suite
-make test
+git clone https://github.com/mzola/sidera.git
+cd sidera
 
-# Lint + format
-make lint
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,dashboard]"
 
-# Sync doc counts with codebase
-make sync-docs
+cp .env.example .env
+# Edit .env with your API keys
 
-# All of the above
-make cleanup
+# Run database migrations
+alembic upgrade head
+
+# Start (3 terminals)
+make dev                          # API server
+make dashboard                    # Streamlit UI
+npx inngest-cli@latest dev        # Workflow engine
 ```
 
-## Project Structure
-
-```
-src/
-  agent/        — Core AI agent loop, prompts, three-phase model routing
-  skills/       — YAML skill definitions, registry, router, executor, manager executor, auto-execute rules
-  api/          — FastAPI app, OAuth routes, webhooks, /sidera command, org chart REST API
-  cache/        — Redis caching layer with @cached decorator
-  claude_code/  — Claude Code headless executor, task manager, concurrency control
-  connectors/   — API clients (8 connectors + retry utility — extensible)
-  db/           — Async SQLAlchemy session + 115-method CRUD service
-  meetings/     — Listen-only meeting session manager, transcript capture
-  middleware/   — Sentry, rate limiting, structured request logging, API auth, RBAC
-  mcp_servers/  — MCP tools for the Claude agent (74 tools — extensible)
-  mcp_stdio/    — MCP stdio server for Claude Code (bridge, meta-tools)
-  models/       — Database schema, cross-platform metric normalization
-  workflows/    — Inngest durable functions (18 workflows)
-  templates/    — Templates for adding new connectors, MCP tools, and OAuth routes
-dashboard/      — Streamlit MVP (6 pages)
-scripts/        — Operational scripts (seed, health check, cache, audit, doc sync)
-tests/          — 4221+ unit and integration tests
-alembic/        — Database migrations (29 revisions)
-```
+See **[QUICKSTART.md](QUICKSTART.md)** for the complete setup guide including Slack app creation, OAuth configuration, and your first briefing.
 
 ## Configuration
 
-All configuration is via environment variables. See [`.env.example`](.env.example) for the full list.
+All configuration via environment variables. See [`.env.example`](.env.example) for the full list with inline documentation.
 
-Key settings:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | Claude API key |
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `SLACK_BOT_TOKEN` | Yes | Slack app bot token |
-| `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | Google Ads API access |
-| `META_APP_ID` | For Meta | Meta Marketing API access |
-| `BIGQUERY_PROJECT_ID` | For backend data | BigQuery source of truth |
-| `REDIS_URL` | Recommended | Upstash Redis for caching |
-| `SSH_ENABLED` | For SSH | Enable remote server execution (default OFF) |
-| `SSH_HOST` | For SSH | SSH server hostname |
-| `COMPUTER_USE_ENABLED` | For Computer Use | Enable desktop automation (default OFF) |
-| `CLAUDE_CODE_ENABLED` | For Claude Code | Enable Claude Code task execution |
+| `SLACK_BOT_TOKEN` | For Slack | Slack app bot token |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | For Google Ads | API access token |
+| `META_APP_ID` | For Meta | Marketing API access |
+| `BIGQUERY_PROJECT_ID` | For BigQuery | Backend data source |
+| `REDIS_URL` | Recommended | Caching (gracefully degrades without) |
 
-## How It Works
+## Development
 
-1. **Scheduled Cron (configurable):** Inngest triggers a workflow (e.g., daily briefing at 7 AM weekdays)
-2. **Data Pull:** Agent fetches data from connected sources via MCP tools
-3. **Analysis:** Claude analyzes data against configured goals and thresholds
-4. **Briefing:** Formatted report sent to your Slack channel (optionally saved to Google Drive)
-5. **Approval Flow:** Each recommendation gets an interactive approve/reject button
-6. **Execution:** Approved actions are executed against the source APIs and logged
-
-### Skill System
-
-Skills are the core extensibility mechanism. Each skill is a YAML file (or folder with examples/context/guidelines) that teaches the agent how to perform a specific task:
-
-```
-/sidera analyze my Meta creatives     → routes to creative_analysis skill
-/sidera run budget_reallocation       → runs budget optimization directly
-/sidera list                          → shows all available skills
+```bash
+make lint          # Lint with ruff
+make test          # Run 4200+ tests
+make sync-docs     # Verify doc counts match codebase
+make cleanup       # All of the above
 ```
 
-Add new skills without writing code — just drop YAML in `src/skills/library/`.
-
-### Claude Code Tasks
-
-For complex multi-step work, agents can propose Claude Code task execution:
-
-```
-User: "Use claude code to run a system health check"
-  → Agent calls propose_claude_code_task(skill_id, prompt, budget, ...)
-  → Slack shows Approve/Reject with task preview
-  → On Approve: Claude Code executes the task
-  → Result posted back to the Slack thread
-```
-
-Safety: hard blocks on `bypassPermissions` and budgets over $10. Auto-execute rules available for trusted patterns.
-
-### Adding a New Domain
-
-1. **Create connectors** — Copy `src/templates/connector_template.py`, implement read/write methods for your APIs
-2. **Create MCP tools** — Copy `src/templates/mcp_server_template.py`, expose connector methods as agent tools
-3. **Create skills** — Write YAML skill definitions for the domain's tasks
-4. **Configure** — Add environment variables for API credentials
-5. **Deploy** — Same infrastructure, new capabilities
-
-See the [Adding a Channel Guide](docs/adding-a-channel.md) for a detailed walkthrough.
+Pre-commit hooks available: `make pre-commit`
 
 ## By the Numbers
 
 | Metric | Count |
 |--------|-------|
-| Unit + integration tests | 4,221+ |
+| Tests | 4221+ |
 | MCP tools | 74 |
 | DB service methods | 115 |
 | Inngest workflows | 18 |
-| Alembic migrations | 29 |
-| API connectors | 8 |
-| YAML skills | 11 |
+| Database migrations | 29 |
+| Connectors | 8 |
+| YAML skills | 11 (examples — add your own) |
 | Departments | 3 |
 | Agent roles | 7 |
 
+## Contributing
+
+Contributions welcome. The fastest ways to contribute:
+
+1. **Add a connector** — Copy `src/templates/connector_template.py`, implement read/write methods for a new API
+2. **Add skills** — Write YAML skill definitions for new domains
+3. **Improve existing skills** — The 11 example skills are starting points, not finished products
+4. **Report bugs** — Open an issue with reproduction steps
+
+See [Adding a Channel Guide](docs/adding-a-channel.md) for a detailed walkthrough of adding new connectors.
+
 ## License
 
-MIT
+MIT — do whatever you want with it.
