@@ -1,5 +1,7 @@
 # Getting Started: Deployment & Next Steps
 
+> For a step-by-step walkthrough, see the **[QUICKSTART.md](../../QUICKSTART.md)** guide in the project root.
+
 ## What's Needed to Deploy
 
 ### API Keys & Accounts
@@ -15,11 +17,14 @@
 | **Railway** | Account | Hosting |
 | **Recall.ai** (optional) | API key | Meeting transcript capture |
 
+Only Anthropic and a database are truly required. Everything else is optional — Sidera degrades gracefully.
+
 ### Infrastructure
 - **Railway** for hosting (FastAPI + Inngest worker)
 - **Supabase** for PostgreSQL (free tier works for testing)
 - **Upstash** for Redis (free tier works for testing)
 - **Inngest** for workflow orchestration (free tier: 25K events/month)
+- Or use **Docker Compose** for everything locally
 
 ---
 
@@ -27,47 +32,59 @@
 
 ### 1. Clone & Configure
 ```bash
-git clone <repo>
+git clone https://github.com/mzola/sidera.git
+cd sidera
 cp .env.example .env
-# Fill in API keys
+# Fill in API keys — see .env.example for inline docs
 ```
 
-### 2. Database Setup
+### 2. Start Infrastructure
 ```bash
-# Run migrations
+# Option A: Docker Compose (recommended)
+docker compose up -d
+
+# Option B: Local development
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,dashboard]"
+make dev                          # API server (terminal 1)
+make dashboard                    # Streamlit UI (terminal 2)
+npx inngest-cli@latest dev        # Workflow engine (terminal 3)
+```
+
+### 3. Database Setup
+```bash
+# Run migrations (29 revisions)
 alembic upgrade head
 
 # Seed initial data (optional)
-python scripts/seed_data.py
-```
-
-### 3. Deploy to Railway
-```bash
-# Railway will use the existing Dockerfile + railway.toml
-railway up
+python -m scripts.seed_test_data
 ```
 
 ### 4. Configure Slack
-1. Create Slack app at api.slack.com/apps
-2. Enable Event Subscriptions → point to `https://your-domain/slack/events`
-3. Enable Interactivity → same URL
-4. Add slash command `/sidera` → same URL
-5. Install app to workspace
-6. Invite bot to relevant channels
+1. Create Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Add bot scopes: `chat:write`, `chat:write.public`, `reactions:write`, `reactions:read`, `users:read`, `conversations:read`, `conversations:history`, `commands`, `app_mentions:read`
+3. Enable Event Subscriptions → point to `https://your-domain/slack/events`
+4. Subscribe to bot events: `app_mention`, `message.channels`, `message.groups`, `message.im`
+5. Enable Interactivity → same URL
+6. Add slash command `/sidera` → same URL
+7. Install app to workspace
+8. Invite bot to relevant channels
+
+For local development, use ngrok: `ngrok http 8000`
 
 ### 5. Connect Platforms
-- **Google Ads:** Navigate to `/api/oauth/google-ads/authorize` → complete OAuth flow
-- **Meta:** Navigate to `/api/oauth/meta/authorize` → complete OAuth flow
-- **Google Drive:** Navigate to `/api/oauth/google-drive/authorize` → complete OAuth flow
-- **BigQuery:** Upload service account JSON via config
+- **Google Ads:** Navigate to `/oauth/google-ads/authorize` → complete OAuth flow
+- **Meta:** Navigate to `/oauth/meta/authorize` → complete OAuth flow
+- **Google Drive:** Navigate to `/oauth/google-drive/authorize` → complete OAuth flow
+- **BigQuery:** Set `BIGQUERY_CREDENTIALS_JSON` in `.env` with service account JSON
 
 ### 6. Verify
 ```bash
 # Health check
-curl https://your-domain/health
+curl http://localhost:8000/health
 
 # Test Slack
-/sidera list roles
+/sidera list
 
 # Test a role
 /sidera run role:head_of_it
@@ -95,7 +112,6 @@ Skills are YAML files. To add a new skill:
 
 ```yaml
 # src/skills/library/marketing/performance_media_buyer/new_skill.yaml
-id: new_skill
 name: "New Skill Name"
 version: "1.0"
 description: "What this skill does"
@@ -108,20 +124,32 @@ tools_required:
 model: sonnet
 max_turns: 10
 system_supplement: |
-  Detailed instructions for the agent...
+  MANDATORY ANALYSIS SEQUENCE:
+  1. FIRST, pull data from [source] using [tool]
+  2. THEN compute [metrics]
+  3. Cross-reference against backend data — NEVER skip this step
+
+  HARD RULES:
+  - MUST show actual numbers, not vague descriptions
+  - MUST flag anything deviating more than 20%
+  - NEVER recommend actions without supporting data
 prompt_template: |
   What to do this run. Date: {analysis_date}
   Accounts: {accounts_block}
 output_format: |
   How to structure the output...
 business_guidance: |
-  Domain-specific rules and guardrails...
+  HARD RULES:
+  - Backend data overrides platform-reported metrics
+  - Always provide week-over-week context
 requires_approval: true
 ```
 
 Then add it to the role's `briefing_skills` list in `_role.yaml`.
 
 No code changes required. The registry auto-discovers new YAML files.
+
+Or use the Skill Creator wizard: `/sidera chat skill_creator I need a new skill for budget pacing`
 
 ---
 
@@ -132,7 +160,6 @@ For a completely new domain (e.g., Finance, Customer Success):
 ### 1. Create department YAML
 ```yaml
 # src/skills/library/finance/_department.yaml
-id: finance
 name: "Finance Department"
 description: "Manages financial reporting, forecasting, and compliance"
 context: |
@@ -147,16 +174,16 @@ vocabulary:
 ### 2. Create role YAML
 ```yaml
 # src/skills/library/finance/controller/_role.yaml
-id: controller
 name: "Financial Controller"
-department_id: finance
 description: "Monitors cash flow, expenses, and financial compliance"
 persona: |
   You are a financial controller...
 principles:
   - "Conservative estimates over optimistic projections"
-connectors:
-  - bigquery  # or new connectors: stripe, quickbooks
+  - "Flag variances exceeding 10% immediately"
+goals:
+  - "Maintain cash runway above 6 months"
+  - "Keep expense-to-revenue ratio below 70%"
 briefing_skills:
   - cash_flow_report
 ```
@@ -169,7 +196,7 @@ New data sources need a connector in `src/connectors/`. Use `src/templates/conne
 - Token encryption
 
 ### 4. Add MCP tools
-Each connector needs corresponding MCP tools in `src/mcp_servers/`. Use `src/templates/mcp_template.py`.
+Each connector needs corresponding MCP tools in `src/mcp_servers/`. Use `src/templates/mcp_server_template.py`.
 
 ---
 
@@ -184,43 +211,50 @@ Each connector needs corresponding MCP tools in `src/mcp_servers/`. Use `src/tem
 | `/sidera run role:media_buyer` | Run media buyer's skills |
 | `/sidera run manager:head_of_marketing` | Run full manager pipeline |
 | `/sidera run dept:marketing` | Run entire department |
+| `/sidera run skill_id` | Run a specific skill |
 | `/sidera chat media_buyer` | Start conversation with media buyer |
+| `/sidera chat skill_creator` | Start skill creation wizard |
 | `/sidera meeting join <url>` | Join a meeting (listen-only) |
 | `/sidera meeting status` | Check active meetings |
 | `/sidera org list` | Show dynamic org chart |
 | `/sidera org add-role ...` | Add a role via DB |
 | `/sidera steward list` | Show stewardship assignments |
 | `/sidera steward assign <role> @user` | Assign a steward |
+| `/sidera steward note <role> <text>` | Inject steward guidance into role memory |
 | `@Sidera talk to the media buyer` | Start conversational thread |
 | `@Sidera hey head of IT, something broke` | Direct role conversation |
 
 ---
 
+## Development Workflow
+
+After making changes, always run the cleanup pipeline:
+
+```bash
+make lint          # Lint with ruff
+make test          # Run 4221+ tests
+make sync-docs     # Verify doc counts match codebase
+make cleanup       # All of the above
+```
+
+Pre-commit hooks: `make pre-commit`
+
+---
+
 ## What's Next
 
-### Immediate (E2E Testing)
-- [ ] Verify Meta connector with live API keys
-- [ ] Test full approval → execution flow (approve in Slack → action taken)
+### Immediate
+- [ ] Complete E2E testing (Meta live, full approval → execution flow)
+- [ ] Deploy to Railway with production Slack app
 - [ ] Run complete daily briefing cycle end-to-end
-- [ ] Test manager delegation (Head of Marketing → sub-roles → synthesis)
-- [ ] Verify webhook event reactor with simulated alerts
 
-### Short-Term (Production Readiness)
-- [ ] Deploy to Railway
-- [ ] Configure production Slack app (no ngrok)
-- [ ] Set up monitoring dashboards (Sentry, cost tracking)
-- [ ] Onboard first real company via bootstrap pipeline
+### Short-Term
 - [ ] Build out skill library to 50+ skills
-
-### Medium-Term (Scale)
+- [ ] Onboard first real company via bootstrap pipeline
 - [ ] Add connectors for additional platforms (Stripe, Salesforce, HubSpot)
+
+### Medium-Term
 - [ ] Build new departments (Finance, Customer Success, Operations)
 - [ ] Scale to 100+ skills across 10+ departments
-- [ ] Enable hybrid model routing for cost optimization
 - [ ] Skill marketplace for cross-company sharing
-
-### Long-Term (Vision)
-- [ ] Self-improving skill library (agents propose and refine their own skills)
-- [ ] Cross-company benchmarking (anonymized performance comparisons)
-- [ ] Industry-specific skill packs (DTC e-commerce, SaaS, fintech)
 - [ ] Visual workflow builder (no-YAML skill creation)

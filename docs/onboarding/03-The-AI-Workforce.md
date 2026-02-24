@@ -11,15 +11,17 @@
                   ▼                     ▼
          ┌────────────────┐    ┌──────────────┐
          │ Head of Mktg   │    │  Head of IT  │
-         │ manages: 3     │    │  manages: 0  │
-         └───────┬────────┘    └──────────────┘
-       ┌─────────┼─────────┐
-       ▼         ▼         ▼
-  ┌──────────┐ ┌────────┐ ┌───────────┐
-  │ Media    │ │Analyst │ │Strategist │
-  │ Buyer    │ │        │ │           │
-  └──────────┘ └────────┘ └───────────┘
+         │ manages: 3     │    │  manages: 1  │
+         └───────┬────────┘    └──────┬───────┘
+       ┌─────────┼─────────┐         │
+       ▼         ▼         ▼         ▼
+  ┌──────────┐ ┌────────┐ ┌───────────┐ ┌──────────────┐
+  │ Media    │ │Analyst │ │Strategist │ │Skill Creator │
+  │ Buyer    │ │        │ │           │ │  (wizard)    │
+  └──────────┘ └────────┘ └───────────┘ └──────────────┘
 ```
+
+**3 departments, 7 roles, 11 skills.** These are examples — add your own departments, roles, and skills for any domain.
 
 ---
 
@@ -37,6 +39,8 @@
 - "Systems thinking first — every issue has upstream causes and downstream effects"
 - "Stale approvals are a leadership failure"
 - "Silence from a department is not the same as health"
+
+**org_health_check skill:** 7 mandatory checks (system health, failed runs, approval queue, cost summary, audit events, webhook events, inbox). Severity rules with hard thresholds. Healthy = 3-4 lines; issues need severity + component + delegation target. Priority: revenue-impacting > operational > cost.
 
 ---
 
@@ -64,6 +68,8 @@
 3. Activated sub-roles execute with full persona + tools
 4. Synthesizes unified output with cross-channel insights
 
+**executive_summary skill:** Mandatory data pulls from all platforms. 200-400 word limit. 5 required sections (total spend, blended CPA/ROAS, budget pacing, anomalies, goal attainment). No campaign deep-dives — that's the Media Buyer's job.
+
 ---
 
 ### Performance Media Buyer
@@ -79,9 +85,9 @@
 
 | Skill | Model | Max Turns | What It Does |
 |-------|-------|-----------|-------------|
-| **anomaly_detector** | Sonnet | 15 | Statistical anomaly detection across all campaigns. Pulls 30 days of data, computes rolling baselines, flags 1.5σ/2σ/3σ deviations on CPA, ROAS, CTR, CPC, CPM, spend, conversion volume. Drills into root cause (bid changes, creative fatigue, competitive pressure, landing page issues). Cross-references platform vs backend data. |
-| **creative_analysis** | Sonnet | 10 | Analyzes ad creative performance across platforms. Identifies fatigue, winning/losing creatives, recommended creative refreshes. |
-| **fb_creative_cuts** | Sonnet | 10 | Meta-specific creative performance breakdown. Audience-level cuts, placement analysis, creative-audience fit. |
+| **anomaly_detector** | Sonnet | 15 | 7 mandatory steps: baseline collection (30 days, min 14), KPI computation (8 KPIs), statistical bounds (1.5σ/2σ/3σ), anomaly flagging, root cause investigation (6 categories), backend cross-reference, financial impact ranking. Hard rules: $50/day minimum spend, DoW comparison required, no single-day pause recommendations. |
+| **creative_analysis** | Sonnet | 10 | 7 mandatory steps: creative-level data collection, backend cross-reference (non-negotiable), segmentation (format/copy/audience/objective), metric calculation (5 metrics), classification (top 20% Scale, middle 60% Maintain, bottom 20% Cut by backend ROAS), fatigue detection (frequency >3.0 AND declining CTR 7+ days), test hypotheses. |
+| **fb_creative_cuts** | Sonnet | 10 | Code-backed skill with calibrated Python analysis. Agent MUST NOT re-analyze — trust the code's thresholds (CUT=50% above avg CPL, WATCH=20%, CPL Shield for top 20%, 14-day minimum, max 3+3 per ad set). Run code → read output → summarize → present. |
 
 **Auto-Execute Rules (_rules.yaml):**
 
@@ -105,7 +111,7 @@
 
 | Skill | What It Does |
 |-------|-------------|
-| **weekly_report** | Weekly performance summary with period-over-period comparisons, trend analysis, statistical significance |
+| **weekly_report** | 6 mandatory steps: data collection from all platforms, backend cross-reference, WoW + 4-week calculations for all metrics, exactly 3 wins and 3 concerns, goal attainment classification, deliverable creation in Google Drive. Writing rules: insights-first, context for every number, tables for data/prose for insights. |
 
 **Key Principles:**
 - "Highlight statistically significant changes, not just any movement"
@@ -125,7 +131,7 @@
 
 | Skill | What It Does |
 |-------|-------------|
-| **competitor_benchmark** | Competitive landscape analysis, audience overlap detection, strategic opportunity identification |
+| **competitor_benchmark** | 7 mandatory steps including non-negotiable campaign type segmentation (NEVER compare search against display). Hard classification thresholds (>10% = advantage/gap). Benchmark data treated as directional, not targets. Attribution caveats required on all third-party data. |
 
 **Key Principles:**
 - "Consider the competitive context — what are competitors doing differently?"
@@ -135,10 +141,11 @@
 
 ## IT Department
 
-### Head of IT
+### Head of IT (Manager Role)
 - **Model:** Sonnet
 - **Schedule:** 6 AM daily (runs before marketing roles)
 - **Heartbeat:** Every 15 minutes, 24/7
+- **Manages:** Skill Creator
 - **Connectors:** None (uses system introspection tools)
 - **Clearance:** Internal
 - **Purpose:** Platform reliability. Monitors DB, Redis, workflows, costs, DLQ, approval queue. Diagnoses failures, resolves transient errors, escalates persistent issues.
@@ -149,14 +156,30 @@
 
 | Skill | Model | Max Turns | What It Does |
 |-------|-------|-----------|-------------|
-| **system_health_check** | Sonnet | 8 | Full infrastructure health check — DB, Redis, config, DLQ, approvals, conversations, costs. Resolves transient DLQ entries. Sends Slack alerts for WARNING/CRITICAL. |
-| **error_diagnosis** | Sonnet | 10 | Deep-dive into specific failures. Reads DLQ entries, audit logs, traces root cause. Recommends fixes. |
-| **cost_monitoring** | Haiku | 5 | Checks LLM spend vs daily budget. Flags spikes. Analyzes which models/operations drive costs. |
+| **system_health_check** | Sonnet | 8 | 5-step mandatory check sequence (get_system_health → get_failed_runs → get_approval_queue_status → get_conversation_status → get_cost_summary). Severity classification: Database=CRITICAL, Redis=WARNING, etc. Resolves transient DLQ entries. Sends Slack alerts for WARNING/CRITICAL. |
+| **error_diagnosis** | Sonnet | 10 | 5-step mandatory diagnostic sequence (symptom → health → audit → DLQ → cross-reference). Pattern matching for known issues. Evidence-based resolution only. Escalates recurring failures (3+ times) to steward. |
+| **cost_monitoring** | Haiku | 5 | 4-step analysis with cost benchmark table (8 operations with expected costs). Alert thresholds: $10/day=WARNING, $25/day=CRITICAL, >$2 single op=runaway. Optimization signals with specific recommendations. |
 
 **Key Principles:**
 - "Check the simplest explanation first — misconfig before bug"
 - "Never resolve a DLQ entry without understanding the root cause"
 - "Prefer least-invasive fixes — restart before rebuild"
+
+---
+
+### Skill Creator (Wizard Role)
+- **Model:** Sonnet
+- **Schedule:** None (conversational only, plus heartbeat)
+- **Heartbeat:** Every 4 hours
+- **Purpose:** Guides users through creating new skills via conversation. Asks structured questions, generates valid YAML, validates tool names and categories, proposes via standard approval pipeline.
+
+**Skills:**
+
+| Skill | What It Does |
+|-------|-------------|
+| **create_skill_wizard** | 5-question mandatory interview (purpose, data sources, output format, business rules, ownership). Enforces safe defaults (requires_approval: true, model: sonnet). Validates categories and tool names. Generated system_supplements MUST use behavioral enforcement language (MUST/NEVER/BEFORE). |
+
+On heartbeat, checks inbox for skill suggestions from other roles (e.g., gap detection pipeline sends suggestions when capability gaps are detected).
 
 ---
 
@@ -176,13 +199,16 @@ CEO            ← learns from → Head of Marketing, Head of IT
 ```
 
 ### Working Groups
-Managers can form ad hoc cross-functional groups: "I need the Media Buyer, Analyst, and Strategist to investigate this together." Max 10 members. Manager plans tasks, members execute, manager synthesizes.
+Managers can form ad hoc cross-functional groups: "I need the Media Buyer, Analyst, and Strategist to investigate this together." Max 10 members. Manager plans tasks, members execute in parallel, manager synthesizes.
+
+### Real Delegation in Conversations
+When chatting with a manager role, it can delegate to sub-roles mid-conversation. The manager calls `delegate_to_role`, which runs a complete inner agent loop as the sub-role (full persona, context, memory, tools), then the manager synthesizes the result. Max 3 delegations per turn, no recursion.
 
 ---
 
 ## Memory Types
 
-Every role accumulates persistent memory:
+Every role accumulates persistent memory across 9 types:
 
 | Type | What It Captures | Example |
 |------|-----------------|---------|
@@ -193,6 +219,9 @@ Every role accumulates persistent memory:
 | **Lesson** | "I tried X, it failed because Y" | "Budget increase on Campaign Z backfired due to creative fatigue" |
 | **Commitment** | Conversational promises | "I'll investigate the CTR drop tomorrow" |
 | **Relationship** | Inter-role context | "The Analyst prefers data in table format" |
-| **Steward Note** | Human-injected guidance | "Focus on ROAS over CPA this quarter" (highest priority, agent can't override) |
+| **Steward Note** | Human-injected guidance (highest priority, agent can't override) | "Focus on ROAS over CPA this quarter" |
+| **Cross-Role Insight** | Learnings from peer roles | "Media Buyer reports CPM spikes correlate with Meta policy updates" |
 
-Hot memories (< 90 days) are auto-injected into every run. Cold memories are archived but searchable. Weekly consolidation merges duplicates. Memories are never deleted.
+Hot memories (< 90 days) are auto-injected into every run, sorted by confidence, capped at 2000 tokens. When >20 hot memories exist, a compact index is injected instead — agents load specific memories on demand via `load_memory_detail` MCP tool.
+
+Cold memories are archived but searchable via Slack. Weekly consolidation merges duplicates, detects contradictions (flagged with low confidence for human review). Memories are never deleted.
