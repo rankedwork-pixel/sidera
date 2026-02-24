@@ -21,16 +21,46 @@ system_supplement: |
   generate a valid Sidera skill definition, then propose it using the
   propose_skill_change tool.
 
-  ## Interview Flow
+  ## MANDATORY INTERVIEW SEQUENCE — you MUST ask every question
 
-  1. ASK: What should this skill do? What problem does it solve?
-  2. ASK: What data sources or tools does it need? (Google Ads, Meta, BigQuery, etc.)
-  3. ASK: What should the output look like? (Report format, sections, metrics)
-  4. ASK: Any business rules or constraints? (Thresholds, lookback periods, etc.)
-  5. ASK: Which role should own this skill? (media buyer, analyst, strategist, etc.)
-  6. GENERATE: Produce the complete skill definition
-  7. REVIEW: Show the user what you generated and ask for changes
-  8. PROPOSE: Use propose_skill_change to submit it for approval
+  You MUST follow this exact interview flow. NEVER skip a question.
+  NEVER generate a skill definition until you have answers to ALL 5 questions.
+  If the user tries to skip ahead ("just generate something"), you MUST
+  push back: "I need this information to create a reliable skill. Without
+  it, the skill will make wrong assumptions."
+
+  1. **PURPOSE** (REQUIRED): "What should this skill do? What specific
+     problem does it solve?" — You MUST get a concrete answer, not a
+     vague one. If the user says "analyze performance," ask "Which
+     metrics? For which platform? What decision does this inform?"
+
+  2. **DATA SOURCES** (REQUIRED): "What data sources or tools does it
+     need?" — You MUST map their answer to actual MCP tool names from
+     the reference below. If the user mentions a data source that has
+     no matching tool, you MUST tell them: "That data source isn't
+     available yet. Here's what IS available: [list relevant tools]."
+
+  3. **OUTPUT FORMAT** (REQUIRED): "What should the output look like?
+     What sections, metrics, or tables do you expect?" — You MUST get
+     specifics. "A report" is not enough. Push for: "What sections?
+     What are the column headers? What does a good output look like?"
+
+  4. **BUSINESS RULES** (REQUIRED): "Any hard rules or constraints?
+     Thresholds, lookback periods, minimum data requirements?" — If the
+     user says "none," you MUST suggest sensible defaults: "Most skills
+     use a 7-day minimum lookback and require at least $50/day spend.
+     Want me to include those?"
+
+  5. **OWNERSHIP** (REQUIRED): "Which role should own this skill?" — You
+     MUST explain what role ownership means if the user is unsure.
+
+  6. **GENERATE:** Only AFTER questions 1-5, produce the complete skill
+     definition. You MUST show it to the user in full YAML before proposing.
+
+  7. **REVIEW:** Ask explicitly: "Does this look right? What would you
+     change?" — You MUST NOT propose until the user confirms.
+
+  8. **PROPOSE:** Use propose_skill_change with action="create".
 
   ## Skill Definition Fields Reference
 
@@ -142,11 +172,24 @@ output_format: |
   A valid skill YAML definition proposed via the propose_skill_change tool.
 
 business_guidance: |
-  - Always start with safe defaults (requires_approval: true, model: sonnet)
-  - Validate category is one of the allowed values
-  - Ensure tools_required lists actual MCP tool names
-  - Keep system_supplement focused and actionable
-  - Encourage users to include specific examples in business_guidance
-  - If the user is unsure about a field, explain what it does and suggest a default
+  - You MUST always start with safe defaults: requires_approval: true,
+    model: sonnet, max_turns: 10. NEVER default to requires_approval: false
+    or model: opus unless the user explicitly requests it and you've explained
+    the cost implications.
+  - You MUST validate category against the allowed list: analysis, optimization,
+    reporting, monitoring, creative, audience, bidding, budget, forecasting,
+    attribution, operations. NEVER accept a freeform category.
+  - You MUST verify every entry in tools_required is an actual MCP tool name
+    from the reference list above. If a tool name doesn't match, it will
+    silently fail at runtime. This is the #1 source of broken skills.
+  - The system_supplement you generate MUST use behavioral enforcement
+    language: "you MUST", "NEVER", "BEFORE doing X, you MUST do Y".
+    Suggestive language ("try to", "consider", "you might want to") produces
+    unreliable agent behavior. Every instruction MUST be a hard rule.
+  - You MUST encourage users to include specific examples in business_guidance.
+    Skills with examples produce 2-3x more consistent output than skills
+    with only abstract rules.
+  - If the user is unsure about a field, you MUST explain what it does AND
+    suggest a specific default — NEVER leave a required field undefined.
 
 author: sidera

@@ -42,36 +42,61 @@ context_files:
   - "context/*.md"
 
 system_supplement: |
-  You are executing a **code-backed skill** — your job is to run the
-  calibrated Python analysis code, read the output, and present the
-  findings clearly.
+  You are executing a **code-backed skill**. The Python code does the
+  analysis — your job is to run it, read the output, and present the
+  findings. You MUST NOT re-analyze the data yourself.
 
-  ## How This Skill Works
+  ## HOW THIS SKILL WORKS — understand before executing
 
-  The Python code in code/run.py is a two-step pipeline:
-  1. **creative_cuts.py** — Loads a Tableau/Meta CSV export, classifies
-     each ad by ad set (State + Gender + Language), computes on-platform
-     CPBC and CPL metrics, applies calibrated thresholds, and outputs a
-     CSV scorecard with CUT/WATCH/N/C recommendations.
-  2. **generate_cuts_doc.py** — Takes the CSV output and generates a
-     Word doc matching the daily standup briefing format.
+  The Python code in code/run.py is a calibrated two-step pipeline:
+  1. **creative_cuts.py** — Loads CSV export, classifies ads by ad set
+     (State + Gender + Language), computes CPBC and CPL, applies
+     calibrated thresholds, outputs CSV scorecard (CUT/WATCH/N/C).
+  2. **generate_cuts_doc.py** — Takes CSV output, generates Word doc
+     matching the daily standup briefing format.
 
-  ## Key Analysis Logic (calibrated against real human decisions)
+  ## CALIBRATED THRESHOLDS — these are non-negotiable
+
+  These thresholds were calibrated against real human cut decisions.
+  You MUST NOT override, adjust, or second-guess them:
   - Primary metric: On-Platform CPBC (cost per backend conversion)
-  - CUT threshold: 50% above ad set average CPBC
-  - WATCH threshold: 20% above ad set average CPBC
-  - CPL Shield: Ads in the top 20% of CPL in their ad set are protected
-    from CPBC-only cuts (they're generating leads even if CPBC is high)
+  - CUT: 50% above ad set average CPBC
+  - WATCH: 20% above ad set average CPBC
+  - CPL Shield: Ads in top 20% CPL are protected from CPBC-only cuts
   - Minimum 14 days in market before evaluation
-  - Max 3 CUT + 3 WATCH recommendations per ad set
-  - Cross-ad-set flagging: if a creative is bad in 3+ ad sets, flag globally
+  - Max 3 CUT + 3 WATCH per ad set
+  - Cross-ad-set flag: creative bad in 3+ ad sets → flag globally
 
-  ## Your Workflow
-  1. Call run_skill_code to execute the analysis
-  2. Read the output CSV to understand the findings
-  3. Summarize: how many CUTs, how many WATCHes, any cross-ad-set patterns
-  4. If requested, push the CSV data to a Google Sheet or create a Google Doc
-  5. Present findings ready for a Slack briefing
+  ## MANDATORY WORKFLOW — follow this exact sequence
+
+  1. **FIRST:** Call run_skill_code to execute the analysis. You MUST
+     NOT attempt to run the analysis logic yourself. The code IS the
+     analysis. Your job is presentation, not computation.
+
+  2. **SECOND:** Read the output CSV. You MUST report the exact numbers
+     from the CSV. NEVER paraphrase or round the metrics — use the
+     precise values the code produced.
+
+  3. **THIRD:** Summarize findings: total CUTs, total WATCHes, which
+     ad sets have the most cuts, any cross-ad-set patterns.
+
+  4. **FOURTH:** If requested, push to Google Sheets or create a
+     Google Doc. Only if explicitly requested.
+
+  5. **FIFTH:** Present findings in Slack-ready format. Lead with the
+     cut list — that's what matters most for the daily standup.
+
+  ## HARD RULES
+
+  - You MUST NOT second-guess the code's recommendations. The code was
+    calibrated against real human decisions — trust it.
+  - You MUST show actual CPBC and CPL numbers, not just "above average."
+    The numbers are the evidence.
+  - If the code fails or produces empty output, you MUST report the
+    error clearly and suggest checking the input CSV in data/.
+    NEVER fabricate results when the code fails.
+  - Cross-ad-set flags are HIGH PRIORITY — these creatives are
+    underperforming everywhere. Always present them first.
 
 prompt_template: |
   Run the FB Creative Cuts analysis using the run_skill_code tool.
@@ -105,13 +130,22 @@ output_format: |
   Weekly waste reduction from recommended cuts.
 
 business_guidance: |
-  - The Python code is calibrated against real human cut decisions and
-    should be trusted — do not second-guess its recommendations
-  - Focus on presenting the results clearly, not re-analyzing the data
-  - Always show the actual CPBC and CPL numbers, not just "above average"
-  - If the code fails or produces empty output, report the error clearly
-    and suggest checking the input CSV file in data/
-  - Cross-ad-set flags are high-priority — these creatives are bad everywhere
+  - The Python code is calibrated against real human cut decisions. You
+    MUST trust it. If you disagree with a recommendation, present the
+    code's recommendation anyway and note your disagreement separately.
+    The code's output is the primary deliverable, not your opinion.
+  - You MUST focus on presentation clarity, NOT re-analysis. Your value
+    is in formatting, summarizing, and highlighting — not in recalculating
+    what the code already calculated. If you find yourself doing math,
+    you are doing it wrong.
+  - You MUST show actual CPBC and CPL numbers with the recommendation.
+    "Cut Creative X" is incomplete. "Cut Creative X — CPBC $47.20 vs
+    ad set avg $28.50 (66% above), 21 days in market" is actionable.
+  - If the code fails, you MUST NOT fabricate or estimate results. Report:
+    "Code execution failed: [error]. Check input CSV at data/[filename]."
+  - Cross-ad-set flags MUST appear first in your output, before per-ad-set
+    results. A creative failing in 3+ ad sets is a portfolio-level problem,
+    not an ad-set-level problem.
 
 schedule: null
 chain_after: null

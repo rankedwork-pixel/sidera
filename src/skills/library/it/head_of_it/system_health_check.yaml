@@ -18,31 +18,56 @@ model: sonnet
 max_turns: 8
 
 system_supplement: |
-  You are running a scheduled system health check. Your goal is to verify
-  all infrastructure components are operational and flag any issues.
+  You are running a scheduled system health check. Your job is to verify
+  every infrastructure component and flag issues with zero ambiguity.
 
-  ## Health Check Procedure
-  1. Run get_system_health to get the overall dashboard
-  2. Check the DLQ for any unresolved failures (get_failed_runs)
-  3. Check the approval queue for stuck/expired items
-  4. Review active conversations for any anomalies
-  5. Check today's LLM costs against normal patterns
+  ## MANDATORY CHECK SEQUENCE — you MUST execute every step in order
 
-  ## What to Flag
-  - Database connectivity issues → CRITICAL
-  - Redis connectivity issues → WARNING (system degrades gracefully)
-  - Unresolved DLQ entries older than 24h → WARNING
-  - Pending approvals older than 48h → WARNING (likely forgotten)
-  - Cost spike (>2x normal daily spend) → WARNING
-  - Active conversation with >15 turns → INFO (approaching limit)
-  - Any error in configuration → CRITICAL
+  1. **FIRST:** Call get_system_health. This is ALWAYS your first tool call.
+     NEVER skip this step. NEVER call any other tool before this one.
+     If this call fails, your entire report MUST open with
+     "⚠️ UNABLE TO REACH SYSTEM HEALTH ENDPOINT" and you MUST send
+     a CRITICAL Slack alert immediately.
 
-  ## What to Do
-  - For DLQ entries that are clearly transient (network timeout, rate limit),
-    resolve them with a note explaining why
-  - For stuck approvals, note them for human follow-up
-  - For cost spikes, analyze which models/operations are driving the increase
-  - Send a Slack alert ONLY if there are WARNING or CRITICAL findings
+  2. **SECOND:** Call get_failed_runs to check the DLQ.
+     You MUST check for unresolved entries. If any exist, you MUST
+     record the count and the age of the oldest entry.
+
+  3. **THIRD:** Call get_approval_queue_status for stuck/expired items.
+     You MUST report the count of pending approvals and the age of
+     the oldest one. If any approval is older than 48h, you MUST
+     classify it as WARNING.
+
+  4. **FOURTH:** Call get_conversation_status.
+     You MUST flag any conversation with >15 turns.
+
+  5. **FIFTH:** Call get_cost_summary.
+     You MUST compare today's spend against the 7-day average.
+     If today exceeds 2x the average, this is a WARNING.
+
+  ## SEVERITY CLASSIFICATION — use these exact thresholds, no exceptions
+
+  - Database unreachable → CRITICAL. Full stop. Nothing else matters.
+  - Redis unreachable → WARNING only. System degrades gracefully.
+  - Configuration error (missing API keys) → CRITICAL.
+  - Unresolved DLQ entries >24h old → WARNING.
+  - Pending approvals >48h old → WARNING.
+  - Cost spike >2x daily average → WARNING.
+  - Cost spike >5x daily average → CRITICAL.
+  - Conversation >15 turns → INFO.
+
+  ## ACTION RULES — what you MUST do vs what you MUST NOT do
+
+  - You MUST resolve DLQ entries that are clearly transient (network
+    timeout, rate limit, temporary API failure). Include a resolution
+    note explaining why it was transient.
+  - You MUST NOT resolve DLQ entries caused by auth failures, schema
+    issues, or code bugs. Those require human intervention.
+  - You MUST send a Slack alert if ANY finding is WARNING or CRITICAL.
+  - You MUST NOT send a Slack alert if all findings are HEALTHY or INFO.
+    Unnecessary alerts erode trust.
+  - You MUST NOT skip any step in the check sequence. If a tool call
+    fails, report the failure — do not silently omit the section.
 
 prompt_template: |
   Run a comprehensive system health check for Sidera.
@@ -84,17 +109,22 @@ output_format: |
   - Any anomalies
 
 business_guidance: |
-  - A healthy system has 0 unresolved DLQ entries and 0 pending approvals
-    older than 24h. Anything else warrants investigation.
-  - Transient errors (network timeouts, rate limits, temporary API failures)
-    can be resolved in the DLQ with a note. Persistent errors (schema issues,
-    auth failures, code bugs) should NOT be auto-resolved.
-  - Cost spikes are normal during initial setup and testing. Flag only if
-    daily cost exceeds $10 or is >2x the 7-day average.
-  - Redis being down is a warning, not critical — the system works without
-    cache, just slower. Database being down IS critical.
-  - If configuration shows missing API keys, that's critical but expected
-    during initial setup. Note which keys are missing.
+  - HEALTHY means: 0 unresolved DLQ entries AND 0 pending approvals >24h
+    AND all connectors authenticated AND cost within 2x average. If ANY
+    of these conditions fail, the system is NOT HEALTHY.
+  - You MUST distinguish transient from persistent errors before resolving:
+    - TRANSIENT (safe to resolve): network timeouts, rate limits, 503s,
+      temporary API failures, connection resets
+    - PERSISTENT (NEVER resolve): auth failures (401/403), schema errors,
+      code exceptions, missing configuration, data corruption
+    If you resolve a persistent error, you are hiding a real problem.
+  - Cost thresholds: >$10/day warrants a WARNING. >$25/day warrants a
+    CRITICAL. During E2E testing, costs are expected to be higher —
+    note this context but still flag the numbers.
+  - Redis down = WARNING. Database down = CRITICAL. NEVER confuse these
+    severity levels. Redis is a cache; the database is the source of truth.
+  - Missing API keys during initial setup: still CRITICAL, but add context
+    "Expected during setup — keys needed: [list]".
 
 schedule: null
 chain_after: null

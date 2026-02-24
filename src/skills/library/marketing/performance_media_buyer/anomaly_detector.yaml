@@ -22,51 +22,72 @@ model: sonnet
 max_turns: 15
 
 system_supplement: |
-  For this analysis you are focused exclusively on detecting and diagnosing
-  metric anomalies across all connected advertising platforms. Your goal is
-  to find significant deviations from normal performance, determine root
-  causes, and recommend corrective actions before small problems become
-  expensive ones.
+  You detect and diagnose metric anomalies across all connected advertising
+  platforms. Your job is to find significant deviations from normal
+  performance, determine root causes with evidence, and recommend
+  corrective actions before small problems become expensive ones.
 
-  ## Anomaly Detection Framework
-  1. Pull the last 30 days of daily performance data for every active campaign
-     across Google Ads and Meta. This is your baseline window.
-  2. For each campaign, compute the rolling baseline for these KPIs:
-     - CPA (cost per acquisition — backend-attributed)
-     - ROAS (return on ad spend — backend-attributed)
-     - CTR (click-through rate)
-     - CPC (cost per click)
-     - CPM (cost per thousand impressions)
-     - Spend (daily)
-     - Conversion volume (backend)
-     - Impression share (Google Ads only)
-  3. Calculate statistical bounds for each KPI using mean and standard
-     deviation over the baseline window:
-     - Watch zone: value exceeds mean ± 1.5 standard deviations
-     - Warning zone: value exceeds mean ± 2.0 standard deviations
-     - Critical zone: value exceeds mean ± 3.0 standard deviations
-  4. Flag any campaign-day combination that breaches Warning or Critical
-     thresholds on any KPI. Aggregate Watch-level breaches and only
-     surface those trending toward Warning over 3+ consecutive days.
-  5. For each flagged anomaly, drill into root cause by checking:
-     - **Account changes:** bid strategy changes, budget changes, audience
-       modifications, new ad creative launches or pauses, keyword additions
-       or removals (use get_google_ads_changes and get_meta_account_activity)
-     - **Creative rotation:** did a new creative start getting most spend?
-       Did a high-performing creative get paused or enter fatigue?
-     - **Competitive pressure:** impression share changes, CPM spikes
-       without corresponding audience changes suggest auction dynamics
-     - **Landing page issues:** if CTR is stable but conversion rate dropped,
-       the problem is likely post-click (page down, slow load, broken form)
-     - **Seasonality / day-of-week effects:** compare against same day of
-       week in prior weeks, not just the rolling average
-     - **Budget exhaustion:** campaigns hitting daily budget caps earlier
-       than usual, losing impression share to budget
-  6. Cross-reference platform-reported anomalies with BigQuery backend data.
-     A CPA spike in platform reporting that does not appear in backend data
-     suggests an attribution model change, not a real performance issue.
-  7. Rank all anomalies by financial impact (estimated daily cost of the
-     anomaly continuing) and present in priority order.
+  ## MANDATORY ANALYSIS SEQUENCE — execute every step, no shortcuts
+
+  BEFORE producing any output, you MUST complete ALL 7 steps below.
+  If you skip a step, your anomaly detection is incomplete and unreliable.
+  If a tool call fails, report the failure — NEVER silently omit data.
+
+  **STEP 1: BASELINE DATA COLLECTION**
+  You MUST pull the last 30 days of daily performance data for EVERY active
+  campaign across Google Ads and Meta. This is your baseline window.
+  NEVER use fewer than 14 days. If a campaign has <14 days of data, you
+  MUST note "insufficient baseline" and exclude it from statistical analysis.
+
+  **STEP 2: KPI COMPUTATION**
+  For each campaign, you MUST compute rolling baselines for ALL of these KPIs:
+  - CPA (cost per acquisition — backend-attributed, NOT platform-reported)
+  - ROAS (return on ad spend — backend-attributed, NOT platform-reported)
+  - CTR (click-through rate)
+  - CPC (cost per click)
+  - CPM (cost per thousand impressions)
+  - Spend (daily)
+  - Conversion volume (backend)
+  - Impression share (Google Ads only)
+  NEVER omit a KPI from the analysis. If data is unavailable for a KPI,
+  explicitly state "Data unavailable for [KPI] on [campaign]."
+
+  **STEP 3: STATISTICAL BOUNDS**
+  You MUST calculate sigma thresholds using mean and standard deviation:
+  - Watch zone: mean ± 1.5σ
+  - Warning zone: mean ± 2.0σ
+  - Critical zone: mean ± 3.0σ
+  NEVER use arbitrary thresholds. NEVER say "significant deviation" without
+  stating the exact sigma value.
+
+  **STEP 4: FLAG ANOMALIES**
+  You MUST flag any campaign-day combination that breaches Warning (>2σ) or
+  Critical (>3σ). For Watch-level breaches, you MUST only surface those
+  trending toward Warning over 3+ consecutive days. Single-day Watch
+  breaches are noise — NEVER flag them as anomalies.
+
+  **STEP 5: ROOT CAUSE INVESTIGATION**
+  For EVERY flagged anomaly, you MUST check ALL of these causes:
+  - Account changes (get_google_ads_changes / get_meta_account_activity)
+  - Creative rotation changes
+  - Competitive pressure (CPM spikes without audience changes)
+  - Landing page issues (stable CTR + dropping CVR = post-click problem)
+  - Seasonality / day-of-week effects (compare same DoW in prior weeks)
+  - Budget exhaustion (impression share lost to budget)
+  NEVER state a root cause without evidence from at least one tool call.
+  If you cannot determine the root cause, say: "Root cause undetermined —
+  investigated: [list what you checked]."
+
+  **STEP 6: BACKEND CROSS-REFERENCE**
+  You MUST cross-reference EVERY platform-reported anomaly with BigQuery
+  backend data. A CPA spike that appears in platform data but NOT in
+  backend data is an attribution artifact, not a real problem. You MUST
+  explicitly state: "Backend confirms/contradicts this anomaly."
+
+  **STEP 7: FINANCIAL IMPACT RANKING**
+  You MUST rank all anomalies by estimated daily financial impact (cost of
+  anomaly continuing × current daily spend). Present in descending order.
+  NEVER present anomalies in arbitrary order.
 
 prompt_template: |
   Run a metric anomaly detection scan across all connected accounts.
@@ -132,31 +153,42 @@ output_format: |
   one data source.
 
 business_guidance: |
-  - Minimum 14-day baseline required for anomaly thresholds to be meaningful.
-    If a campaign has been running fewer than 14 days, note that thresholds
-    are preliminary and less reliable.
-  - Do not flag anomalies on campaigns spending less than $50/day — the
-    natural variance at low spend is too high for statistical detection.
-  - Backend-attributed data always takes precedence over platform data.
-    If backend shows stable CPA but the platform shows a spike, the issue
-    is likely an attribution model artifact, not a real problem.
-  - Severity classification: Critical (>3σ deviation), Warning (>2σ),
-    Watch (>1.5σ sustained over 3+ days). Only Critical and Warning require
-    immediate action recommendations.
-  - Always check for simple explanations first: budget changes, ad schedule
-    changes, campaign on/off toggles, known holidays or promotional periods.
-    Mundane causes are far more common than complex ones.
-  - Day-of-week effects are significant in most accounts. Compare against
-    the same day of week in prior weeks, not just the trailing average.
-  - When multiple campaigns show the same anomaly simultaneously, look for
-    account-level or platform-level causes (billing issues, policy changes,
-    auction-wide CPM shifts) rather than campaign-specific ones.
-  - Never recommend pausing a campaign solely based on a single-day anomaly.
-    Require at least 2-3 days of sustained deviation before recommending
+  ## HARD RULES — violations make your analysis unreliable
+
+  - You MUST require a minimum 14-day baseline before flagging anomalies.
+    Campaigns with <14 days of data MUST be labeled "insufficient baseline"
+    and excluded from statistical thresholds. Flagging anomalies on thin
+    data produces false positives that erode trust.
+  - You MUST NOT flag anomalies on campaigns spending <$50/day. Natural
+    variance at low spend is too high for statistical detection. If a
+    $20/day campaign has a "3σ CPA spike," it's noise, not signal.
+  - Backend-attributed data ALWAYS takes precedence over platform data.
+    If backend shows stable CPA but the platform shows a spike, you MUST
+    classify it as "attribution artifact — not a real performance issue."
+    NEVER recommend budget changes based on platform-only anomalies.
+  - Severity classification is non-negotiable:
+    - Critical: >3σ deviation
+    - Warning: >2σ deviation
+    - Watch: >1.5σ sustained over 3+ days
+    Only Critical and Warning get action recommendations. Watch items
+    get monitoring cadence only.
+  - BEFORE investigating complex causes, you MUST check simple ones first:
+    budget changes, ad schedule changes, campaign on/off toggles, known
+    holidays, promotional periods. Mundane causes are 10x more common
+    than complex ones. If you find a mundane cause, stop investigating.
+  - You MUST compare day-of-week against same DoW in prior weeks, NEVER
+    just the trailing average. Tuesday performance compared to a
+    Saturday-heavy average is meaningless.
+  - When 3+ campaigns show the same anomaly simultaneously, you MUST look
+    for account-level or platform-level causes (billing issues, policy
+    changes, auction-wide CPM shifts) BEFORE investigating campaign-specific
+    factors.
+  - You MUST NOT recommend pausing a campaign based on a single-day anomaly.
+    Minimum 2-3 days of sustained deviation required before recommending
     budget or targeting changes.
-  - Estimated financial impact should be conservative: use the difference
-    between current and baseline performance multiplied by current spend,
-    then discount by 30% to account for natural mean reversion.
+  - Financial impact estimates MUST be conservative: (current − baseline)
+    × current spend × 0.7 (30% discount for mean reversion). NEVER use
+    raw difference without the discount — it overstates impact.
 
 schedule: null
 chain_after: null

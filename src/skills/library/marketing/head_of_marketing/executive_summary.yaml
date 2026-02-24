@@ -26,17 +26,43 @@ model: haiku
 max_turns: 10
 system_supplement: |
   You are producing a quick executive overview for the Head of Marketing.
-  This summary will be used to decide which team members need to provide
-  detailed reports today. Focus on the big picture — totals, trends, and
-  anything that looks anomalous enough to warrant deeper investigation.
+  This summary drives delegation decisions — which team members need to
+  act today. Speed and accuracy of totals matter more than depth.
 
-  Pull data quickly and efficiently. Do not deep-dive into individual
-  campaigns — that is the team's job. Focus on:
-  1. Total spend across all platforms (7-day trend)
-  2. Blended CPA and ROAS across all platforms
-  3. Budget pacing status (on track / over / under)
-  4. Any anomalies that jump out (>20% changes)
-  5. Goal attainment status (on track / behind / ahead)
+  ## MANDATORY DATA PULLS — you MUST complete all of these
+
+  You MUST pull data from EVERY connected platform. NEVER produce an
+  executive summary with partial data. If a platform's API call fails,
+  you MUST note "⚠️ [Platform] data unavailable" in the summary.
+
+  1. Campaign structures from all connected platforms
+  2. 7-day performance from all connected platforms
+  3. Backend goals from BigQuery
+  4. Budget pacing from BigQuery
+
+  ## MANDATORY OUTPUT REQUIREMENTS
+
+  Your summary MUST include ALL five of these sections. If any is missing,
+  the summary is incomplete and unusable for delegation decisions:
+
+  1. **Total spend** across all platforms with 7-day trend direction
+  2. **Blended CPA and ROAS** across all platforms, compared to targets
+  3. **Budget pacing** — on track / over / under for each channel
+  4. **Anomalies** — anything with >20% change from prior period
+  5. **Goal attainment** — on track / behind / ahead for each target
+
+  ## HARD RULES
+
+  - You MUST keep the summary to 200-400 words. If you exceed 400 words,
+    you are going too deep — save the detail for delegation.
+  - You MUST NOT deep-dive into individual campaigns. That is the team's
+    job. If you find yourself analyzing a specific campaign, stop.
+  - Every number you report MUST have context: vs last week, vs target,
+    or vs budget. A naked number is meaningless. "$12,450 in spend" is
+    useless. "$12,450 in spend (↑8% WoW, 62% of monthly budget)" is useful.
+  - If any metric is >20% off from target or prior period, you MUST flag
+    it in the Anomalies section AND recommend which team member should
+    investigate.
 prompt_template: |
   Produce a quick executive overview of marketing performance for {analysis_date}.
 
@@ -73,9 +99,18 @@ output_format: |
   ### Delegation Notes
   - [Which team members should be activated and why]
 business_guidance: |
-  Remember: this is a quick snapshot, not a deep analysis. The goal is to
-  give the Head of Marketing enough context to make smart delegation
-  decisions. Accuracy of totals matters more than campaign-level detail.
+  - This is a SNAPSHOT, not an analysis. You MUST NOT produce more than
+    400 words. If you find yourself writing paragraphs of analysis, you
+    are doing the team's job instead of enabling the manager's delegation.
+  - Accuracy of totals MUST take priority over campaign-level detail.
+    Getting the total spend wrong by $1,000 is worse than missing a
+    campaign-level nuance. Double-check your addition.
+  - You MUST compare every metric against its target. If no target exists,
+    compare against last week. NEVER present a metric without a reference
+    point.
+  - Delegation notes MUST be specific: "The media buyer should investigate
+    the Google Ads CPA spike" is actionable. "Someone should look into
+    this" is not.
 requires_approval: false
 min_clearance: confidential
 author: sidera
