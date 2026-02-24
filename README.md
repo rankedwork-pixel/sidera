@@ -8,7 +8,7 @@ The pattern is domain-agnostic: connect data sources, teach the agent via YAML s
 
 ## Built-In Connectors
 
-Sidera ships with connectors ready to use out of the box:
+Sidera ships with 8 connectors ready to use out of the box:
 
 - Google Ads (7 read + 6 write methods)
 - Meta Marketing API (7 read + 6 write methods)
@@ -16,8 +16,10 @@ Sidera ships with connectors ready to use out of the box:
 - Google Drive (Docs, Sheets, Slides)
 - Slack (notifications, approvals, conversations)
 - Recall.ai (meeting transcript capture)
+- SSH (remote server execution with command safety filter)
+- Computer Use (Anthropic desktop automation via Docker containers)
 
-23 example skills across 3 departments demonstrate the skill system. Add your own connectors and skills for any domain — customer support, engineering management, e-commerce, finance, or anything with APIs and decisions.
+11 example skills across 3 departments demonstrate the skill system. Add your own connectors and skills for any domain — customer support, engineering management, e-commerce, finance, or anything with APIs and decisions.
 
 ## Framework Capabilities
 
@@ -56,8 +58,13 @@ Sidera ships with connectors ready to use out of the box:
 - **Meeting participation** — Manager roles join live video calls (Google Meet, Zoom) as listen-only participants via Recall.ai bot
 - **Transcript capture** — Real-time transcript via webhooks. Post-call: transcript summary → action item extraction → manager delegation
 
+### Infrastructure Control
+- **SSH remote execution** — Agents can SSH into servers to run commands, read logs, check system health, and diagnose issues. 20+ blocked command patterns prevent destructive operations (rm -rf, shutdown, etc.)
+- **Desktop automation** — Via Anthropic Computer Use, agents control isolated Docker desktops with mouse/keyboard. Full screenshot-action-screenshot loop for anything that needs a GUI (dashboards, legacy tools, report downloads)
+
 ### Agent Collaboration
 - **Peer-to-peer messaging** — Roles send asynchronous messages to each other without manager mediation. Anti-loop protection (max 3 per run, max 5 chain depth)
+- **Agent-to-agent learning** — Structured knowledge transfer between roles via learning channels with confidence thresholds
 - **Proactive heartbeats** — Roles wake up on configurable cron schedules and freely investigate their domain
 - **Google Drive integration** — Auto-generate reports in Docs, Sheets, and Slides
 
@@ -91,10 +98,10 @@ Each new domain = new connectors + new skills. The agent loop, Slack interaction
                           └──────────────┘
 ```
 
-**Built-in connectors:** Google Ads, Meta, BigQuery, Google Drive, Slack, Recall.ai (6 total)
+**Built-in connectors:** Google Ads, Meta, BigQuery, Google Drive, Slack, Recall.ai, SSH, Computer Use (8 total)
 **Adding new connectors:** Copy templates from `src/templates/`, implement read/write methods, register MCP tools.
 
-**Stack:** Python 3.13 · FastAPI · Anthropic API · Claude Agent SDK · Inngest · SQLAlchemy · Slack Bolt · Streamlit
+**Stack:** Python 3.13 · FastAPI · Anthropic API · Inngest · SQLAlchemy · Slack Bolt · asyncssh · Streamlit
 
 ## Quick Start
 
@@ -174,19 +181,19 @@ src/
   api/          — FastAPI app, OAuth routes, webhooks, /sidera command, org chart REST API
   cache/        — Redis caching layer with @cached decorator
   claude_code/  — Claude Code headless executor, task manager, concurrency control
-  connectors/   — API clients (6 connectors + retry utility — extensible)
+  connectors/   — API clients (8 connectors + retry utility — extensible)
   db/           — Async SQLAlchemy session + 115-method CRUD service
   meetings/     — Listen-only meeting session manager, transcript capture
   middleware/   — Sentry, rate limiting, structured request logging, API auth, RBAC
   mcp_servers/  — MCP tools for the Claude agent (74 tools — extensible)
   mcp_stdio/    — MCP stdio server for Claude Code (bridge, meta-tools)
   models/       — Database schema, cross-platform metric normalization
-  workflows/    — Inngest durable functions (15 workflows)
+  workflows/    — Inngest durable functions (18 workflows)
   templates/    — Templates for adding new connectors, MCP tools, and OAuth routes
 dashboard/      — Streamlit MVP (6 pages)
 scripts/        — Operational scripts (seed, health check, cache, audit, doc sync)
 tests/          — 4221+ unit and integration tests
-alembic/        — Database migrations (18 revisions)
+alembic/        — Database migrations (29 revisions)
 ```
 
 ## Configuration
@@ -203,6 +210,9 @@ Key settings:
 | `META_APP_ID` | For Meta | Meta Marketing API access |
 | `BIGQUERY_PROJECT_ID` | For backend data | BigQuery source of truth |
 | `REDIS_URL` | Recommended | Upstash Redis for caching |
+| `SSH_ENABLED` | For SSH | Enable remote server execution (default OFF) |
+| `SSH_HOST` | For SSH | SSH server hostname |
+| `COMPUTER_USE_ENABLED` | For Computer Use | Enable desktop automation (default OFF) |
 | `CLAUDE_CODE_ENABLED` | For Claude Code | Enable Claude Code task execution |
 
 ## How It Works
@@ -254,12 +264,12 @@ See the [Adding a Channel Guide](docs/adding-a-channel.md) for a detailed walkth
 
 | Metric | Count |
 |--------|-------|
-| Unit + integration tests | 4002+ |
-| MCP tools | 65 |
+| Unit + integration tests | 4,221+ |
+| MCP tools | 74 |
 | DB service methods | 115 |
 | Inngest workflows | 18 |
 | Alembic migrations | 29 |
-| API connectors | 6 |
+| API connectors | 8 |
 | YAML skills | 11 |
 | Departments | 3 |
 | Agent roles | 7 |
