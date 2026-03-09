@@ -111,7 +111,7 @@ _memory_count_var: contextvars.ContextVar[int] = contextvars.ContextVar(
                 "type": "string",
                 "description": (
                     "A short, descriptive title for this memory (max 100 chars). "
-                    "Should be scannable — e.g. 'Test account 8382412741 shows $0 budget', "
+                    "Should be scannable — e.g. 'Campaign ROAS dropped below target', "
                     "'Client prefers conservative bid changes', "
                     "'Q4 budget freeze until Jan 15'."
                 ),

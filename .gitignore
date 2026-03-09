@@ -45,3 +45,19 @@ logs/
 credentials.json
 token.json
 google-ads.yaml
+
+# External tools (not part of Sidera)
+tools/
+
+# Binary docs (use .md equivalents)
+*.docx
+*.pdf
+
+# Images (keep in external hosting, not git)
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Local MCP config
+.mcp.json

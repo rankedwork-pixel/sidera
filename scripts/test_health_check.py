@@ -9,7 +9,6 @@ This exercises the full production code path:
     → post to Slack
 
 Usage:
-    cd "/Users/michaelzola/Desktop/Build an Agent"
     python3 scripts/test_health_check.py
 """
 

@@ -120,9 +120,9 @@
 **E2E testing with real API keys** — connected Google Ads (test account), Slack, and Anthropic API. First live conversation between a human and the AI marketing team via Slack threads.
 
 ### What Was Done
-- **Google Ads live connection** — API v23, test MCC (9433912543) → client account (8382412741). Created 3 campaigns, ad groups, RSAs, keywords, extensions via `create_campaign` tool.
+- **Google Ads live connection** — API v23, test MCC → client account. Created 3 campaigns, ad groups, RSAs, keywords, extensions via `create_campaign` tool.
 - **Slack bot setup** — Configured Slack app with Event Subscriptions, Interactivity, slash commands. ngrok tunnel for local dev.
-- **Slash command fix** — Added dual decorator for `/sidera` + `/mjz-test-agent` (user's test command). Dynamic `{cmd}` variable replaced ~50 hardcoded `/sidera` references in user-facing strings.
+- **Slash command fix** — Dynamic `{cmd}` variable replaced ~50 hardcoded `/sidera` references in user-facing strings.
 - **Env var fix** — Empty shell `ANTHROPIC_API_KEY=""` overriding `.env` value. Added `_load_dotenv_overrides()` in `src/config.py` to pre-load .env for blank shell vars.
 - **Inngest import fix** — `inngest.serve()` → `inngest.fast_api.serve`. Added `is_production` flag, default `event_key` for dev mode.
 - **Inline conversation runner** — Built `_run_conversation_turn_inline()` as dev-mode fallback when Inngest isn't running. `_dispatch_or_run_inline()` tries Inngest first, falls back to inline.
@@ -140,11 +140,11 @@
 
 ### Test Account Structure
 ```
-Test MCC: 9433912543 ← LOGIN_CUSTOMER_ID
-  └── Client: 8382412741 ("Sidera Test Client")
-        ├── Brand Search (ID: 23564855216) — PAUSED, $15/day
-        ├── Search Campaign (ID: 23564856461) — PAUSED, $20/day
-        └── Display Campaign (ID: 23564856473) — PAUSED, $10/day
+Test MCC: XXX-XXX-XXXX ← LOGIN_CUSTOMER_ID
+  └── Client: XXX-XXX-XXXX ("Test Client")
+        ├── Brand Search — PAUSED, $15/day
+        ├── Search Campaign — PAUSED, $20/day
+        └── Display Campaign — PAUSED, $10/day
 ```
 
 ---

@@ -14,7 +14,7 @@
 #   make check         CI-equivalent check (lint + test + sync-docs)
 # ──────────────────────────────────────────────────────────────────────────────
 
-.PHONY: lint format test test-fast sync-docs update-docs cleanup pre-commit check help
+.PHONY: lint format test test-fast sync-docs update-docs cleanup pre-commit check demo help
 
 PYTHON ?= python3
 PYTEST ?= $(PYTHON) -m pytest
@@ -34,6 +34,7 @@ help:
 	@echo "  make cleanup       Full cleanup: format + lint + test + sync-docs"
 	@echo "  make pre-commit    Install pre-commit hooks"
 	@echo "  make check         CI-equivalent check (lint + test + sync-docs)"
+	@echo "  make demo          Run zero-config demo (requires ANTHROPIC_API_KEY)"
 	@echo ""
 
 # ── Lint ─────────────────────────────────────────────────────────────────────
@@ -93,6 +94,11 @@ migrate:
 migration:
 	@read -p "Migration message: " msg; \
 	alembic revision --autogenerate -m "$$msg"
+
+# ── Demo ─────────────────────────────────────────────────────────────────────
+
+demo:
+	$(PYTHON) scripts/demo.py
 
 # ── Server ───────────────────────────────────────────────────────────────────
 

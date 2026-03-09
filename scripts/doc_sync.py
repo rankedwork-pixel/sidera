@@ -305,17 +305,6 @@ def build_doc_references() -> list[DocReference]:
             r"(\d+)\+ unit and integration",
             "tests",
         ),
-        # ── Instructions ──
-        DocReference(
-            "Instructions",
-            r"(\d+) revisions",
-            "migrations",
-        ),
-        DocReference(
-            "Instructions",
-            r"(\d+) methods \(this is the largest",
-            "db_methods",
-        ),
     ]
 
 

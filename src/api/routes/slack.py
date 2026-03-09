@@ -2369,10 +2369,8 @@ async def _handle_steward_command(
 
 
 @slack_app.command("/sidera")
-@slack_app.command("/mjz-test-agent")
-@slack_app.command("/project-sidera")
 async def handle_sidera_command(ack, body, client):
-    """Handle the ``/sidera`` (or ``/mjz-test-agent``) slash command from Slack.
+    """Handle the ``/sidera`` slash command from Slack.
 
     Supported commands:
     - ``/sidera list`` — List all available skills (alias: ``list skills``).
@@ -2402,7 +2400,7 @@ async def handle_sidera_command(ack, body, client):
     text = (body.get("text") or "").strip()
     user_id = body["user_id"]
     channel_id = body["channel_id"]
-    # Use the actual command name the user typed (e.g. "/sidera" or "/mjz-test-agent")
+    # Use the actual command name the user typed
     cmd = body.get("command", "/sidera")
 
     # --- Top-level RBAC gate: block unregistered users ---

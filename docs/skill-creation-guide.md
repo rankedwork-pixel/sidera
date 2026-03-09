@@ -443,7 +443,7 @@ supports variable substitution using Python's `str.format()` syntax.
 | Variable | Source | Example |
 |----------|--------|---------|
 | `{analysis_date}` | The date of analysis | `2025-02-24` |
-| `{accounts_block}` | Formatted list of connected accounts | `Google Ads: 8382412741\nMeta: act_123456789` |
+| `{accounts_block}` | Formatted list of connected accounts | `Google Ads: 123-456-7890\nMeta: act_123456789` |
 | `{lookback_days}` | Configurable lookback window | `30` |
 | `{previous_output}` | Output from the previous skill in the pipeline | (text from prior skill) |
 
