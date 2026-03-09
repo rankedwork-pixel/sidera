@@ -2,7 +2,16 @@
 name = "sidera"
 version = "0.1.0"
 description = "Sidera — AI agent framework for building approval-gated AI employees"
+license = {text = "MIT"}
+authors = [{name = "Michael Zola"}]
+readme = "README.md"
+keywords = ["ai", "agent", "framework", "automation", "slack", "mcp"]
 requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/mzola/sidera"
+Repository = "https://github.com/mzola/sidera"
+Issues = "https://github.com/mzola/sidera/issues"
 dependencies = [
     # Anthropic API (direct calls — no Agent SDK needed)
     "anthropic>=0.45.0",
