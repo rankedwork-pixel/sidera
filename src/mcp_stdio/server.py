@@ -85,7 +85,7 @@ import src.mcp_servers.slack  # noqa: F401, E402
 import src.mcp_servers.ssh  # noqa: F401, E402
 import src.mcp_servers.system  # noqa: F401, E402
 from src.agent.tool_registry import get_global_registry  # noqa: E402
-from src.mcp_stdio.bridge import DIRECT_TOOLS  # noqa: E402
+from src.mcp_stdio.bridge import DIRECT_TOOLS, META_TOOL_NAMES  # noqa: E402
 from src.mcp_stdio.meta_tools import (  # noqa: E402
     META_TOOL_DEFINITIONS,
     META_TOOL_HANDLERS,
@@ -118,6 +118,20 @@ async def list_tools() -> list[MCPTool]:
                 )
             )
 
+    # Plugin tools (registered dynamically via load_plugin)
+    known_names = DIRECT_TOOLS | META_TOOL_NAMES
+    for name in sorted(registry.get_tool_names()):
+        if name not in known_names and "__" in name:
+            tool_def = registry._tools.get(name)
+            if tool_def:
+                tools.append(
+                    MCPTool(
+                        name=tool_def.name,
+                        description=tool_def.description,
+                        inputSchema=tool_def.input_schema,
+                    )
+                )
+
     # Meta-tools (defined in meta_tools.py)
     tools.extend(META_TOOL_DEFINITIONS)
 
@@ -137,6 +151,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name in META_TOOL_HANDLERS:
         # Dispatch to the meta-tool handler
         return await META_TOOL_HANDLERS[name](arguments)
+
+    # Plugin tools (namespaced as pluginname__toolname)
+    if name in registry:
+        result_text = await registry.dispatch(name, arguments)
+        return [TextContent(type="text", text=result_text)]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 

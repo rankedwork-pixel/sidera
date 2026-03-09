@@ -155,5 +155,8 @@ META_TOOL_NAMES: frozenset[str] = frozenset(
         "decide_approval",
         "run_claude_code_task",
         "orchestrate",
+        "load_plugin",
+        "unload_plugin",
+        "list_loaded_plugins",
     ]
 )

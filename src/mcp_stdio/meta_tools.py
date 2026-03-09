@@ -1,10 +1,11 @@
 """Meta-tools for the Sidera MCP stdio server.
 
-These seven tools provide high-level operations that are not simple
+These ten tools provide high-level operations that are not simple
 pass-through calls to the internal ``ToolRegistry``.  They set up
 proper ``contextvars``, orchestrate agent turns, manage the approval
-queue, and spawn headless Claude Code instances — bridging the gap
-between Claude Code and Sidera's internal agent infrastructure.
+queue, spawn headless Claude Code instances, and load external
+plugins — bridging the gap between Claude Code and Sidera's internal
+agent infrastructure.
 
 Meta-tools:
     1. talk_to_role  — Run a single conversation turn as a Sidera role
@@ -14,6 +15,9 @@ Meta-tools:
     5. decide_approval — Approve or reject a pending action
     6. run_claude_code_task — Execute a skill as a headless Claude Code instance
     7. orchestrate — Multi-step orchestration with evaluation and re-tasking
+    8. load_plugin — Load a Claude Code / Cowork plugin
+    9. unload_plugin — Unload a plugin
+   10. list_loaded_plugins — List all loaded plugins
 """
 
 from __future__ import annotations
@@ -257,6 +261,65 @@ META_TOOL_DEFINITIONS: list[Tool] = [
                 },
             },
             "required": ["objective"],
+        },
+    ),
+    Tool(
+        name="load_plugin",
+        description=(
+            "Load a Claude Code / Cowork plugin into Sidera. Connects to the "
+            "plugin's MCP servers, registers its tools (namespaced as "
+            "'pluginname__toolname'), and imports its SKILL.md skills. "
+            "After loading, all plugin tools are available to Sidera agents."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "plugin_dir": {
+                    "type": "string",
+                    "description": "Absolute path to the plugin directory.",
+                },
+                "target_department_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional department to assign imported skills to."
+                    ),
+                },
+                "target_role_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional role to assign imported skills to."
+                    ),
+                },
+            },
+            "required": ["plugin_dir"],
+        },
+    ),
+    Tool(
+        name="unload_plugin",
+        description=(
+            "Unload a previously loaded plugin. Disconnects its MCP servers "
+            "and removes its tools from the registry."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "plugin_name": {
+                    "type": "string",
+                    "description": "The plugin name to unload.",
+                },
+            },
+            "required": ["plugin_name"],
+        },
+    ),
+    Tool(
+        name="list_loaded_plugins",
+        description=(
+            "List all currently loaded plugins with their tools and skills."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {},
+            "required": [],
         },
     ),
 ]
@@ -1046,3 +1109,140 @@ async def _handle_orchestrate(
                 text=f"Error in orchestration: {exc}",
             )
         ]
+
+
+# =============================================================================
+# 8. load_plugin
+# =============================================================================
+
+
+@_register_handler("load_plugin")
+async def _handle_load_plugin(arguments: dict[str, Any]) -> list[TextContent]:
+    """Load a Claude Code / Cowork plugin into Sidera."""
+    from src.plugins.loader import load_plugin
+
+    plugin_dir = arguments.get("plugin_dir", "")
+    if not plugin_dir:
+        return [TextContent(type="text", text="Error: plugin_dir is required.")]
+
+    try:
+        loaded = await load_plugin(
+            plugin_dir=plugin_dir,
+            target_department_id=arguments.get("target_department_id", ""),
+            target_role_id=arguments.get("target_role_id", ""),
+        )
+
+        sections = [f"Plugin **{loaded.manifest.name}** loaded successfully."]
+        if loaded.manifest.version:
+            sections[0] += f" (v{loaded.manifest.version})"
+
+        if loaded.registered_tool_names:
+            sections.append(
+                f"\n\n**Tools registered ({len(loaded.registered_tool_names)}):**"
+            )
+            for name in loaded.registered_tool_names:
+                sections.append(f"\n  - `{name}`")
+
+        if loaded.imported_skill_ids:
+            sections.append(
+                f"\n\n**Skills imported ({len(loaded.imported_skill_ids)}):**"
+            )
+            for sid in loaded.imported_skill_ids:
+                sections.append(f"\n  - `{sid}`")
+
+        failed = sum(
+            1 for c in loaded.connections if not c.is_connected
+        )
+        if failed:
+            sections.append(
+                f"\n\n**Warning:** {failed} MCP server(s) failed to connect."
+            )
+
+        return [TextContent(type="text", text="".join(sections))]
+
+    except Exception as exc:
+        logger.exception("load_plugin.error")
+        return [
+            TextContent(type="text", text=f"Error loading plugin: {exc}")
+        ]
+
+
+# =============================================================================
+# 9. unload_plugin
+# =============================================================================
+
+
+@_register_handler("unload_plugin")
+async def _handle_unload_plugin(
+    arguments: dict[str, Any],
+) -> list[TextContent]:
+    """Unload a previously loaded plugin."""
+    from src.plugins.loader import get_plugin, unload_plugin
+
+    plugin_name = arguments.get("plugin_name", "")
+    if not plugin_name:
+        return [
+            TextContent(type="text", text="Error: plugin_name is required.")
+        ]
+
+    plugin = get_plugin(plugin_name)
+    if plugin is None:
+        return [
+            TextContent(
+                type="text",
+                text=f"Plugin '{plugin_name}' is not loaded.",
+            )
+        ]
+
+    tool_count = len(plugin.registered_tool_names)
+    await unload_plugin(plugin_name)
+    return [
+        TextContent(
+            type="text",
+            text=(
+                f"Plugin '{plugin_name}' unloaded. "
+                f"Removed {tool_count} tool(s)."
+            ),
+        )
+    ]
+
+
+# =============================================================================
+# 10. list_loaded_plugins
+# =============================================================================
+
+
+@_register_handler("list_loaded_plugins")
+async def _handle_list_loaded_plugins(
+    arguments: dict[str, Any],
+) -> list[TextContent]:
+    """List all currently loaded plugins."""
+    from src.plugins.loader import list_plugins
+
+    plugins = list_plugins()
+    if not plugins:
+        return [TextContent(type="text", text="No plugins loaded.")]
+
+    sections = [f"**{len(plugins)} plugin(s) loaded:**"]
+    for p in plugins:
+        m = p.manifest
+        connected = sum(1 for c in p.connections if c.is_connected)
+        total_servers = len(p.connections)
+        sections.append(
+            f"\n\n**{m.name}**"
+            f"{f' v{m.version}' if m.version else ''}"
+            f"\n  Source: `{m.source_dir}`"
+            f"\n  MCP servers: {connected}/{total_servers} connected"
+            f"\n  Tools: {len(p.registered_tool_names)}"
+            f"\n  Skills: {len(p.imported_skill_ids)}"
+        )
+        if p.registered_tool_names:
+            sections.append("\n  Tool list: " + ", ".join(
+                f"`{n}`" for n in p.registered_tool_names[:10]
+            ))
+            if len(p.registered_tool_names) > 10:
+                sections.append(
+                    f" ... and {len(p.registered_tool_names) - 10} more"
+                )
+
+    return [TextContent(type="text", text="".join(sections))]

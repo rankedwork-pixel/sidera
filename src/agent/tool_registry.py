@@ -111,6 +111,10 @@ class ToolRegistry:
         """Return a sorted list of all registered tool names."""
         return sorted(self._tools.keys())
 
+    def remove(self, name: str) -> bool:
+        """Remove a tool by name.  Returns ``True`` if it was present."""
+        return self._tools.pop(name, None) is not None
+
     def __contains__(self, name: str) -> bool:
         return name in self._tools
 

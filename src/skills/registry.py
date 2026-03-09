@@ -94,6 +94,21 @@ class SkillRegistry:
         self._log = logger.bind(component="skill_registry")
 
     # ------------------------------------------------------------------
+    # Direct registration (for plugins and programmatic use)
+    # ------------------------------------------------------------------
+
+    def register_skill(self, skill: SkillDefinition) -> None:
+        """Register a skill definition directly (not from disk).
+
+        Useful for loading skills from plugins or tests.  If a skill
+        with the same ID already exists it will be overwritten.
+        """
+        if skill.id in self._skills:
+            self._log.debug("skill_registry.overwrite", skill_id=skill.id)
+        self._skills[skill.id] = skill
+        self._sources[f"skill:{skill.id}"] = "plugin"
+
+    # ------------------------------------------------------------------
     # Loading
     # ------------------------------------------------------------------
 
