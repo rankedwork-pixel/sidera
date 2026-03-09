@@ -1,9 +1,10 @@
 """Sidera MCP stdio server — bridges Sidera tools to Claude Code.
 
 Exposes 50 stateless tools directly from the ``ToolRegistry`` plus
-7 meta-tools (``talk_to_role``, ``run_role``, ``list_roles``,
+10 meta-tools (``talk_to_role``, ``run_role``, ``list_roles``,
 ``review_pending_approvals``, ``decide_approval``,
-``run_claude_code_task``, ``orchestrate``) via the MCP protocol
+``run_claude_code_task``, ``orchestrate``, ``load_plugin``,
+``unload_plugin``, ``list_loaded_plugins``) via the MCP protocol
 over stdio transport.
 
 Usage::

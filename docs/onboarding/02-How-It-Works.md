@@ -174,7 +174,7 @@ All connectors have:
 - **SSH** (6): run command, read file, list directory, system info, processes, tail log
 - **Computer Use** (3): run task, get session, stop session
 
-Plus 5 MCP meta-tools for Claude Code integration (talk_to_role, run_role, list_roles, review_pending_approvals, decide_approval).
+Plus 10 MCP meta-tools for Claude Code integration (talk_to_role, run_role, list_roles, review_pending_approvals, decide_approval, run_claude_code_task, orchestrate, load_plugin, unload_plugin, list_loaded_plugins).
 
 ## Data Flow Example: Daily Media Buyer Run
 

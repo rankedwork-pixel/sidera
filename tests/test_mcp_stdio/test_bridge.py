@@ -54,12 +54,12 @@ class TestDirectToolsAllowlist:
         assert len(DIRECT_TOOLS) == 50
 
     def test_meta_tools_count(self):
-        """META_TOOL_NAMES should have exactly 7 meta-tools."""
-        assert len(META_TOOL_NAMES) == 7
+        """META_TOOL_NAMES should have exactly 10 meta-tools."""
+        assert len(META_TOOL_NAMES) == 10
 
     def test_total_exposed_tools(self):
-        """Total tools exposed to Claude Code = 50 direct + 7 meta = 57."""
-        assert len(DIRECT_TOOLS) + len(META_TOOL_NAMES) == 57
+        """Total tools exposed to Claude Code = 50 direct + 10 meta = 60."""
+        assert len(DIRECT_TOOLS) + len(META_TOOL_NAMES) == 60
 
 
 class TestWriteToolsExcluded:
