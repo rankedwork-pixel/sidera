@@ -65,21 +65,52 @@ business_guidance: |
 
 ### 2. Organize Into Teams
 
-Skills are grouped into a three-level hierarchy: **Department → Role → Skill**.
+Skills are grouped into a three-level hierarchy: **Department → Role → Skill**. Each role has a persona, principles, goals, and memory. Context flows down — a skill inherits everything from its role and department.
 
-Each role has a persona, principles, goals, and memory. Context flows down — a skill inherits everything from its role and department. Manager roles delegate to sub-roles and synthesize results.
+Manager roles sit at the top of each department. They delegate to sub-roles and synthesize results — just like a real org.
 
 ```
-Executive/
-  CEO (manager)
-    → org_health_check
-    → delegates to department heads
-
-Engineering/
-  On-Call Engineer
-    → incident_triage
-    → runbook_executor
+┌─────────────────────────────────────────────────────────────────┐
+│                          YOUR COMPANY                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Executive/                                                     │
+│  ├── CEO (manager)                                              │
+│  │   ├── org_health_check        ← daily cross-department view  │
+│  │   └── delegates to ──┬── Head of Engineering                 │
+│  │                      ├── Head of Sales                       │
+│  │                      └── Head of Support                     │
+│  │                                                              │
+│  Engineering/                                                   │
+│  ├── Head of Engineering (manager)                              │
+│  │   ├── sprint_summary          ← weekly progress report       │
+│  │   └── delegates to ──┬── On-Call Engineer                    │
+│  │                      └── Security Analyst                    │
+│  ├── On-Call Engineer                                           │
+│  │   ├── incident_triage         ← 24/7, every 15 min          │
+│  │   └── runbook_executor        ← on-demand via Slack          │
+│  └── Security Analyst                                           │
+│      └── vulnerability_scan      ← nightly                      │
+│                                                                 │
+│  Sales/                                                         │
+│  ├── Head of Sales (manager)                                    │
+│  │   └── delegates to ──┬── Pipeline Analyst                    │
+│  │                      └── Forecast Manager                    │
+│  ├── Pipeline Analyst                                           │
+│  │   ├── deal_health_check       ← daily, 7 AM                 │
+│  │   └── stale_deal_alert        ← daily, 9 AM                 │
+│  └── Forecast Manager                                           │
+│      └── weekly_forecast         ← Mondays, 8 AM               │
+│                                                                 │
+│  Support/                                                       │
+│  └── Ticket Triager                                             │
+│      ├── ticket_classification   ← every 30 min                 │
+│      └── escalation_detector     ← every 15 min                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+You define all of this in YAML files on disk. No code required — just folder structure and config.
 
 ### 3. Approve or Reject in Slack
 
