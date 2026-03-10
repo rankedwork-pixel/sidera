@@ -1,6 +1,30 @@
 # Sidera
 
-Open-source framework for building autonomous AI agents that connect to APIs, run on schedules, and execute actions with human approval.
+**Build AI employees that actually do work.**
+
+Sidera is an open-source framework for creating autonomous AI agents that connect to your APIs, run on schedules, analyze data, recommend actions, and execute them — with human approval at every step.
+
+Think of it like hiring a team of AI workers: each one has a job title, a set of skills, memory of past work, and a Slack channel where they report to you. You approve or reject their recommendations with a button click. They learn from every interaction.
+
+---
+
+### The Problem
+
+You want AI agents that do real work in your business — not chatbots, not copilots, not prompt chains. Actual employees that wake up every morning, check your data, find problems, recommend solutions, and execute approved changes.
+
+But building that from scratch means solving: tool orchestration, human approval flows, persistent memory, cost controls, audit logging, multi-agent coordination, skill definitions, scheduled execution, and safety guardrails. That's months of infrastructure work before your agent does anything useful.
+
+### The Solution
+
+Sidera gives you all of that out of the box. You just define **what your agents should do** (in simple YAML files) and **connect your data sources** (with a Python connector template).
+
+```
+connect data sources → define skills in YAML → get Slack briefings → approve or reject → execute → repeat
+```
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/rankedwork-pixel/sidera.git && cd sidera
@@ -11,102 +35,123 @@ export ANTHROPIC_API_KEY="your-key-here"
 make demo
 ```
 
-The demo runs a full agent briefing cycle against sample data — no database, no external services, just Python and an API key.
+The demo runs a full agent briefing cycle against sample data — no database, no Slack, just Python and an API key.
 
-## What It Does
+---
 
-Sidera agents pull data from APIs, analyze it with Claude, and post structured recommendations to Slack with approve/reject buttons. Approved actions execute through the same connectors. Everything is logged.
+## How It Works
 
-The core loop: **connect data sources → define skills in YAML → get Slack briefings → approve or reject → execute → repeat.**
+### 1. Define Skills in YAML
 
-Skills, connectors, and roles are all swappable. The framework handles the agent loop, approval pipeline, memory, scheduling, and audit trail.
-
-## Skills
-
-Skills are YAML files that tell agents what to do:
+Skills tell agents what to do. No code required for most skills — just describe the task, pick a model, and set a schedule.
 
 ```yaml
-name: Anomaly Detector
-category: analysis
+name: Daily Health Check
+category: monitoring
 model: sonnet
-schedule: "0 7 * * 1-5"
+schedule: "0 7 * * 1-5"   # 7 AM, weekdays
 
 system_supplement: |
-  1. Pull 30 days of data from all connected sources
-  2. Compute baselines for all KPIs
-  3. Flag anything beyond 2 standard deviations
-  4. Rank anomalies by financial impact
+  1. Check system health across all connected services
+  2. Review error rates and latency trends
+  3. Compare against 7-day baselines
+  4. Flag anything unusual and recommend fixes
 
 business_guidance: |
-  - Never recommend action based on a single day of data
-  - Always check day-of-week patterns before flagging
+  - Don't alert on single transient errors
+  - Always check if scheduled maintenance explains anomalies
+  - Rank issues by business impact, not technical severity
 ```
 
-Skills are organized into a three-level hierarchy: **Department → Role → Skill**. Context flows down — a skill inherits its role's persona, principles, and goals, plus its department's vocabulary and shared context.
+### 2. Organize Into Teams
 
-## Approval Tiers
+Skills are grouped into a three-level hierarchy: **Department → Role → Skill**.
 
-| Tier | Behavior |
-|------|----------|
-| Read-only | Agent reads data, reports findings. No writes. |
-| Auto-execute | Pre-approved rules with caps, cooldowns, kill switch. Off by default. |
-| Manual approval | Approve/Reject buttons in Slack for every action. |
+Each role has a persona, principles, goals, and memory. Context flows down — a skill inherits everything from its role and department. Manager roles delegate to sub-roles and synthesize results.
 
-## Memory
+```
+Executive/
+  CEO (manager)
+    → org_health_check
+    → delegates to department heads
 
-Agents persist memories across runs — decisions, anomalies, lessons, commitments, steward notes, cross-role insights. Hot memories (90 days) are auto-injected. Cold memories are searchable. Weekly consolidation detects contradictions.
+Engineering/
+  On-Call Engineer
+    → incident_triage
+    → runbook_executor
+```
 
-## Conversations
+### 3. Approve or Reject in Slack
 
-Every role works in Slack threads. `@Sidera talk to the media buyer` starts a conversation pinned to that role. Write operations work inline — the agent proposes, you approve or reject in-thread.
+Every recommendation shows up in Slack with Approve/Reject buttons. You stay in control.
 
-## Manager Roles
+Agents can also hold conversations — `@Sidera talk to the on-call engineer` starts a threaded back-and-forth with full tool access.
 
-A manager is a role with a `manages` field. It runs its own skills, decides which sub-roles to activate (via LLM), runs them, and synthesizes the results. Recursive (managers of managers) supported.
+### 4. Agents Learn and Evolve
 
-## Skill Evolution
+Agents persist memories across runs — decisions made, anomalies found, lessons learned, commitments tracked. They reflect after every run and propose improvements to their own skills through the same approval pipeline.
 
-Agents propose changes to their own skills through the approval pipeline. Post-run reflection detects recurring friction and generates modification proposals. Agents cannot modify their own safety controls (`requires_approval`, `manages`, `is_active` are forbidden fields).
+---
 
-## Connectors
+## Key Features
 
-Adding a connector: copy `src/templates/connector_template.py`, implement your read/write methods, register MCP tools. The agent loop, approval flow, and audit trail work automatically.
+| Feature | What It Means |
+|---------|--------------|
+| **YAML-based skills** | Define agent behavior without code. Schedule, model, tools, and instructions in one file. |
+| **Human-in-the-loop** | Every write action goes through Slack approval. Auto-execute rules available (off by default). |
+| **Persistent memory** | Agents remember across runs. Hot/cold tiers, weekly consolidation, contradiction detection. |
+| **Manager roles** | Hierarchical delegation — managers decide which sub-roles to activate and synthesize results. |
+| **Skill evolution** | Agents propose changes to their own skills. Forbidden fields prevent safety bypass. |
+| **Multi-agent working groups** | Form ad hoc cross-functional teams around a shared objective. |
+| **Pluggable connectors** | Copy a template, implement your methods. Framework handles the rest. |
+| **Plugin import** | Absorb Claude Code / Cowork plugins — agents can use external MCP tools. |
+| **Cost controls** | Per-run budgets, daily caps, three-phase model routing (Haiku → Sonnet → Opus). |
+| **Full audit trail** | Every action, recommendation, approval, and cost tracked in PostgreSQL. |
+| **Stewardship** | Every AI role has a designated human accountable for its behavior. |
 
-## Plugin Import
+---
 
-Sidera can absorb Claude Code / Cowork plugins — importing skills and connecting to MCP servers so agents can use external tools. `load_plugin` / `unload_plugin` meta-tools for interactive management.
+## Adding a Connector
 
-## Project Structure
+Connectors let agents talk to your APIs. Copy the template, implement your read/write methods, register MCP tools:
+
+```bash
+cp src/templates/connector_template.py src/connectors/my_service.py
+```
+
+The agent loop, approval flow, memory, and audit trail all work automatically with any connector.
+
+---
+
+## Architecture
 
 ```
 src/
-  agent/        Agent loop, prompts, three-phase model routing
+  agent/        Core agent loop, prompts, model routing
   skills/       YAML definitions, registry, router, executor, evolution
-  connectors/   API clients + retry utility
-  mcp_servers/  74 MCP tools
+  connectors/   API clients (Slack built-in, add your own)
+  mcp_servers/  MCP tools for agent capabilities
   plugins/      Claude Code / Cowork plugin import
-  workflows/    18 Inngest durable functions
+  workflows/    13 Inngest durable functions (scheduling, orchestration)
   db/           Async SQLAlchemy + 115-method CRUD service
-  api/          FastAPI, OAuth, webhooks, Slack commands
+  api/          FastAPI, Slack commands, org chart API
   mcp_stdio/    MCP server for Claude Code integration
   llm/          Hybrid model routing (Claude + external providers)
-  cache/        Redis caching
-  middleware/   Sentry, rate limiting, auth, RBAC
-  meetings/     Listen-only meeting participation
-  templates/    Templates for new connectors/tools
-dashboard/      Streamlit admin UI
-tests/          4200+ tests
-alembic/        29 migrations
+  cache/        Redis caching layer
+  middleware/   Auth, RBAC, rate limiting, Sentry
+  templates/    Starter templates for new connectors and tools
 ```
 
-**Stack:** Python 3.13, FastAPI, Anthropic API, Inngest, PostgreSQL, Redis, Slack Bolt, SQLAlchemy
+**Stack:** Python, FastAPI, Anthropic Claude API, Inngest, PostgreSQL, Redis, Slack Bolt, SQLAlchemy
+
+---
 
 ## Setup
 
-### Docker Compose
+### Docker (fastest)
 
 ```bash
-cp .env.example .env  # edit with your API keys
+cp .env.example .env  # add your API keys
 docker compose up -d
 ```
 
@@ -115,37 +160,33 @@ docker compose up -d
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,dashboard]"
-cp .env.example .env  # edit with your API keys
+cp .env.example .env  # add your API keys
 alembic upgrade head
 
-make dev              # API server
-make dashboard        # Streamlit UI
-npx inngest-cli@latest dev  # Workflow engine
+make dev                     # API server
+make dashboard               # Streamlit admin UI
+npx inngest-cli@latest dev   # Workflow engine
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for the full setup guide.
-
-## Development
+### Development
 
 ```bash
-make demo          # Zero-config demo
-make lint          # Ruff
-make test          # 4200+ tests
-make cleanup       # Format + lint + test + sync-docs
+make demo       # Zero-config demo (no DB needed)
+make lint       # Ruff linter
+make test       # Full test suite
+make cleanup    # Format + lint + test + sync-docs
 ```
 
-## Configuration
-
-All via environment variables. See [`.env.example`](.env.example) for the full list.
-
-Key variables: `ANTHROPIC_API_KEY`, `DATABASE_URL`, `SLACK_BOT_TOKEN`, `REDIS_URL`.
+---
 
 ## Docs
 
-- [QUICKSTART.md](QUICKSTART.md) — full setup guide
+- [QUICKSTART.md](QUICKSTART.md) — full setup walkthrough
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
 - [docs/onboarding/](docs/onboarding/) — architecture deep-dives
-- [docs/skill-creation-guide.md](docs/skill-creation-guide.md) — writing skills
+- [docs/skill-creation-guide.md](docs/skill-creation-guide.md) — writing custom skills
+
+---
 
 ## License
 
