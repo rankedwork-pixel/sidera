@@ -32,14 +32,14 @@ model: sonnet
 schedule: "0 7 * * 1-5"
 
 system_supplement: |
-  1. Pull 30 days of data from Google Ads AND Meta
+  1. Pull 30 days of data from all connected sources
   2. Compute baselines for all KPIs
   3. Flag anything beyond 2 standard deviations
-  4. Cross-reference against backend BigQuery data
+  4. Rank anomalies by financial impact
 
 business_guidance: |
-  - Backend data ALWAYS overrides platform-reported metrics
-  - Never recommend pausing a campaign based on a single day
+  - Never recommend action based on a single day of data
+  - Always check day-of-week patterns before flagging
 ```
 
 Skills are organized into a three-level hierarchy: **Department → Role → Skill**. Context flows down — a skill inherits its role's persona, principles, and goals, plus its department's vocabulary and shared context.
@@ -70,7 +70,7 @@ Agents propose changes to their own skills through the approval pipeline. Post-r
 
 ## Connectors
 
-Ships with 8 reference connectors: Google Ads, Meta Ads, BigQuery, Google Drive, Slack, Recall.ai (meetings), SSH, Computer Use. Adding a connector: copy `src/templates/connector_template.py`, implement methods, register MCP tools.
+Adding a connector: copy `src/templates/connector_template.py`, implement your read/write methods, register MCP tools. The agent loop, approval flow, and audit trail work automatically.
 
 ## Plugin Import
 
@@ -82,7 +82,7 @@ Sidera can absorb Claude Code / Cowork plugins — importing skills and connecti
 src/
   agent/        Agent loop, prompts, three-phase model routing
   skills/       YAML definitions, registry, router, executor, evolution
-  connectors/   API clients (8 connectors + retry)
+  connectors/   API clients + retry utility
   mcp_servers/  74 MCP tools
   plugins/      Claude Code / Cowork plugin import
   workflows/    18 Inngest durable functions
