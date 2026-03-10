@@ -47,9 +47,9 @@ defined entirely in YAML and tells the agent:
 - **What tools to use** (tools_required — which MCP tools are available)
 - **Which model to use** (model — haiku, sonnet, or opus)
 
-Skills are the atomic unit of agent capability. A role (like "Performance Media
-Buyer") is composed of multiple skills. A department (like "Marketing") is
-composed of multiple roles. Skills are designed to be:
+Skills are the atomic unit of agent capability. A role (like "CEO" or
+"Head of IT") is composed of multiple skills. A department (like "Executive")
+is composed of multiple roles. Skills are designed to be:
 
 - **Composable** — multiple skills run in sequence to form a role's briefing
 - **Portable** — skills can be exported and imported across organizations
@@ -69,32 +69,32 @@ Skills exist inside a three-level hierarchy on disk:
 
 ```
 src/skills/library/
-  marketing/                          <-- Department
-    _department.yaml                  <-- Department config
-    performance_media_buyer/          <-- Role
-      _role.yaml                      <-- Role config
-      _rules.yaml                     <-- Auto-execute rules (optional)
-      anomaly_detector.yaml           <-- Flat skill (single file)
-      creative_analysis/              <-- Folder-based skill (directory)
-        skill.yaml                    <-- Skill config
-        context/                      <-- Context files
-          scoring_rubric.md
-          platform_benchmarks.md
-        examples/                     <-- Example outputs
-          good_analysis_ecommerce.md
-        guidelines/                   <-- Decision frameworks
+  executive/                            <-- Department
+    _department.yaml                    <-- Department config
+    ceo/                                <-- Role
+      _role.yaml                        <-- Role config
+      _rules.yaml                       <-- Auto-execute rules (optional)
+      system_monitor.yaml               <-- Flat skill (single file)
+      incident_triage/                  <-- Folder-based skill (directory)
+        skill.yaml                      <-- Skill config
+        context/                        <-- Context files
+          severity_rubric.md
+          escalation_policy.md
+        examples/                       <-- Example outputs
+          good_triage_report.md
+        guidelines/                     <-- Decision frameworks
           decision_framework.md
-      fb_creative_cuts/               <-- Code-backed skill (directory)
+      cost_report/                      <-- Code-backed skill (directory)
         skill.yaml
         code/
-          run.py                      <-- Python entrypoint
+          run.py                        <-- Python entrypoint
         context/
-          calibration_notes.md
-  it/                                 <-- Another department
+          threshold_notes.md
+  engineering/                           <-- Another department
     _department.yaml
-    head_of_it/
+    on_call_engineer/
       _role.yaml
-      system_health_check.yaml
+      incident_triage.yaml
 ```
 
 **Naming conventions:**
@@ -104,8 +104,8 @@ src/skills/library/
 | `_department.yaml` | Department definition (underscore prefix = config, not a skill) |
 | `_role.yaml` | Role definition |
 | `_rules.yaml` | Auto-execute rules for the role |
-| `anomaly_detector.yaml` | Flat skill (single YAML file, no context files) |
-| `creative_analysis/skill.yaml` | Folder-based skill (skill.yaml inside a directory) |
+| `system_monitor.yaml` | Flat skill (single YAML file, no context files) |
+| `incident_triage/skill.yaml` | Folder-based skill (skill.yaml inside a directory) |
 
 The underscore prefix on `_department.yaml`, `_role.yaml`, and `_rules.yaml`
 tells the registry "this is configuration, not a skill." The registry skips
@@ -144,9 +144,9 @@ the computation; the agent interprets and presents the results.
 thresholds, statistical analysis, or deterministic output that an LLM should
 not be trusted to compute.
 
-**Example:** The `fb_creative_cuts` skill uses Python code calibrated against
-real human cut decisions. The code computes CPBC thresholds. The agent's job is
-to run the code, read the CSV output, and present findings.
+**Example:** A `cost_report` skill uses Python code to compute cost breakdowns
+across agent runs. The code aggregates billing data from logs. The agent's job
+is to run the code, read the output, and present findings.
 
 This guide focuses on LLM skills first. Code-backed skills are covered in
 [Section 15](#15-code-backed-skills).
@@ -162,7 +162,7 @@ files (examples, rubrics, guidelines).
 
 ```bash
 # Create a flat skill
-touch src/skills/library/marketing/performance_media_buyer/budget_optimizer.yaml
+touch src/skills/library/<department>/<role>/system_monitor.yaml
 ```
 
 **Folder-based skill** — a directory containing `skill.yaml` plus context
@@ -171,11 +171,11 @@ decision frameworks, or other reference material into the agent's context.
 
 ```bash
 # Create a folder-based skill
-mkdir -p src/skills/library/marketing/performance_media_buyer/budget_optimizer
-touch src/skills/library/marketing/performance_media_buyer/budget_optimizer/skill.yaml
-mkdir -p src/skills/library/marketing/performance_media_buyer/budget_optimizer/context
-mkdir -p src/skills/library/marketing/performance_media_buyer/budget_optimizer/examples
-mkdir -p src/skills/library/marketing/performance_media_buyer/budget_optimizer/guidelines
+mkdir -p src/skills/library/<department>/<role>/incident_triage
+touch src/skills/library/<department>/<role>/incident_triage/skill.yaml
+mkdir -p src/skills/library/<department>/<role>/incident_triage/context
+mkdir -p src/skills/library/<department>/<role>/incident_triage/examples
+mkdir -p src/skills/library/<department>/<role>/incident_triage/guidelines
 ```
 
 **When to use which:**
@@ -196,37 +196,34 @@ in:
 
 ```yaml
 # --- Identity ---
-id: budget_optimizer                    # Unique ID (alphanumeric + underscore + hyphen)
-name: "Budget Optimizer"                # Human-readable name
+id: system_monitor                      # Unique ID (alphanumeric + underscore + hyphen)
+name: "System Monitor"                  # Human-readable name
 version: "1.0"                          # Semantic version
 description: >-                         # One-line description (used by the SkillRouter
-  Analyze campaign budgets and          #   for semantic matching — make it specific)
-  recommend reallocations based on
-  backend-attributed ROAS
+  Monitor system health, detect failed  #   for semantic matching — make it specific)
+  runs, and recommend corrective
+  actions based on error patterns
 
 # --- Classification ---
-category: budget                        # One of: analysis, optimization, reporting,
+category: monitoring                    # One of: analysis, optimization, reporting,
                                         #   monitoring, creative, audience, bidding,
                                         #   budget, forecasting, attribution, operations
-platforms: [google_ads, meta, bigquery] # Which connectors this skill needs
+platforms: [custom]                     # Which connectors this skill needs
 tags:                                   # Keywords for routing and search
-  - budget
-  - allocation
-  - roas
-  - spend
-  - efficiency
+  - health
+  - monitoring
+  - errors
+  - failed-runs
+  - diagnostics
 
 # --- Execution ---
 tools_required:                         # MCP tools the agent can call
-  - get_google_ads_performance
-  - get_google_ads_campaigns
-  - get_meta_performance
-  - get_meta_campaigns
-  - get_backend_performance
-  - get_budget_pacing
-  - get_business_goals
-  - update_google_ads_campaign          # Write tool (requires approval)
-  - update_meta_campaign                # Write tool (requires approval)
+  - get_system_health
+  - get_failed_runs
+  - get_recent_audit_events
+  - get_cost_summary
+  - get_approval_queue_status
+  - send_slack_alert
 model: sonnet                           # haiku | sonnet | opus
 max_turns: 15                           # Max API round-trips (1-50)
 
@@ -261,8 +258,8 @@ underscores and hyphens. This is how the system refers to the skill everywhere:
 in `briefing_skills` lists, in `chain_after` references, in the routing index,
 in the database.
 
-- Good: `anomaly_detector`, `creative_analysis`, `system_health_check`
-- Bad: `my skill`, `budget.optimizer`, `skill #3`
+- Good: `system_monitor`, `incident_triage`, `system_health_check`
+- Bad: `my skill`, `health.check`, `skill #3`
 
 **`name`** (required) — Human-readable name shown in Slack messages, dashboard,
 and logs.
@@ -275,49 +272,60 @@ meaningful changes. The system tracks this for skill evolution history.
 user's query to this skill. Be specific about what the skill does and what
 questions it answers. Vague descriptions cause misrouting.
 
-- Good: "Identify significant metric anomalies across Google Ads and Meta campaigns, find root causes for sudden CPA spikes, ROAS drops, or spend surges"
-- Bad: "Analyzes data" or "Does marketing stuff"
+- Good: "Identify failed agent runs, diagnose root causes for DLQ entries, cost spikes, or system errors, and recommend corrective actions"
+- Bad: "Analyzes data" or "Does monitoring stuff"
 
 **`category`** (required) — Must be one of: `analysis`, `optimization`,
 `reporting`, `monitoring`, `creative`, `audience`, `bidding`, `budget`,
 `forecasting`, `attribution`, `operations`. Used for filtering and organization.
 
 **`platforms`** (required) — Which platform connectors this skill needs data
-from. Valid values: `google_ads`, `meta`, `bigquery`, `google_drive`. A skill
-with `platforms: [meta, bigquery]` needs access to both Meta and BigQuery.
+from. Valid values: `custom`. A skill with `platforms: [custom]` uses the
+framework's built-in tools.
 
 **`tags`** (required) — Keywords used by the SkillRouter for semantic matching.
-Include synonyms. If your skill handles "CPA spikes," include both `cpa` and
-`cost-per-acquisition`. The router builds a compact index from these:
+Include synonyms. If your skill handles "system errors," include both `errors`
+and `failures`. The router builds a compact index from these:
 `skill_id | description | tag1, tag2, tag3`.
 
 **`tools_required`** (required) — The MCP tools this skill can call. The agent
-will only have access to tools listed here. If you list a write tool (like
-`update_google_ads_campaign`), the agent can propose changes but they go through
-the approval pipeline.
+will only have access to tools listed here. If you list a write tool, the agent
+can propose changes but they go through the approval pipeline.
 
 The full list of available tools is defined in `src/agent/prompts.py` in the
-`ALL_TOOLS` list (74 tools total). Common ones:
+`ALL_TOOLS` list. Common ones:
 
 | Tool | Purpose |
 |------|---------|
-| `get_google_ads_performance` | Pull Google Ads metrics by date range |
-| `get_google_ads_campaigns` | List campaigns with status/budget/strategy |
-| `get_google_ads_changes` | Recent account changes (last N days) |
-| `get_meta_performance` | Pull Meta metrics by date range |
-| `get_meta_campaigns` | List Meta campaigns with objectives/budgets |
-| `get_meta_audience_insights` | Breakdown by age/gender/platform/device |
-| `get_backend_performance` | Backend revenue, orders, AOV from BigQuery |
-| `get_campaign_attribution` | Backend campaign-level attribution |
-| `get_budget_pacing` | Budget vs actual spend pacing |
-| `get_business_goals` | Revenue/CPA/ROAS targets |
-| `update_google_ads_campaign` | Modify Google Ads campaign (write, needs approval) |
-| `update_meta_campaign` | Modify Meta campaign (write, needs approval) |
-| `send_slack_alert` | Send alert to Slack channel |
-| `create_google_doc` | Create a Google Doc |
-| `manage_google_sheets` | Create/read/write Google Sheets |
-| `get_system_health` | System infrastructure health |
+| `get_system_health` | System infrastructure health check |
 | `get_failed_runs` | Dead letter queue entries |
+| `get_recent_audit_events` | Recent audit log entries |
+| `get_cost_summary` | LLM cost tracking summary |
+| `get_approval_queue_status` | Pending approval queue status |
+| `get_conversation_status` | Active conversation thread status |
+| `get_webhook_events` | Recent webhook events |
+| `resolve_failed_run` | Mark a DLQ entry as resolved |
+| `send_slack_alert` | Send alert to Slack channel |
+| `send_slack_thread_reply` | Reply in a Slack thread |
+| `react_to_slack_message` | Add emoji reaction to a message |
+| `search_role_memory_archive` | Search cold memory archive |
+| `check_slack_connection` | Verify Slack connectivity |
+| `preview_slack_briefing` | Preview a briefing before posting |
+| `propose_skill_change` | Propose a modification to a skill |
+| `propose_role_change` | Propose a new role or role modification |
+| `save_memory` | Save a memory for the current role |
+| `load_memory_detail` | Load full content of a memory by ID |
+| `load_skill_context` | Load a context file on demand |
+| `load_referenced_skill_context` | Load a referenced skill's context |
+| `send_message_to_role` | Send async message to another role |
+| `check_inbox` | Check for pending messages |
+| `reply_to_message` | Reply to a received message |
+| `request_peer_consultation` | Ask another role for input |
+| `form_working_group` | Form an ad hoc cross-functional group |
+| `get_working_group_status` | Check working group progress |
+| `delegate_to_role` | Delegate a task to a sub-role |
+| `orchestrate_task` | Run a supervised multi-step task |
+| `run_skill_code` | Execute a code-backed skill's Python script |
 
 **`model`** (required) — Which Claude model to use:
 
@@ -354,33 +362,37 @@ The single most effective pattern for high-quality agent output is the
 MUST execute in order. Each step specifies what to do, what tools to call,
 and what conditions trigger special handling.
 
-Here is the pattern from the real `anomaly_detector` skill:
+Here is the pattern from a `system_monitor` skill:
 
 ```yaml
 system_supplement: |
-  You detect and diagnose metric anomalies across all connected advertising
-  platforms. Your job is to find significant deviations from normal
-  performance, determine root causes with evidence, and recommend
-  corrective actions before small problems become expensive ones.
+  You detect and diagnose system health issues across the Sidera agent
+  framework. Your job is to find failed runs, cost anomalies, and
+  infrastructure problems, determine root causes with evidence, and
+  recommend corrective actions before small problems escalate.
 
   ## MANDATORY ANALYSIS SEQUENCE — execute every step, no shortcuts
 
   BEFORE producing any output, you MUST complete ALL 7 steps below.
-  If you skip a step, your anomaly detection is incomplete and unreliable.
+  If you skip a step, your diagnosis is incomplete and unreliable.
   If a tool call fails, report the failure — NEVER silently omit data.
 
-  **STEP 1: BASELINE DATA COLLECTION**
-  You MUST pull the last 30 days of daily performance data for EVERY active
-  campaign across Google Ads and Meta. This is your baseline window.
-  NEVER use fewer than 14 days. ...
+  **STEP 1: SYSTEM HEALTH CHECK**
+  You MUST call get_system_health to get the current infrastructure status.
+  Check for database connectivity, Redis availability, and Inngest worker
+  status. NEVER skip this step.
 
-  **STEP 2: KPI COMPUTATION**
-  For each campaign, you MUST compute rolling baselines for ALL of these KPIs:
-  - CPA (cost per acquisition — backend-attributed, NOT platform-reported)
-  - ROAS (return on ad spend — backend-attributed, NOT platform-reported)
+  **STEP 2: FAILED RUN INSPECTION**
+  You MUST call get_failed_runs to retrieve all dead letter queue entries.
+  Classify each failure: transient (retry-safe) vs permanent (needs human).
+  NEVER resolve entries you are unsure about.
+
+  **STEP 3: COST ANALYSIS**
+  You MUST call get_cost_summary to check LLM spend against budgets.
+  Flag any role or skill where cost exceeds 120% of its expected run cost.
   ...
 
-  **STEP 3: STATISTICAL BOUNDS**
+  **STEP 4: AUDIT LOG REVIEW**
   ...
 ```
 
@@ -400,29 +412,29 @@ commands strictly. Use this language hierarchy:
 **Specific patterns that work:**
 
 ```
-You MUST pull data for EVERY active campaign.
-NEVER use fewer than 14 days of baseline data.
+You MUST check system health for EVERY connected service.
+NEVER resolve a failed run without diagnosing the root cause.
 If a tool call fails, report the failure — NEVER silently omit data.
-BEFORE investigating complex causes, you MUST check simple ones first.
-You MUST NOT recommend pausing a campaign based on a single-day anomaly.
+BEFORE recommending a fix, you MUST verify the error is reproducible.
+You MUST NOT auto-resolve failures caused by auth errors or schema bugs.
 ```
 
 **Patterns that do NOT work:**
 
 ```
-Try to pull data for all campaigns.          (too soft — agent will skip some)
-It would be good to use 14+ days.            (agent treats as optional)
-Consider checking for tool call failures.    (agent will not prioritize this)
-You might want to look at backend data.      (agent may or may not do it)
+Try to check all services.                  (too soft — agent will skip some)
+It would be good to check the DLQ.          (agent treats as optional)
+Consider checking for tool call failures.   (agent will not prioritize this)
+You might want to look at cost data.        (agent may or may not do it)
 ```
 
 ### What to Include in system_supplement
 
 1. **One-paragraph role description** — What this skill does, in the agent's voice
 2. **Mandatory analysis sequence** — Numbered steps, explicit tool calls, failure handling
-3. **Severity/classification rules** — Exact thresholds (not "significant" — say ">2 sigma")
+3. **Severity/classification rules** — Exact thresholds (not "significant" — say ">3 consecutive failures")
 4. **Action rules** — What the agent MUST do vs MUST NOT do
-5. **Cross-reference requirements** — e.g., "You MUST cross-reference platform data with BigQuery backend"
+5. **Cross-reference requirements** — e.g., "You MUST cross-reference failed runs with recent audit events"
 
 ### What NOT to Include
 
@@ -443,7 +455,7 @@ supports variable substitution using Python's `str.format()` syntax.
 | Variable | Source | Example |
 |----------|--------|---------|
 | `{analysis_date}` | The date of analysis | `2025-02-24` |
-| `{accounts_block}` | Formatted list of connected accounts | `Google Ads: 123-456-7890\nMeta: act_123456789` |
+| `{accounts_block}` | Formatted list of connected accounts | `System: Sidera Framework v1.0` |
 | `{lookback_days}` | Configurable lookback window | `30` |
 | `{previous_output}` | Output from the previous skill in the pipeline | (text from prior skill) |
 
@@ -451,21 +463,20 @@ supports variable substitution using Python's `str.format()` syntax.
 
 ```yaml
 prompt_template: |
-  Run a budget optimization analysis for all connected accounts.
+  Run a system health and diagnostics analysis.
   Analysis date: {analysis_date}
 
-  Connected Accounts:
+  Connected Systems:
   {accounts_block}
 
-  Pull the last {lookback_days} days of performance and pacing data.
-  Cross-reference with backend attribution data from BigQuery.
-  Compare current allocation against business goals and targets.
+  Check the last {lookback_days} days of failed runs, cost data, and
+  audit events. Cross-reference error patterns with recent system changes.
 
   Focus especially on:
-  - Campaigns significantly over or under budget pace
-  - Campaigns where ROAS justifies budget increase
-  - Campaigns where budget is being wasted (high spend, low ROAS)
-  - Cross-channel reallocation opportunities
+  - Roles with repeated failures (3+ in the lookback window)
+  - Cost spikes above 120% of expected run cost
+  - Unresolved DLQ entries older than 24 hours
+  - Any approval queue bottlenecks
 ```
 
 **Tips:**
@@ -487,31 +498,32 @@ follow. The agent will match this structure closely.
 ```yaml
 output_format: |
   ## Executive Summary
-  2-3 sentences: Overall budget health. Are we on track, overspending,
-  or leaving money on the table?
+  2-3 sentences: Overall system health. Are all services operational,
+  are there unresolved failures, or is cost trending above budget?
 
-  ## Budget Pacing Table
-  Table with columns: Campaign | Platform | Monthly Budget | Spent |
-  Remaining | Pace Status | Projected End-of-Month
+  ## System Health Status
+  Table with columns: Service | Status | Last Check | Notes
 
-  ## Reallocation Recommendations
-  For each recommended change:
-  - Campaign name and ID
-  - Current daily budget → Recommended daily budget
-  - Rationale (with specific metrics)
-  - Expected impact on backend ROAS
-  - Risk assessment
+  ## Failed Run Analysis
+  For each failed run or cluster of failures:
+  - Role and skill that failed
+  - Error type (transient vs permanent)
+  - Root cause diagnosis
+  - Recommended action (auto-resolve, escalate, or investigate)
+  - Time in DLQ
 
-  ## Efficiency Opportunities
-  Campaigns where budget is being wasted:
-  - Campaign name
-  - Current spend and ROAS
-  - Recommended action (reduce/pause/restructure)
-  - Estimated weekly savings
+  ## Cost Analysis
+  Roles or skills exceeding expected cost:
+  - Role/skill name
+  - Expected cost vs actual cost
+  - Trend (increasing/stable/decreasing)
+  - Recommended action
 
-  ## Cross-Channel Summary
-  How is budget split across Google Ads vs Meta? Is the current split
-  optimal based on backend-attributed performance?
+  ## Approval Queue Status
+  Summary of pending approvals:
+  - Count of pending items by role
+  - Oldest pending item age
+  - Any bottlenecks or stuck approvals
 ```
 
 **Tips:**
@@ -519,7 +531,7 @@ output_format: |
 - Start with an Executive Summary — this is what the human reads first
 - Use tables for data-heavy sections
 - For each recommendation, require: what, why (with metrics), and expected impact
-- Include a "savings" or "impact" number wherever possible — dollar values drive action
+- Include a "time" or "urgency" indicator wherever possible — response time drives action
 
 ---
 
@@ -535,28 +547,28 @@ the agent must follow regardless of what the data suggests. Think of it as the
 business_guidance: |
   ## HARD RULES — violations make your analysis unreliable
 
-  - You MUST NOT recommend budget changes exceeding 20% of current budget
-    in a single move. Large jumps destabilize platform learning algorithms.
-    If ROAS justifies a 50% increase, recommend two sequential 20% increases
-    over 2 weeks instead.
-  - You MUST require a minimum 7-day performance window before recommending
-    ANY budget change. Decisions on <7 days of data are noise, not signal.
-  - Backend-attributed ROAS ALWAYS takes precedence over platform-reported
-    ROAS. If they disagree, follow backend. Period.
-  - You MUST NOT reallocate budget FROM a campaign that is currently in
-    learning phase (indicated by "Learning" status or <50 conversions in
-    the optimization window). Learning campaigns need stability.
-  - You MUST factor in day-of-week effects: compare Tuesday to previous
-    Tuesdays, not to trailing daily average.
-  - When total account spend is within 5% of monthly budget, you MUST NOT
-    recommend increases — only redistribution within current total.
-  - You MUST flag campaigns spending >30% of total account budget as
-    concentration risk, even if performance is good.
+  - You MUST NOT auto-resolve DLQ entries caused by authentication
+    failures, schema mismatches, or code bugs. These require human
+    intervention. Only transient network errors are safe to auto-resolve.
+  - You MUST require a minimum of 3 occurrences of the same error
+    pattern before classifying it as a systemic issue. Single failures
+    are noise, not signal.
+  - Audit log data ALWAYS takes precedence over inferred state.
+    If the audit log shows a successful run but the DLQ has an entry,
+    investigate the discrepancy — do not assume either is wrong.
+  - You MUST NOT recommend restarting services or clearing caches
+    as a first response. Diagnose the root cause first.
+  - You MUST factor in scheduled maintenance windows: failures during
+    known maintenance are expected, not anomalies.
+  - When total daily LLM cost exceeds 90% of the daily budget, you
+    MUST flag it as a cost warning — even if all runs succeeded.
+  - You MUST flag any single role consuming >40% of total daily cost
+    as a concentration risk, even if the role is performing well.
 ```
 
 ### What Makes Good Business Guidance
 
-1. **Specific thresholds** — "20% max budget change" not "don't change too much"
+1. **Specific thresholds** — "3+ occurrences" not "multiple failures"
 2. **Data source precedence** — explicitly state which data source wins
 3. **Minimum data requirements** — how much data before taking action
 4. **Exception handling** — what to do when rules conflict
@@ -568,8 +580,8 @@ business_guidance: |
 |------------------|-------------------|
 | How to analyze | What rules to follow |
 | Step-by-step procedure | Constraint boundaries |
-| "Pull 30 days of data" | "Never use <14 days baseline" |
-| "Compute sigma thresholds" | "Only flag >2 sigma as Warning" |
+| "Check failed runs for the last 30 days" | "Never auto-resolve auth failures" |
+| "Compute cost ratios per role" | "Only flag >120% of expected cost" |
 | Process-oriented | Outcome-oriented |
 
 Both are injected into the system prompt. The system_supplement comes first
@@ -582,8 +594,8 @@ agent sees both as part of the same instruction set.
 
 Context files are markdown documents that get injected into the agent's system
 prompt at runtime. They provide reference material the agent can consult while
-working: scoring rubrics, example outputs, decision frameworks, platform
-benchmarks.
+working: severity rubrics, example outputs, decision frameworks, escalation
+policies.
 
 ### Setting Up Context Files
 
@@ -614,12 +626,12 @@ lives). The system uses Python's `pathlib.glob()`:
 ### What Goes Where
 
 **`context/`** — Reference data the agent needs during analysis:
-- Scoring rubrics (tier definitions, thresholds)
-- Platform benchmarks (industry averages, expected ranges)
-- Account-specific context (target CPA, budget caps, business constraints)
+- Severity rubrics (tier definitions, thresholds)
+- Escalation policies (who to notify, when to page)
+- System-specific context (expected error rates, known issues, SLA targets)
 
 **`examples/`** — Example outputs showing "what good looks like":
-- Full example analyses with real (or realistic) numbers
+- Full example analyses with real (or realistic) data
 - Annotations explaining why each decision is correct
 - Both good and bad examples if helpful
 
@@ -630,27 +642,33 @@ lives). The system uses Python's `pathlib.glob()`:
 
 ### Example: Context File Content
 
-Here is a real context file from the `creative_analysis` skill
-(`context/scoring_rubric.md`):
+Here is an example context file for an `incident_triage` skill
+(`context/severity_rubric.md`):
 
 ```markdown
-# Creative Scoring Rubric
+# Incident Severity Rubric
 
-## Performance Tiers
+## Severity Tiers
 
-Use backend-attributed ROAS (not platform-reported) for all tier
-assignments. Platform ROAS is typically inflated 1.2-1.8x.
+Use the actual error count and impact scope for all tier
+assignments. Single occurrences do not warrant escalation.
 
-### Scale Tier (Top 20%)
-- Backend ROAS >= 2x the account's break-even ROAS
-- Frequency < 3.0 (still has headroom)
-- CTR stable or increasing over last 7 days
-- Action: Increase budget 10-20%. Never more than 20%.
+### Critical (P0)
+- All agent roles failing simultaneously
+- Database connectivity lost
+- Cost runaway: daily spend >200% of budget
+- Action: Immediate Slack alert to steward. Pause all scheduled runs.
 
-### Cut Tier (Bottom 20%)
-- Backend ROAS below break-even after sufficient data window
-- OR: frequency > 4.0 AND CTR declining for 5+ consecutive days
-- Action: Pause. Calculate weekly savings in the report.
+### Warning (P1)
+- Single role failing repeatedly (3+ consecutive failures)
+- Cost for a role >150% of expected
+- Approval queue backed up >48 hours
+- Action: Alert steward. Investigate root cause within 4 hours.
+
+### Info (P2)
+- Transient errors that self-resolved
+- Single DLQ entry with known cause
+- Action: Log for pattern detection. No immediate action needed.
 ```
 
 ### How Context Files Are Injected
@@ -660,7 +678,7 @@ At runtime, the executor calls `load_context_text()` from
 
 1. Resolves each glob pattern against the skill's `source_dir`
 2. Reads each matching file
-3. Wraps each file in a section header: `# Context: context/scoring_rubric.md`
+3. Wraps each file in a section header: `# Context: context/severity_rubric.md`
 4. Concatenates all sections
 
 The combined text is injected into the system prompt after the skill's
@@ -675,8 +693,8 @@ manifest:
 ```
 ## Available Context Files
 You can load any of these files using the load_skill_context tool:
-- context/scoring_rubric.md — Creative performance tier definitions and thresholds
-- examples/good_analysis_ecommerce.md — Example analysis for DTC brand
+- context/severity_rubric.md — Incident severity tier definitions and thresholds
+- examples/good_triage_report.md — Example triage report for a multi-role outage
 ```
 
 The agent then uses the `load_skill_context` MCP tool to load specific files
@@ -687,11 +705,11 @@ To provide descriptions in the manifest, add `context_file_descriptions`:
 ```yaml
 context_file_descriptions:
   - pattern: "context/*.md"
-    description: "Scoring rubrics and platform benchmarks"
+    description: "Severity rubrics and escalation policies"
   - pattern: "examples/*.md"
-    description: "Example analyses showing what good output looks like"
+    description: "Example triage reports showing what good output looks like"
   - pattern: "guidelines/*.md"
-    description: "Decision frameworks for cut/scale/test recommendations"
+    description: "Decision frameworks for prioritization and escalation"
 ```
 
 ---
@@ -707,9 +725,9 @@ executions.
 ```yaml
 # In _role.yaml
 briefing_skills:
-  - anomaly_detector         # Runs first
-  - budget_optimizer         # Runs second (gets anomaly_detector's output)
-  - creative_analysis        # Runs third
+  - system_monitor            # Runs first
+  - incident_triage           # Runs second (gets system_monitor's output)
+  - cost_analysis             # Runs third
 ```
 
 **Order matters.** Skills run sequentially, and each skill can access the
@@ -717,25 +735,23 @@ previous skill's output via the `{previous_output}` variable in its prompt
 template. This creates a pipeline:
 
 ```
-anomaly_detector → output → budget_optimizer → output → creative_analysis
+system_monitor → output → incident_triage → output → cost_analysis
 ```
 
-If `budget_optimizer` needs to know about anomalies, it can reference them
-because `anomaly_detector` ran first and its output is available as
+If `incident_triage` needs to know about system health issues, it can reference
+them because `system_monitor` ran first and its output is available as
 `{previous_output}`.
 
 ### Verify the Role Can Access Required Tools
 
 The role's `connectors` field determines which platform connectors are
-available. If your skill needs `get_meta_performance`, the role must have
-`meta` in its connectors:
+available. If your skill needs a specific connector's tools, the role must
+list it:
 
 ```yaml
 # In _role.yaml
 connectors:
-  - google_ads
-  - meta
-  - bigquery
+  - custom
 ```
 
 ### Test a Single Skill
@@ -743,13 +759,13 @@ connectors:
 You can run a single skill without running the entire role via Slack:
 
 ```
-/sidera run budget_optimizer
+/sidera run system_monitor
 ```
 
 Or run the full role:
 
 ```
-/sidera run role:performance_media_buyer
+/sidera run role:ceo
 ```
 
 ---
@@ -766,47 +782,40 @@ Auto-execute rules live in `_rules.yaml` inside the role directory:
 
 ```yaml
 # _rules.yaml
-role_id: performance_media_buyer
+role_id: ceo
 
 rules:
-  - id: pause_low_roas_ads
-    description: "Auto-pause ads with ROAS < 0.5x and daily spend > $100"
+  - id: resolve_transient_errors
+    description: "Auto-resolve DLQ entries caused by transient network errors"
     enabled: true
     action_types:
-      - pause_campaign
-      - update_ad_status
+      - resolve_error
     conditions:
-      - field: "action_params.metrics.roas"
-        operator: "lt"
-        value: 0.5
-      - field: "action_params.metrics.daily_spend"
-        operator: "gt"
-        value: 100.0
+      - field: "action_params.error_type"
+        operator: "eq"
+        value: "transient"
+      - field: "action_params.retry_count"
+        operator: "gte"
+        value: 3
     constraints:
-      max_daily_auto_executions: 5
-      cooldown_minutes: 60
+      max_daily_auto_executions: 10
+      cooldown_minutes: 30
       platforms:
-        - google_ads
-        - meta
+        - custom
 ```
 
 ### Rule Anatomy
 
 **`action_types`** — Which action types this rule can auto-execute. Must match
 the `ActionType` enum values:
-- `budget_change`
-- `pause_campaign`
-- `enable_campaign`
-- `bid_change`
-- `add_negative_keywords`
-- `update_ad_schedule`
-- `update_geo_bid_modifier`
-- `update_ad_status`
-- `update_adset_budget`
-- `update_adset_bid`
+- `resolve_error`
+- `restart_service`
+- `clear_cache`
+- `send_alert`
+- `update_config`
 
 **`conditions`** — ALL must be true (AND logic). Each condition has:
-- `field` — Dot-path into the action payload (e.g., `action_params.metrics.roas`)
+- `field` — Dot-path into the action payload (e.g., `action_params.error_type`)
 - `operator` — One of: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `regex`
 - `value` — The comparison value
 
@@ -818,10 +827,9 @@ the `ActionType` enum values:
 ### Safety Guarantees
 
 1. The **global kill switch** `auto_execute_enabled` defaults to `False`. No auto-execution happens until you explicitly enable it.
-2. **Budget changes** are further capped by `max_budget_change_ratio` (default 1.5 = 50%). Even if a rule allows a budget change, it cannot exceed this cap.
-3. **Skill proposals** (agent modifying its own skills) can NEVER auto-execute — hard-coded block in `should_auto_execute()`.
-4. **Role proposals** (agent proposing new roles) can NEVER auto-execute.
-5. **Lesson contradiction check** — before auto-executing, the system checks if the agent has any high-confidence lessons (>=0.8) that contradict the action. If found, auto-execution is blocked.
+2. **Skill proposals** (agent modifying its own skills) can NEVER auto-execute — hard-coded block in `should_auto_execute()`.
+3. **Role proposals** (agent proposing new roles) can NEVER auto-execute.
+4. **Lesson contradiction check** — before auto-executing, the system checks if the agent has any high-confidence lessons (>=0.8) that contradict the action. If found, auto-execution is blocked.
 
 ---
 
@@ -834,12 +842,12 @@ references skill B, the agent can load skill B's context on demand.
 
 ```yaml
 references:
-  - skill_id: anomaly_detector
+  - skill_id: system_health_check
     relationship: "depends_on"
-    reason: "Budget decisions should account for active anomalies"
-  - skill_id: creative_analysis
+    reason: "Incident triage should account for current system health status"
+  - skill_id: cost_monitoring
     relationship: "informs"
-    reason: "Creative performance affects budget allocation efficiency"
+    reason: "Cost patterns may indicate underlying system issues"
 ```
 
 ### How References Work at Runtime
@@ -908,19 +916,19 @@ make sync-docs
 Test a single skill directly:
 
 ```
-/sidera run budget_optimizer
+/sidera run system_monitor
 ```
 
 Test the entire role:
 
 ```
-/sidera run role:performance_media_buyer
+/sidera run role:ceo
 ```
 
 Start a conversation to test interactively:
 
 ```
-/sidera chat performance_media_buyer How are our budgets looking?
+/sidera chat ceo How is the system health looking?
 ```
 
 ### Testing via Code
@@ -932,7 +940,7 @@ from src.skills.schema import validate_skill
 registry = SkillRegistry()
 registry.load_all()
 
-skill = registry.get("budget_optimizer")
+skill = registry.get("system_monitor")
 assert skill is not None, "Skill not found in registry"
 
 errors = validate_skill(skill)
@@ -959,27 +967,26 @@ code_entrypoint: code/run.py         # Relative path from skill directory
 code_timeout_seconds: 120            # Subprocess timeout (max 3600)
 code_output_patterns:                # Glob patterns for output files
   - "output/*.csv"
-  - "output/*.docx"
+  - "output/*.json"
 
 tools_required:
   - run_skill_code                   # REQUIRED for code-backed skills
   - send_slack_alert                 # Optional — agent can push results
-  - create_google_doc                # Optional — agent can create docs
 ```
 
 ### Directory Structure
 
 ```
-fb_creative_cuts/
+cost_report/
   skill.yaml
   code/
     run.py                  # Entrypoint — the agent executes this
-    creative_cuts.py        # Business logic
-    generate_cuts_doc.py    # Output generation
+    cost_analysis.py        # Business logic
+    generate_report.py      # Output generation
   data/                     # Input data (CSV exports, etc.)
   output/                   # Where code writes results
   context/
-    calibration_notes.md
+    threshold_notes.md
 ```
 
 ### The system_supplement Pattern for Code-Backed Skills
@@ -995,7 +1002,7 @@ system_supplement: |
   ## MANDATORY WORKFLOW — follow this exact sequence
 
   1. FIRST: Call run_skill_code to execute the analysis.
-  2. SECOND: Read the output CSV/files.
+  2. SECOND: Read the output CSV/JSON files.
   3. THIRD: Summarize findings.
   4. FOURTH: Present in Slack-ready format.
 
@@ -1011,15 +1018,15 @@ When a code-backed skill executes, the `SkillExecutor` delegates to
 `ClaudeCodeExecutor` instead of the standard `SideraAgent.run_skill()`. The
 executor spins up a full agent instance with access to all connectors plus the
 `run_skill_code` tool. The agent runs the Python code in a subprocess,
-interprets the output, and can push results to any connector (Google Drive,
-Slack, BigQuery).
+interprets the output, and can push results to Slack or other connected
+services.
 
 ---
 
 ## 16. Behavioral Enforcement Patterns
 
-These patterns have been tested across all 19 Sidera skills and produce
-reliable, consistent agent behavior.
+These patterns have been tested across Sidera skills and produce reliable,
+consistent agent behavior.
 
 ### Pattern 1: Mandatory Step Sequences
 
@@ -1042,50 +1049,50 @@ If a tool call fails, report the failure — NEVER silently omit data.
 For rules that must never be violated:
 
 ```
-NEVER use fewer than 14 days of baseline data.
-ALWAYS cross-reference platform data with BigQuery backend.
-NEVER recommend changes exceeding 50% of current budget.
-ALWAYS state the exact sigma value when claiming "significant deviation."
+NEVER resolve a DLQ entry without diagnosing the root cause first.
+ALWAYS cross-reference failed runs with recent audit events.
+NEVER recommend service restarts without exhausting diagnostic steps.
+ALWAYS state the exact error count when claiming "repeated failures."
 ```
 
 ### Pattern 3: Conditional Requirements
 
 ```
-If backend data is unavailable for a creative, you MUST label it
-"Platform-only — backend data unavailable" and flag this prominently.
+If a service health check returns degraded status, you MUST escalate
+to the steward and flag it prominently in the report.
 
 If a tool call fails, report the failure — NEVER silently omit data.
 
-When 3+ campaigns show the same anomaly simultaneously, you MUST look
-for account-level causes BEFORE investigating campaign-specific factors.
+When 3+ roles show the same failure pattern simultaneously, you MUST
+look for infrastructure-level causes BEFORE investigating role-specific factors.
 ```
 
 ### Pattern 4: Specific Thresholds Over Vague Language
 
 ```
 # BAD — vague, agent will interpret inconsistently
-Flag campaigns that are significantly over budget.
+Flag roles that are having too many failures.
 
 # GOOD — specific, reproducible
-Flag campaigns where actual spend exceeds budget pace by >10%.
-Classify: WARNING if 10-20% over pace, CRITICAL if >20% over pace.
+Flag roles with 3+ consecutive failed runs in the last 24 hours.
+Classify: WARNING if 3-5 failures, CRITICAL if >5 failures.
 ```
 
 ### Pattern 5: Data Source Precedence
 
 ```
-Backend-attributed data ALWAYS takes precedence over platform data.
-If backend shows stable CPA but the platform shows a spike, you MUST
-classify it as "attribution artifact — not a real performance issue."
-NEVER recommend budget changes based on platform-only anomalies.
+Audit log data ALWAYS takes precedence over inferred system state.
+If the audit log shows a successful completion but the DLQ has an
+entry, you MUST classify it as "state inconsistency — investigate."
+NEVER auto-resolve entries based on inferred state alone.
 ```
 
 ### Pattern 6: Conservative Defaults
 
 ```
-When in doubt about cutting, you MUST recommend reduced-budget test
-BEFORE recommending full pause. Cutting a potential winner is more
-expensive than running it at low budget for another week.
+When in doubt about resolving a DLQ entry, you MUST recommend manual
+review BEFORE auto-resolving. Incorrectly resolving a real failure
+is more costly than leaving it in the queue for human inspection.
 ```
 
 ### Pattern 7: What NOT to Do (Explicit Anti-Patterns)
@@ -1109,35 +1116,35 @@ Here is the exact composition order (from `compose_role_context()` in
 ### System Prompt (what the agent sees as instructions)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  BASE_SYSTEM_PROMPT (from src/agent/prompts.py)     │ ← Identity, safety rules
-├─────────────────────────────────────────────────────┤
-│  STABLE IDENTITY LAYER (cached across runs)         │
-│  ├── Department context + vocabulary                │ ← From _department.yaml
-│  ├── Role persona                                   │ ← From _role.yaml
-│  ├── Decision-making principles                     │ ← From _role.yaml
-│  ├── Active goals                                   │ ← From _role.yaml
-│  ├── Role context files                             │ ← From _role.yaml context_files
-│  └── Team awareness (manager roles only)            │ ← From manages list
-├─────────────────────────────────────────────────────┤
-│  DYNAMIC PER-RUN LAYER (attention edge)             │
-│  ├── Memory context (hot memories, <=2000 tokens)   │ ← From role_memory table
-│  └── Pending messages (peer inbox)                  │ ← From role_messages table
-├─────────────────────────────────────────────────────┤
-│  SKILL-SPECIFIC CONTEXT                             │
-│  ├── system_supplement                              │ ← Your instructions
-│  ├── Context files (or lazy manifest)               │ ← Your context/*.md files
-│  ├── output_format                                  │ ← Your output structure
-│  └── business_guidance                              │ ← Your hard rules
-└─────────────────────────────────────────────────────┘
++-----------------------------------------------------+
+|  BASE_SYSTEM_PROMPT (from src/agent/prompts.py)     | <- Identity, safety rules
++-----------------------------------------------------+
+|  STABLE IDENTITY LAYER (cached across runs)         |
+|  |-- Department context + vocabulary                | <- From _department.yaml
+|  |-- Role persona                                   | <- From _role.yaml
+|  |-- Decision-making principles                     | <- From _role.yaml
+|  |-- Active goals                                   | <- From _role.yaml
+|  |-- Role context files                             | <- From _role.yaml context_files
+|  +-- Team awareness (manager roles only)            | <- From manages list
++-----------------------------------------------------+
+|  DYNAMIC PER-RUN LAYER (attention edge)             |
+|  |-- Memory context (hot memories, <=2000 tokens)   | <- From role_memory table
+|  +-- Pending messages (peer inbox)                  | <- From role_messages table
++-----------------------------------------------------+
+|  SKILL-SPECIFIC CONTEXT                             |
+|  |-- system_supplement                              | <- Your instructions
+|  |-- Context files (or lazy manifest)               | <- Your context/*.md files
+|  |-- output_format                                  | <- Your output structure
+|  +-- business_guidance                              | <- Your hard rules
++-----------------------------------------------------+
 ```
 
 ### User Prompt (what kicks off each run)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  prompt_template (with variables substituted)       │ ← Your run prompt
-└─────────────────────────────────────────────────────┘
++-----------------------------------------------------+
+|  prompt_template (with variables substituted)       | <- Your run prompt
++-----------------------------------------------------+
 ```
 
 ### Why the Ordering Matters
@@ -1157,49 +1164,49 @@ context receive the strongest attention from the LLM (U-shaped attention curve).
 
 ## 18. How Skills Execute at Runtime
 
-Here is the complete execution flow when `/sidera run role:performance_media_buyer` is triggered:
+Here is the complete execution flow when `/sidera run role:ceo` is triggered:
 
 ```
-1. Slack slash command → src/api/routes/slack.py
-   └── Dispatches Inngest event: sidera/role.run
+1. Slack slash command -> src/api/routes/slack.py
+   +-- Dispatches Inngest event: sidera/role.run
 
-2. Inngest picks up event → src/workflows/daily_briefing.py
-   └── role_runner_workflow (17 steps)
+2. Inngest picks up event -> src/workflows/daily_briefing.py
+   +-- role_runner_workflow (17 steps)
 
 3. Step: load-registry
-   └── SkillRegistry.load_all() + merge_db_definitions()
+   +-- SkillRegistry.load_all() + merge_db_definitions()
 
 4. Step: load-role-memory
-   └── db_service.get_hot_memories(role_id) → compose_memory_context()
+   +-- db_service.get_hot_memories(role_id) -> compose_memory_context()
 
 5. Step: check-inbox
-   └── db_service.get_pending_messages(role_id) → compose_message_context()
+   +-- db_service.get_pending_messages(role_id) -> compose_message_context()
 
 6. Step: execute-role
-   └── For each skill in briefing_skills:
+   +-- For each skill in briefing_skills:
        a. SkillExecutor.execute(skill_id, ...)
        b. SideraAgent.run_skill(skill, role_context, ...)
-          └── Compose full system prompt (see Section 17)
-          └── Call Anthropic API with tools
-          └── Agent loop: think → call tool → get result → think → ...
-          └── Return BriefingResult
+          +-- Compose full system prompt (see Section 17)
+          +-- Call Anthropic API with tools
+          +-- Agent loop: think -> call tool -> get result -> think -> ...
+          +-- Return BriefingResult
 
 7. Step: extract-and-save-memories
-   └── Scan output for decisions, anomalies → save to role_memory
+   +-- Scan output for decisions, anomalies -> save to role_memory
 
 8. Step: post-run-reflection
-   └── Haiku call: "What was hard? What would you do differently?"
-   └── Save lesson/insight memories
+   +-- Haiku call: "What was hard? What would you do differently?"
+   +-- Save lesson/insight memories
 
 9. Step: scan-lessons-for-skill-proposals
-   └── Check if 3+ lessons about same skill → propose skill change
+   +-- Check if 3+ lessons about same skill -> propose skill change
 
 10. Step: process-recommendations
-    └── Extract recommendations → create approval queue entries
-    └── Or auto-execute if matching rules
+    +-- Extract recommendations -> create approval queue entries
+    +-- Or auto-execute if matching rules
 
 11. Step: post-to-slack
-    └── Format output as Slack briefing → send via Slack connector
+    +-- Format output as Slack briefing -> send via Slack connector
 ```
 
 ### Key Points
@@ -1220,7 +1227,7 @@ MCP tool. This is how skills improve over time without human editing.
 ### How It Works
 
 1. During reflection, the agent identifies recurring friction (e.g., "I keep
-   needing to check landing page data but my instructions don't mention it")
+   needing to check cost summaries but my instructions don't mention it")
 2. The `scan_lessons_for_skill_proposals` workflow step checks: are there 3+
    lessons about the same skill?
 3. If yes, it uses Haiku to determine if a skill modification would help
@@ -1260,9 +1267,9 @@ organizations.
 from src.skills.portability import export_skill_to_zip
 
 path = export_skill_to_zip(
-    skill=registry.get("creative_analysis"),
+    skill=registry.get("incident_triage"),
     registry=registry,
-    output_path="./exports/creative_analysis.zip",
+    output_path="./exports/incident_triage.zip",
     exported_by="michael",
 )
 ```
@@ -1270,14 +1277,14 @@ path = export_skill_to_zip(
 ### Bundle Structure
 
 ```
-creative_analysis.zip
+incident_triage.zip
   manifest.yaml          # Provenance, SHA-256 hash, compatibility
   skill.yaml             # Sanitized (org-specific fields stripped)
   context/
-    scoring_rubric.md
-    platform_benchmarks.md
+    severity_rubric.md
+    escalation_policy.md
   examples/
-    good_analysis_ecommerce.md
+    good_triage_report.md
   guidelines/
     decision_framework.md
 ```
@@ -1288,10 +1295,10 @@ creative_analysis.zip
 from src.skills.portability import import_skill_from_bundle
 
 result = import_skill_from_bundle(
-    bundle_path="./exports/creative_analysis.zip",
-    target_dept_id="marketing",
-    target_role_id="my_media_buyer",
-    new_skill_id="imported_creative_analysis",  # Fork with new ID
+    bundle_path="./exports/incident_triage.zip",
+    target_dept_id="executive",
+    target_role_id="ceo",
+    new_skill_id="imported_incident_triage",  # Fork with new ID
     new_author="new_org",
 )
 ```
@@ -1401,7 +1408,7 @@ Use this checklist before considering a skill production-ready:
 ### Output Quality
 - [ ] `output_format` starts with Executive Summary
 - [ ] Each section has clear column definitions or field requirements
-- [ ] Dollar impact or savings estimates are required where applicable
+- [ ] Impact or urgency indicators are required where applicable
 - [ ] Recommendations include: what, why (metrics), expected impact
 
 ### Business Guidance

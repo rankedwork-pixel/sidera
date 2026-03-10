@@ -4,11 +4,10 @@ This document traces the complete code path for every trigger type in Sidera —
 
 **Key files referenced throughout:**
 - `src/api/routes/slack.py` — Slack handlers, slash commands, interactive buttons
-- `src/workflows/daily_briefing.py` — All 18 Inngest workflow functions
+- `src/workflows/daily_briefing.py` — All 13 Inngest workflow functions
 - `src/agent/core.py` — SideraAgent (the brain)
 - `src/skills/executor.py` — RoleExecutor, DepartmentExecutor
 - `src/skills/manager.py` — ManagerExecutor (delegation + synthesis)
-- `src/api/routes/webhooks.py` — Webhook endpoints
 
 ---
 
@@ -19,11 +18,9 @@ This document traces the complete code path for every trigger type in Sidera —
 3. [Daily Cron → Role/Manager Execution](#3-daily-cron--rolemanager-execution)
 4. [Approval Flow (Button Click → Execution)](#4-approval-flow-button-click--execution)
 5. [Heartbeat (Proactive Investigation)](#5-heartbeat-proactive-investigation)
-6. [Webhook Event → Event Reactor](#6-webhook-event--event-reactor)
-7. [Working Group Formation](#7-working-group-formation)
-8. [Meeting Join → Transcript → Delegation](#8-meeting-join--transcript--delegation)
-9. [Cross-Cutting Patterns](#9-cross-cutting-patterns)
-10. [Quick Reference Table](#10-quick-reference-table)
+6. [Working Group Formation](#6-working-group-formation)
+7. [Cross-Cutting Patterns](#7-cross-cutting-patterns)
+8. [Quick Reference Table](#8-quick-reference-table)
 
 ---
 
@@ -32,11 +29,11 @@ This document traces the complete code path for every trigger type in Sidera —
 **Entry point:** `handle_sidera_command()` in `src/api/routes/slack.py`
 
 ```
-User types: /sidera run role:performance_media_buyer
+User types: /sidera run role:ceo
          │
          ▼
 handle_sidera_command()
-  ├── Parse text: extract "role:performance_media_buyer"
+  ├── Parse text: extract "role:ceo"
   ├── RBAC check: user must be approver+
   ├── Load registry: verify role exists
   ├── Check if role is a manager → redirect to manager workflow
@@ -63,16 +60,15 @@ role_runner_workflow()              ← see Flow #3 for full steps
 **Entry point:** `handle_app_mention()` in `src/api/routes/slack.py`
 
 ```
-User types: @Sidera talk to the media buyer about CPA trends
+User types: @Sidera talk to the CEO about system health
          │
          ▼
 handle_app_mention()
   ├── Strip bot mention from text
   ├── RBAC check: user must have "chat" permission
-  ├── Detect meeting URL (if present → also trigger meeting join)
   │
   ├── RoleRouter.identify_role() ← Two-tier matching
-  │     ├── Tier 1: Regex patterns ("talk to the media buyer" → media_buyer)
+  │     ├── Tier 1: Regex patterns ("talk to the CEO" → ceo)
   │     └── Tier 2: Haiku semantic fallback (if Tier 1 misses)
   │
   ├── Create/get ConversationThread in DB
@@ -160,7 +156,7 @@ inngest.Event("sidera/role.run")
 role_runner_workflow() — 13 durable steps:
 
   ┌─ SETUP ─────────────────────────────────────────────┐
-  │ 1. load-accounts       Load advertiser accounts     │
+  │ 1. load-accounts       Load accounts                │
   │ 2. load-registry       Load skill registry          │
   │ 3. load-role-memory    Get hot memories for role     │
   │ 4. load-messages       Check peer message inbox      │
@@ -191,10 +187,9 @@ role_runner_workflow() — 13 durable steps:
   │ 13. scan-gaps          Detect capability gaps        │
   │     └── 3+ gap observations → propose new role       │
   │ 14. suggest-skills     Skill-scoped gaps → message   │
-  │     └── to skill_creator role                        │
+  │     └── to relevant role via messaging                │
   │ 15. push-learnings     Share insights with peers     │
-  │ 16. sync-to-drive      Append to Google Doc          │
-  │ 17. log-audit          Record in audit_log           │
+  │ 16. log-audit          Record in audit_log           │
   └─────────────────────────────────────────────────────┘
 ```
 
@@ -212,7 +207,7 @@ manager_runner_workflow() — Four-phase pipeline:
 
   Phase 1: Own Skills
   ├── Run manager's own briefing_skills
-  └── (e.g., Head of Marketing runs executive_summary)
+  └── (e.g., CEO runs its own strategic overview skill)
          │
          ▼
   Phase 2: Delegation Decision
@@ -231,10 +226,10 @@ manager_runner_workflow() — Four-phase pipeline:
   Phase 4: Synthesis
   ├── Single LLM call (Sonnet, no tools, max_turns=1)
   ├── Input: Manager's output + all sub-role outputs
-  └── Output: Unified briefing with cross-channel insights
+  └── Output: Unified briefing with cross-functional insights
          │
          ▼
-  Post-execution: same as role runner (memory, reflection, Slack, Drive, audit)
+  Post-execution: same as role runner (memory, reflection, Slack, audit)
 ```
 
 **Key detail:** Sub-roles run inline in the manager workflow (not separate Inngest events), so results stay in scope for synthesis. Recursive managers supported with depth limit (max 3).
@@ -246,7 +241,7 @@ manager_runner_workflow() — Four-phase pipeline:
 **Entry point:** `handle_approve()` / `handle_reject()` in `src/api/routes/slack.py`
 
 ```
-User clicks [✅ Approve] button on Slack message
+User clicks [Approve] button on Slack message
          │
          ▼
 handle_approve()
@@ -254,7 +249,7 @@ handle_approve()
   ├── Extract: approval_id, user_id, channel_id, message_ts
   ├── RBAC check: user must have "approve" permission
   │
-  ├── Update Slack message: replace buttons with "✅ Approved by @user"
+  ├── Update Slack message: replace buttons with "Approved by @user"
   │
   ├── Save to DB:
   │   approval_queue.status = "APPROVED"
@@ -273,21 +268,18 @@ handle_approve()
 Calling workflow resumes (step.wait_for_event unblocks):
 
   Pre-execution checks:
-  ├── _capture_evidence_snapshot()  Capture current state (budget, status)
+  ├── _capture_evidence_snapshot()  Capture current state
   ├── _check_lessons_before_action() Check role memory for warnings
   └── verify_and_load_approval()   Confirm still valid, not already executed
          │
          ▼
   Route to connector:
   ├── action_params["platform"] determines which connector
-  ├── action_type determines which method:
-  │   ├── budget_change → GoogleAdsConnector.update_campaign_budget()
-  │   ├── pause_campaign → GoogleAdsConnector.pause_campaign()
-  │   ├── bid_change → GoogleAdsConnector.update_keyword_bids()
-  │   ├── update_ad_status → MetaConnector.update_ad_status()
-  │   └── ... (12 total write methods across 2 connectors)
+  ├── action_type determines which method
+  │   └── Each connector exposes read + write methods;
+  │       the action_type maps to the appropriate write method
   │
-  ├── Safety: 50% budget cap (max_budget_change_ratio = 1.5)
+  ├── Safety: connector-level caps enforce change limits
   ├── Safety: executed_at field prevents double-execution
   └── Safety: write_safety module logs start/outcome
          │
@@ -365,88 +357,19 @@ heartbeat_runner_workflow()
 
 **Example:** Head of IT heartbeats every 15 min 24/7. Checks system health, DLQ, approval queue, costs. Only posts to Slack when something is wrong.
 
-**Cost:** ~$0.02–0.10 per heartbeat (Haiku data collection, most are "all clear")
+**Cost:** ~$0.02-0.10 per heartbeat (Haiku data collection, most are "all clear")
 
 ---
 
-## 6. Webhook Event → Event Reactor
-
-**Entry points:** Webhook routes in `src/api/routes/webhooks.py`
-
-```
-External system sends webhook:
-  POST /webhooks/google_ads  (shared secret auth)
-  POST /webhooks/meta        (HMAC-SHA256 verification)
-  POST /webhooks/bigquery    (Google Pub/Sub)
-  POST /webhooks/custom/{id} (header secret)
-         │
-         ▼
-Webhook handler:
-  ├── Verify authentication (signature/HMAC/secret)
-  ├── Normalize via NormalizedWebhookEvent:
-  │   ├── Common fields: source, event_type, severity, account_id
-  │   └── Generate SHA-256 dedup key
-  ├── Check dedup: skip if duplicate within 5 min
-  ├── Save to webhook_events table (status = "received")
-  └── Emit Inngest event
-         │
-         ▼
-┌──────────────────────────────────────────────┐
-│ inngest.Event("sidera/webhook.received")      │
-│   data: {                                     │
-│     webhook_event_id, source, event_type,     │
-│     severity, account_id, campaign_id, summary│
-│   }                                           │
-└──────────────────────────────────────────────┘
-         │
-         ▼
-event_reactor_workflow() — 7 steps:
-  ├── Step 1: classify-severity — Confirm severity level
-  │
-  ├── Step 2: resolve-role — Match event to role
-  │   └── Check event_subscriptions field on RoleDefinition:
-  │       performance_media_buyer subscribes to:
-  │         budget_depleted, spend_spike, campaign_paused,
-  │         conversion_drop, policy_violation, ...
-  │       head_of_it subscribes to:
-  │         system_alert, error_spike, cost_spike
-  │
-  ├── Step 3: update-status → webhook_events.status = "processing"
-  │
-  ├── Step 4: send-alert → Post to Slack
-  │   ├── Medium severity: standard alert
-  │   └── High/critical: alert with escalation @mention
-  │
-  ├── Step 5: run-investigation (high/critical only)
-  │   └── SideraAgent.run_heartbeat_turn()
-  │       ├── Prompt: WEBHOOK_REACTION_SUPPLEMENT + event summary
-  │       ├── Model: Sonnet (more powerful than heartbeat Haiku)
-  │       ├── Full tool access, max 5 turns, $0.50 cost cap
-  │       └── Role investigates root cause and proposes actions
-  │
-  ├── Step 6: post-results → Investigation findings to Slack
-  └── Step 7: log-audit → Update webhook_events.status = "dispatched"
-```
-
-**Role subscription config** (in `_role.yaml`):
-```yaml
-event_subscriptions:
-  - "budget_depleted"
-  - "spend_spike"
-  - "conversion_drop"
-```
-
----
-
-## 7. Working Group Formation
+## 6. Working Group Formation
 
 **Entry point:** `form_working_group` MCP tool in `src/mcp_servers/working_group.py`
 
 ```
 Manager agent calls form_working_group() during execution:
-  objective: "Analyze Q1 performance across all channels"
-  coordinator_role_id: "head_of_marketing"
-  member_role_ids: ["media_buyer", "analyst", "strategist"]
+  objective: "Analyze system performance across all services"
+  coordinator_role_id: "ceo"
+  member_role_ids: ["analyst", "engineer"]
          │
          ▼
 form_working_group() MCP tool:
@@ -482,7 +405,7 @@ working_group_workflow() — 6 phases:
   └── DB status → "executing"
          │
          ▼
-  Phase 3–N: Member Execution (sequential, checkpointed)
+  Phase 3-N: Member Execution (sequential, checkpointed)
   ├── For each member:
   │   └── RoleExecutor.execute(member_role_id)
   │       └── With injected context: group objective + individual task
@@ -504,65 +427,7 @@ working_group_workflow() — 6 phases:
 
 ---
 
-## 8. Meeting Join → Transcript → Delegation
-
-**Entry points:** `/sidera meeting join <url>` or auto-detected URL in @mention
-
-```
-User types: /sidera meeting join https://meet.google.com/abc-defg
-   OR
-User types: @Sidera hey head of marketing, join this meeting https://meet.google.com/abc-defg
-         │
-         ▼
-Slash command handler OR handle_app_mention():
-  ├── _detect_meeting_url() — Regex for Google Meet, Zoom, Teams, WebEx
-  ├── Parse role_id (from command or conversation thread)
-  └── Emit Inngest event
-         │
-         ▼
-┌──────────────────────────────────────────────┐
-│ inngest.Event("sidera/meeting.join")          │
-│   data: { meeting_url, role_id, user_id,      │
-│           channel_id }                        │
-└──────────────────────────────────────────────┘
-         │
-         ▼
-meeting_join_workflow()
-  ├── Step 1: validate-role — Confirm role exists
-  ├── Step 2: start-join → MeetingSessionManager.create_session()
-  │   ├── RecallAiConnector.create_bot(meeting_url) — Creates listen-only bot
-  │   └── DB: meeting_sessions.status = "joining"
-  ├── Step 3: wait-for-join → Bot enters meeting
-  │   └── DB: status = "in_call"
-  ├── Step 4: monitor → Wait for meeting end or timeout (2h max, $10 cap)
-  │   └── Transcript captured via Recall.ai webhooks
-  └── Step 5: on-end → DB: status = "ended"
-         │
-         ▼
-meeting_end_workflow() (triggered by Recall.ai webhook)
-  ├── Step 1: fetch-transcript → Full transcript from Recall.ai
-  ├── Step 2: summarize → Sonnet LLM call
-  │   └── Extract: summary, action items, key decisions
-  ├── Step 3: save → DB: transcript_summary, action_items_json
-  ├── Step 4: sync-to-drive → Append to meeting Doc (if configured)
-  │
-  ├── Step 5: dispatch-delegation
-  │   └── Emit inngest.Event("sidera/manager.run")
-  │       with meeting_context: { summary, action_items, participants }
-  │
-  └── manager_runner_workflow() picks up meeting_context:
-      ├── Manager sees meeting summary in delegation decision
-      ├── Delegates action items to appropriate sub-roles
-      └── Each sub-role acts on their assigned items
-         │
-         ▼
-  Post to Slack: "Meeting analysis complete. [N] action items delegated."
-  DB: meeting_sessions.status = "completed"
-```
-
----
-
-## 9. Cross-Cutting Patterns
+## 7. Cross-Cutting Patterns
 
 Every execution flow shares these common steps:
 
@@ -618,7 +483,7 @@ Agent generates recommendation
           ├── step.wait_for_event("sidera/approval.decided")
           ├── On approve: execute via connector
           │   ├── Evidence snapshot (capture pre-action state)
-          │   ├── 50% budget cap safety
+          │   ├── Connector-level safety caps
           │   ├── Double-execution prevention (executed_at field)
           │   └── write_safety module logging
           └── On reject: log rejection reason
@@ -633,17 +498,13 @@ sidera/department.run       → department_runner_workflow
 sidera/conversation.turn    → conversation_turn_workflow
 sidera/heartbeat.run        → heartbeat_runner_workflow
 sidera/approval.decided     → (resumes waiting workflow)
-sidera/meeting.join         → meeting_join_workflow
-sidera/meeting.ended        → meeting_end_workflow
-sidera/webhook.received     → event_reactor_workflow
 sidera/working_group.run    → working_group_workflow
 sidera/skill.run            → skill_runner_workflow
-sidera/bootstrap.run        → bootstrap_workflow
 ```
 
 ---
 
-## 10. Quick Reference Table
+## 8. Quick Reference Table
 
 | Flow | Trigger | Slack Handler | Inngest Event | Workflow Function | Agent Method | Output |
 |------|---------|---------------|---------------|-------------------|--------------|--------|
@@ -653,6 +514,4 @@ sidera/bootstrap.run        → bootstrap_workflow
 | Manager run | Scheduler or command | `handle_sidera_command()` | `sidera/manager.run` | `manager_runner_workflow()` | `ManagerExecutor` | Slack + approvals |
 | Approval | Button click | `handle_approve()` | `sidera/approval.decided` | (resumes caller) | Connector write | Execution result |
 | Heartbeat | Role cron | — | `sidera/heartbeat.run` | `heartbeat_runner_workflow()` | `run_heartbeat_turn()` | Slack (if findings) |
-| Webhook | POST /webhooks/* | — | `sidera/webhook.received` | `event_reactor_workflow()` | `run_heartbeat_turn()` | Alert + investigation |
 | Working group | MCP tool | — | `sidera/working_group.run` | `working_group_workflow()` | `RoleExecutor` per member | Slack thread |
-| Meeting | `/sidera meeting join` | `handle_sidera_command()` | `sidera/meeting.join` | `meeting_join_workflow()` | `RecallAiConnector` | Transcript + delegation |

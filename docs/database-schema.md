@@ -37,18 +37,12 @@ Classifies what an approved action does. Used in `approval_queue.action_type`.
 
 | Value | Meaning |
 |-------|---------|
-| `budget_change` | Increase/decrease campaign budget |
-| `pause_campaign` | Pause a running campaign |
-| `enable_campaign` | Re-enable a paused campaign |
-| `bid_change` | Modify bid strategy or targets |
-| `add_negative_keywords` | Add negative keywords to a campaign |
-| `update_ad_schedule` | Change ad scheduling |
-| `update_geo_bid_modifier` | Adjust geographic bid modifiers |
-| `update_ad_status` | Enable/pause/remove an individual ad |
-| `update_adset_budget` | Change ad set budget (Meta) |
-| `update_adset_bid` | Change ad set bid strategy (Meta) |
+| `recommendation_accept` | Accept an agent's recommendation |
+| `recommendation_reject` | Reject an agent's recommendation |
 | `skill_proposal` | Agent proposes a skill definition change |
 | `role_proposal` | Agent proposes a new role or role modification |
+| `claude_code_task` | Claude Code headless task execution |
+| `custom_action` | Domain-specific action defined by connectors |
 
 ### ApprovalStatus
 Lifecycle state of an item in the approval queue.
@@ -66,15 +60,15 @@ Classifies persistent role memories. Used as string values in `role_memory.memor
 
 | Value | Purpose | Example |
 |-------|---------|---------|
-| `decision` | Approval outcomes | "Paused Campaign X because CPA exceeded $45" |
-| `anomaly` | Performance spikes/drops | "Meta spend spiked 40% on Tuesday" |
+| `decision` | Approval outcomes | "Approved restarting the monitoring service" |
+| `anomaly` | Performance spikes/drops | "Error rate spiked 40% on Tuesday" |
 | `pattern` | Recurring trends | "Performance dips every Monday morning" |
-| `insight` | Strategic learnings | "Brand search converts 3x better post-Meta prospecting" |
-| `lesson` | "I tried X, it failed because Y" | "Budget increase on Campaign Z backfired due to creative fatigue" |
-| `commitment` | Conversational promises | "I'll investigate the CTR drop tomorrow" |
-| `relationship` | Inter-role context | "The Analyst prefers data in table format" |
-| `steward_note` | Human-injected guidance (highest priority, agent can't create) | "Focus on ROAS over CPA this quarter" |
-| `cross_role_insight` | Learnings from peer roles | "Media Buyer reports CPM spikes correlate with Meta policy updates" |
+| `insight` | Strategic learnings | "Service restarts resolve 80% of transient errors" |
+| `lesson` | "I tried X, it failed because Y" | "Scaling up without load testing caused cascading failures" |
+| `commitment` | Conversational promises | "I'll investigate the latency spike tomorrow" |
+| `relationship` | Inter-role context | "The on-call engineer prefers detailed incident reports" |
+| `steward_note` | Human-injected guidance (highest priority, agent can't create) | "Focus on uptime over feature velocity this quarter" |
+| `cross_role_insight` | Learnings from peer roles | "Security team reports patching correlates with brief latency spikes" |
 
 ### ClearanceLevel
 Information security classification. Used in `users.clearance_level` and `org_roles.clearance_level`.
@@ -122,13 +116,13 @@ Registered Sidera users (Slack users who interact with the system).
 ---
 
 ### `accounts`
-Connected ad platform accounts (Google Ads accounts, Meta ad accounts, etc.).
+Connected external service accounts.
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
 | `id` | INTEGER | NOT NULL | auto PK | Primary key |
 | `user_id` | VARCHAR(255) | NOT NULL | — | Indexed |
-| `platform` | VARCHAR(50) | NOT NULL | — | `google_ads`, `meta`, etc. |
+| `platform` | VARCHAR(50) | NOT NULL | — | Platform string (e.g., `custom` or any connector name) |
 | `account_id` | VARCHAR(255) | NOT NULL | — | Platform-native account ID |
 | `account_name` | VARCHAR(255) | YES | — | |
 | `credentials_encrypted` | TEXT | YES | — | Fernet-encrypted OAuth tokens |
@@ -576,7 +570,7 @@ Inbound webhook events from external monitoring sources.
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
 | `id` | INTEGER | NOT NULL | auto PK | Primary key |
-| `source` | VARCHAR(50) | NOT NULL | — | google_ads, meta, bigquery, custom:X |
+| `source` | VARCHAR(50) | NOT NULL | — | custom:X or any registered source |
 | `event_type` | VARCHAR(100) | NOT NULL | — | budget_depleted, spend_spike, etc. |
 | `severity` | VARCHAR(20) | NOT NULL | — | low, medium, high, critical |
 | `summary` | TEXT | NOT NULL | `""` | |

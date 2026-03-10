@@ -14,12 +14,9 @@
 │         ┌──────────────────┼──────────────────┐                 │
 │         ▼                  ▼                  ▼                  │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │ Google Ads  │  │    Meta      │  │   BigQuery   │           │
-│  │ Connector   │  │  Connector   │  │  Connector   │           │
-│  └─────────────┘  └──────────────┘  └──────────────┘           │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │Google Drive │  │    SSH       │  │Computer Use  │           │
-│  │ Connector   │  │  Connector   │  │  Connector   │           │
+│  │  Your       │  │  Your        │  │  Your        │           │
+│  │ Connector A │  │ Connector B  │  │ Connector C  │           │
+│  │ (e.g. CRM)  │  │(e.g. Billing)│  │(e.g. Infra)  │           │
 │  └─────────────┘  └──────────────┘  └──────────────┘           │
 │         │                  │                  │                  │
 │         ▼                  ▼                  ▼                  │
@@ -41,7 +38,6 @@ Every agent run follows the same pattern:
 ### 1. Trigger
 - **Scheduled:** Cron-based (e.g., "0 7 * * 1-5" = 7 AM weekdays)
 - **Conversational:** User @mentions the bot in Slack
-- **Webhook:** External system pushes an event (spend spike, campaign paused)
 - **Heartbeat:** Proactive check-in on a configurable schedule
 - **Manual:** `/sidera run <skill_id>` or API call
 
@@ -71,7 +67,7 @@ The agent runs as a Claude conversation with MCP tools. Three-phase model routin
 
 Extended thinking enabled for Sonnet and Opus calls — agents reason deeply between tool calls.
 
-Each agent gets access to specific MCP tools based on its role's `connectors` field. A Media Buyer gets Google Ads + Meta + BigQuery tools. The Head of IT gets system health + DLQ + audit tools.
+Each agent gets access to specific MCP tools based on its role configuration. The tools available depend on which connectors you build and register for each role.
 
 ### 4. Output Processing
 After the agent completes:
@@ -81,11 +77,10 @@ After the agent completes:
 - **Memory extraction** → decisions, anomalies, lessons, commitments saved to DB
 - **Post-run reflection** → Haiku call captures "what was hard, what would I do differently"
 - **Cross-role learning** → observations flagged for sharing pushed to peer roles
-- **Document sync** → output appended to designated Google Docs (living documents)
 
 ### 5. Approval & Execution
 ```
-Agent recommends "Pause Campaign X"
+Agent recommends "Scale up Widget-X provisioning"
   → Approval queue item created (PENDING)
   → Auto-execute rules checked:
       ✓ Matches rule? → AUTO_APPROVED, execute immediately, notify Slack
@@ -94,32 +89,27 @@ Agent recommends "Pause Campaign X"
         → Human clicks Reject → Log decision, agent learns from it
 ```
 
-Safety: 50% budget cap on all write operations. Double-execution prevention. Pre-action lesson check (blocks auto-execute if contradicting lessons exist).
+Safety: Double-execution prevention. Pre-action lesson check (blocks auto-execute if contradicting lessons exist). Write operations are gated through configurable safety rules per connector.
 
 ## Key Technical Components
 
 ### Connectors (src/connectors/)
-API clients that read from and write to external platforms:
+API clients that read from and write to external platforms. Slack is the only built-in connector. You add your own domain connectors using the template system in `src/templates/`.
 
-| Connector | Methods | Purpose |
-|-----------|---------|---------|
-| Google Ads | 13 (7 read, 6 write) | Campaign management, performance data |
-| Meta | 13 (7 read, 6 write) | Facebook/Instagram campaign management |
-| BigQuery | 7 (read only) | Backend source of truth for business metrics |
-| Google Drive | 13 | Docs, Sheets, Slides, file management |
-| Slack | 19 | Messaging, approval buttons, thread management |
-| Recall.ai | 5 | Meeting transcript capture |
-| SSH | 7 | Remote server execution with safety filter (20+ blocked commands) |
-| Computer Use | 3 | Desktop automation via Anthropic Computer Use |
+| Connector | Status | Purpose |
+|-----------|--------|---------|
+| Slack | Built-in (19 methods) | Messaging, approval buttons, thread management |
+| Your connectors | Use `src/templates/` | Add any API: CRM, billing, infra, databases, etc. |
+
+The template system provides skeleton code for new connectors, MCP tool wrappers, and OAuth routes. Each template includes retry logic, error handling, and Sentry integration out of the box.
 
 All connectors have:
 - Retry with exponential backoff (3 retries, 1-30s delay, jitter)
 - Fernet token encryption for stored credentials
-- 50% budget cap on write operations (safety)
 - Sentry error capture
 
 ### Workflows (src/workflows/)
-18 Inngest durable functions — each step is checkpointed and auto-retried:
+13 Inngest durable functions — each step is checkpointed and auto-retried:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
@@ -131,15 +121,10 @@ All connectors have:
 | department_runner | Event | Execute all roles in a department |
 | conversation_turn | Event | Handle one Slack conversation reply |
 | heartbeat_runner | Event | Proactive open-ended investigation |
-| event_reactor | Webhook event | Classify severity, alert, investigate |
-| meeting_join | Event | Recall.ai bot lifecycle (join) |
-| meeting_end | Event | Post-meeting summary and delegation |
 | working_group | Event | Multi-agent collaborative task execution |
 | memory_consolidation | Cron Sunday 4 AM | Merge duplicate memories, detect contradictions |
 | data_retention | Cron 3 AM | Purge expired data, expire stale messages |
-| token_refresh | Cron 5 AM | Refresh expiring OAuth tokens |
 | cost_monitor | Cron every 30 min | Check LLM spend vs limits |
-| bootstrap | Event | Automated new-company onboarding pipeline |
 
 ### Database (PostgreSQL via Supabase)
 29 Alembic migrations, 115 CRUD methods. Key tables:
@@ -149,21 +134,17 @@ All connectors have:
 - `conversation_threads` — Slack thread → role mapping
 - `org_departments/roles/skills` — dynamic org chart (DB overrides YAML)
 - `failed_runs` — dead letter queue for workflow failures
-- `webhook_events` — inbound monitoring events from external systems
 - `working_group_sessions` — multi-agent collaborative sessions
 - `role_messages` — peer-to-peer async messaging between roles
 - `users` — RBAC, clearance levels, stewardship
 
 ### MCP Tools (src/mcp_servers/)
-74 tools organized by domain:
-- **Google Ads** (7): campaigns, performance, changes, recommendations, writes
-- **Meta** (7): campaigns, performance, activity, audience insights, writes
-- **BigQuery** (5): goals, pacing, performance, attribution, table discovery
-- **Google Drive** (8): search, read/write docs, sheets, slides, folders
+~29 built-in tools organized by function. You add domain-specific tools when you build connectors.
+
+**Built-in tools:**
 - **Slack** (6): alerts, briefings, thread replies, reactions, memory search
-- **System** (8): health, DLQ, audit, approvals, conversations, costs, webhooks
+- **System** (8): health, DLQ, audit, approvals, conversations, costs
 - **Evolution** (2): propose skill changes, propose role changes
-- **Meeting** (3): transcript, participants, end session
 - **Memory** (2): save memory, load memory detail
 - **Context** (2): load skill context, load referenced skill context
 - **Messaging** (4): send, check inbox, reply, push learning
@@ -171,42 +152,38 @@ All connectors have:
 - **Delegation** (1): delegate to sub-role
 - **Orchestration** (1): orchestrate multi-step task with quality evaluation
 - **Code Execution** (1): run skill-backed Python code
-- **SSH** (6): run command, read file, list directory, system info, processes, tail log
-- **Computer Use** (3): run task, get session, stop session
 
 Plus 10 MCP meta-tools for Claude Code integration (talk_to_role, run_role, list_roles, review_pending_approvals, decide_approval, run_claude_code_task, orchestrate, load_plugin, unload_plugin, list_loaded_plugins).
 
-## Data Flow Example: Daily Media Buyer Run
+## Data Flow Example: On-Call Engineer Incident Triage
 
 ```
-7:00 AM — Scheduler triggers sidera/role.run for performance_media_buyer
+7:00 AM — Scheduler triggers sidera/role.run for on_call_engineer
 
 Step 1: Load role memory (decisions, lessons from past runs)
-Step 2: Load pending peer messages (from reporting_analyst, strategist)
-Step 3: Execute skill: anomaly_detector
-  → Agent calls get_google_ads_performance (last 30 days)
-  → Agent calls get_meta_performance (last 30 days)
-  → Agent calls get_backend_performance (cross-reference)
-  → Agent analyzes: finds CPA spike on Campaign X (2.3σ deviation)
-  → Agent calls get_google_ads_changes (what changed?)
-  → Agent finds: bid strategy changed 3 days ago
-  → Agent recommends: "Revert bid strategy on Campaign X"
+Step 2: Load pending peer messages (from other engineering roles)
+Step 3: Execute skill: system_health_check
+  → Agent calls your infrastructure connector (e.g., check dashboards)
+  → Agent calls your logging connector (e.g., pull error rates)
+  → Agent analyzes: finds elevated error rate on Service Y (2.3σ deviation)
+  → Agent calls your change tracker (e.g., recent deployments)
+  → Agent finds: config change deployed 3 hours ago
+  → Agent recommends: "Roll back config change on Service Y"
 Step 4: Process recommendation
-  → Check auto-execute rules: no match (bid changes require approval)
+  → Check auto-execute rules: no match (rollbacks require approval)
   → Create approval queue item (PENDING)
   → Post to Slack with Approve/Reject buttons
   → Steward @mentioned in message
 Step 5: Extract memories
-  → Anomaly: "CPA spike on Campaign X traced to bid strategy change"
+  → Anomaly: "Error spike on Service Y traced to config change"
   → Saved to role_memory table
 Step 6: Post-run reflection (Haiku, ~$0.01)
-  → "The bid strategy change was obvious in hindsight. Lesson: always
-     check change history first before running full statistical analysis."
+  → "The config change was obvious in hindsight. Lesson: always
+     check recent deployments first before deep-diving into logs."
   → Saved as LESSON memory, linked to relevant principle
 Step 7: Check for recurring friction → scan lesson memories
   → 3+ lessons about same skill? → propose skill modification
 Step 8: Push cross-role learnings
-  → Flag observation for Reporting Analyst: "Bid strategy changes cause
-     CPA spikes — worth noting in weekly reports"
-Step 9: Sync output to Google Drive (if document_sync configured)
+  → Flag observation for Platform Engineer: "Config changes without
+     canary deploys cause error spikes — worth adding a gate"
 ```

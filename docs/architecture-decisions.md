@@ -129,7 +129,7 @@ This document captures the key architectural decisions made during Sidera's deve
 - **Deep hierarchy (Org → Division → Department → Team → Role → Skill)** — too many levels. Rejected because: adds complexity without clear benefit. Three levels cover all real use cases.
 
 **Why three levels:**
-- **Department** provides shared vocabulary and context (e.g., "ROAS means return on ad spend" for all marketing roles)
+- **Department** provides shared vocabulary and context (e.g., domain-specific terminology shared across all roles in that department)
 - **Role** provides persona, principles, goals, and memory — the "who" of the agent
 - **Skill** provides task-specific instructions — the "what" to do right now
 - Context inheritance means you write things once at the right level
@@ -218,7 +218,7 @@ This document captures the key architectural decisions made during Sidera's deve
 ```
 Slack button click → emit "sidera/approval.decided" → approval workflow resumes
 Slack @mention → emit "sidera/conversation.turn" → conversation_turn_workflow runs
-Webhook POST → emit "sidera/webhook.received" → event_reactor_workflow runs
+Custom event → emit "sidera/custom.event" → custom workflow runs
 ```
 
 **Why events (not direct calls):**

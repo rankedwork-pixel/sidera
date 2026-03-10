@@ -20,7 +20,7 @@ The connector wraps the platform's SDK/API and exposes clean, dict-based read-on
 
 ### Pattern to follow
 
-Look at `src/connectors/meta.py` as the cleanest reference.
+Look at `src/connectors/slack.py` as a reference, or start from `src/templates/connector_template.py`.
 
 ### Checklist
 
@@ -42,9 +42,7 @@ Look at `src/connectors/meta.py` as the cleanest reference.
 
 ### Key conventions
 
-- Google Ads returns monetary values in **micros** (÷ 1,000,000)
-- Meta returns spend as **string decimal** and budgets as **string cents** (÷ 100)
-- Your platform will have its own quirks — document the conversion in comments
+- Each platform has its own quirks for monetary values (micros, cents, string decimals) — document the conversion in comments
 
 ---
 
@@ -131,8 +129,8 @@ __CHANNEL_UPPER___TOOLS = [
 ]
 
 ALL_TOOLS = (
-    GOOGLE_ADS_TOOLS + META_TOOLS + SLACK_TOOLS + BIGQUERY_TOOLS
-    + GOOGLE_DRIVE_TOOLS + __CHANNEL_UPPER___TOOLS
+    SLACK_TOOLS + SYSTEM_TOOLS + __CHANNEL_UPPER___TOOLS
+    # ... plus other tool groups
 )
 ```
 
@@ -163,7 +161,7 @@ app.include_router(__CHANNEL___oauth_router)
 ### Key patterns
 
 - Use `secrets.token_urlsafe(32)` for CSRF state tokens
-- Store state in Redis with in-memory fallback (see `_save_oauth_state` / `_get_oauth_state` in meta_oauth.py)
+- Store state in Redis with in-memory fallback (see the OAuth route template)
 - State tokens expire after 10 minutes
 - Always validate state on callback to prevent CSRF attacks
 
@@ -291,14 +289,15 @@ After completing all steps, verify:
 
 | What | File |
 |------|------|
-| Cleanest connector example | `src/connectors/meta.py` |
-| Cleanest MCP server example | `src/mcp_servers/meta.py` |
+| Built-in connector example | `src/connectors/slack.py` |
+| Built-in MCP server example | `src/mcp_servers/slack.py` |
 | Shared MCP helpers | `src/mcp_servers/helpers.py` |
-| Cleanest OAuth route | `src/api/routes/meta_oauth.py` |
+| Connector template | `src/templates/connector_template.py` |
+| MCP server template | `src/templates/mcp_server_template.py` |
+| OAuth route template | `src/templates/oauth_route_template.py` |
 | Config pattern | `src/config.py` |
 | Agent MCP wiring | `src/agent/core.py:_build_mcp_servers()` |
-| Tool list registration | `src/agent/prompts.py:ALL_TOOLS` |
 | Cache TTL constants | `src/cache/service.py` |
 | Normalization layer | `src/models/normalized.py` |
-| Connector test pattern | `tests/test_connectors/test_meta.py` |
-| MCP tool test pattern | `tests/test_mcp_servers/test_meta_mcp.py` |
+| Connector test template | `src/templates/test_connector_template.py` |
+| MCP tool test template | `src/templates/test_mcp_server_template.py` |

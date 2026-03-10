@@ -8,14 +8,10 @@
 | Service | What You Need | Purpose |
 |---------|--------------|---------|
 | **Anthropic** | API key | Claude models (Haiku/Sonnet/Opus) |
-| **Google Ads** | OAuth client ID/secret + developer token | Campaign management |
-| **Meta** | App ID/secret | Facebook/Instagram ad management |
-| **BigQuery** | Service account JSON | Backend data warehouse |
 | **Slack** | Bot token + signing secret | Notifications, approvals, conversations |
 | **Supabase** | Database URL | PostgreSQL database |
 | **Upstash** | Redis URL + token | Caching layer |
 | **Railway** | Account | Hosting |
-| **Recall.ai** (optional) | API key | Meeting transcript capture |
 
 Only Anthropic and a database are truly required. Everything else is optional — Sidera degrades gracefully.
 
@@ -32,7 +28,7 @@ Only Anthropic and a database are truly required. Everything else is optional �
 
 ### 1. Clone & Configure
 ```bash
-git clone https://github.com/mzola/sidera.git
+git clone https://github.com/rankedwork-pixel/sidera.git
 cd sidera
 cp .env.example .env
 # Fill in API keys — see .env.example for inline docs
@@ -53,7 +49,7 @@ npx inngest-cli@latest dev        # Workflow engine (terminal 3)
 
 ### 3. Database Setup
 ```bash
-# Run migrations (29 revisions)
+# Run migrations
 alembic upgrade head
 
 # Seed initial data (optional)
@@ -72,11 +68,15 @@ python -m scripts.seed_test_data
 
 For local development, use ngrok: `ngrok http 8000`
 
-### 5. Connect Platforms
-- **Google Ads:** Navigate to `/oauth/google-ads/authorize` → complete OAuth flow
-- **Meta:** Navigate to `/oauth/meta/authorize` → complete OAuth flow
-- **Google Drive:** Navigate to `/oauth/google-drive/authorize` → complete OAuth flow
-- **BigQuery:** Set `BIGQUERY_CREDENTIALS_JSON` in `.env` with service account JSON
+### 5. Add Your First Connector
+
+If your domain requires external data sources, build a connector using the templates provided:
+
+- **Connector:** Use `src/templates/connector_template.py` as a starting point
+- **MCP Tools:** Use `src/templates/mcp_server_template.py` for the corresponding tool definitions
+- **OAuth Routes:** Use `src/templates/oauth_route_template.py` if the platform requires OAuth
+
+See the "Adding New Departments" section below for the full workflow.
 
 ### 6. Verify
 ```bash
@@ -87,22 +87,8 @@ curl http://localhost:8000/health
 /sidera list
 
 # Test a role
-/sidera run role:head_of_it
+/sidera run role:ceo
 ```
-
----
-
-## Onboarding a New Company
-
-Sidera has an automated bootstrap pipeline for new company onboarding:
-
-1. **Point at a Google Drive folder** containing company documents (strategy docs, brand guidelines, org charts, performance reports)
-2. **Crawler** discovers and classifies documents with Haiku (~$0.01/100 docs)
-3. **Extractor** pulls org structure, skills, goals, vocabulary with Sonnet (3 passes, ~$0.25-0.55 total)
-4. **Generator** assembles a `BootstrapPlan` for human review
-5. **On approval**, writes departments, roles, skills, and seed memories to DB
-
-Total bootstrap cost: **~$0.30-0.60 per company**
 
 ---
 
@@ -111,16 +97,14 @@ Total bootstrap cost: **~$0.30-0.60 per company**
 Skills are YAML files. To add a new skill:
 
 ```yaml
-# src/skills/library/marketing/performance_media_buyer/new_skill.yaml
+# src/skills/library/<department>/<role>/new_skill.yaml
 name: "New Skill Name"
 version: "1.0"
 description: "What this skill does"
 category: analysis
-platforms: [google_ads, meta]
 tags: [relevant, tags]
 tools_required:
-  - get_google_ads_performance
-  - get_meta_performance
+  - your_connector_tool_name
 model: sonnet
 max_turns: 10
 system_supplement: |
@@ -135,7 +119,6 @@ system_supplement: |
   - NEVER recommend actions without supporting data
 prompt_template: |
   What to do this run. Date: {analysis_date}
-  Accounts: {accounts_block}
 output_format: |
   How to structure the output...
 business_guidance: |
@@ -149,13 +132,13 @@ Then add it to the role's `briefing_skills` list in `_role.yaml`.
 
 No code changes required. The registry auto-discovers new YAML files.
 
-Or use the Skill Creator wizard: `/sidera chat skill_creator I need a new skill for budget pacing`
+Or use the org chart commands: `/sidera org add-skill` to register a new skill via the database.
 
 ---
 
 ## Adding New Departments
 
-For a completely new domain (e.g., Finance, Customer Success):
+For a completely new domain (e.g., Finance, Customer Success, Operations):
 
 ### 1. Create department YAML
 ```yaml
@@ -207,22 +190,20 @@ Each connector needs corresponding MCP tools in `src/mcp_servers/`. Use `src/tem
 | `/sidera list` | Show all skills |
 | `/sidera list departments` | Show all departments |
 | `/sidera list roles` | Show all roles |
-| `/sidera list roles marketing` | Show roles in marketing dept |
-| `/sidera run role:media_buyer` | Run media buyer's skills |
-| `/sidera run manager:head_of_marketing` | Run full manager pipeline |
-| `/sidera run dept:marketing` | Run entire department |
-| `/sidera run skill_id` | Run a specific skill |
-| `/sidera chat media_buyer` | Start conversation with media buyer |
-| `/sidera chat skill_creator` | Start skill creation wizard |
-| `/sidera meeting join <url>` | Join a meeting (listen-only) |
-| `/sidera meeting status` | Check active meetings |
+| `/sidera list roles <dept>` | Show roles in a department |
+| `/sidera run role:<role_id>` | Run a role's skills |
+| `/sidera run manager:<role_id>` | Run full manager pipeline |
+| `/sidera run dept:<dept_id>` | Run entire department |
+| `/sidera run <skill_id>` | Run a specific skill |
+| `/sidera chat <role_id>` | Start conversation with a role |
+| `/sidera org add-skill ...` | Add a skill via DB |
 | `/sidera org list` | Show dynamic org chart |
 | `/sidera org add-role ...` | Add a role via DB |
 | `/sidera steward list` | Show stewardship assignments |
 | `/sidera steward assign <role> @user` | Assign a steward |
 | `/sidera steward note <role> <text>` | Inject steward guidance into role memory |
-| `@Sidera talk to the media buyer` | Start conversational thread |
-| `@Sidera hey head of IT, something broke` | Direct role conversation |
+| `@Sidera talk to the <role_name>` | Start conversational thread |
+| `@Sidera hey <role_name>, <message>` | Direct role conversation |
 
 ---
 
@@ -232,7 +213,7 @@ After making changes, always run the cleanup pipeline:
 
 ```bash
 make lint          # Lint with ruff
-make test          # Run 4221+ tests
+make test          # Full test suite
 make sync-docs     # Verify doc counts match codebase
 make cleanup       # All of the above
 ```
@@ -244,17 +225,16 @@ Pre-commit hooks: `make pre-commit`
 ## What's Next
 
 ### Immediate
-- [ ] Complete E2E testing (Meta live, full approval → execution flow)
 - [ ] Deploy to Railway with production Slack app
 - [ ] Run complete daily briefing cycle end-to-end
+- [ ] Verify full approval → execution flow
 
 ### Short-Term
-- [ ] Build out skill library to 50+ skills
-- [ ] Onboard first real company via bootstrap pipeline
-- [ ] Add connectors for additional platforms (Stripe, Salesforce, HubSpot)
+- [ ] Build out skill library for your domain
+- [ ] Add connectors for your data sources
+- [ ] Onboard your first team via the org chart and stewardship setup
 
 ### Medium-Term
-- [ ] Build new departments (Finance, Customer Success, Operations)
-- [ ] Scale to 100+ skills across 10+ departments
+- [ ] Build new departments to cover more of your organization
 - [ ] Skill marketplace for cross-company sharing
 - [ ] Visual workflow builder (no-YAML skill creation)

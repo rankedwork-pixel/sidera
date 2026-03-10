@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Sidera is a framework for building AI 
 ## Getting Started
 
 ```bash
-git clone https://github.com/mzola/sidera.git
+git clone https://github.com/rankedwork-pixel/sidera.git
 cd sidera
 
 python -m venv .venv && source .venv/bin/activate
@@ -30,13 +30,13 @@ name: "My New Skill"
 version: "1.0"
 description: "What this skill does in one line"
 category: analysis          # analysis, optimization, reporting, monitoring, etc.
-platforms: [google_ads]     # which connectors it uses
+platforms: [custom]          # which connectors it uses
 tags: [relevant, keywords]
 model: sonnet               # haiku, sonnet, or opus
 max_turns: 15
 tools_required:
-  - get_google_ads_performance
-  - get_backend_performance
+  - get_system_health
+  - get_cost_summary
 
 system_supplement: |
   Clear instructions for the agent. Use behavioral enforcement:
@@ -45,7 +45,7 @@ system_supplement: |
   - Define mandatory analysis sequences
 
 prompt_template: |
-  Analyze performance for {analysis_date}.
+  Analyze data for {analysis_date}.
   Connected accounts: {accounts_block}
 
 output_format: |
@@ -64,7 +64,7 @@ my_new_skill/
   skill.yaml
   context/
     scoring_rubric.md       # Decision frameworks
-    platform_benchmarks.md  # Reference data
+    benchmarks.md           # Reference data
   examples/
     good_output.md          # Example of what good output looks like
   guidelines/
@@ -87,7 +87,7 @@ cp src/templates/test_connector_template.py tests/test_connectors/test_my_api.py
 cp src/templates/test_mcp_server_template.py tests/test_mcp_servers/test_my_api.py
 ```
 
-Implement your read/write methods following the existing patterns (see `src/connectors/google_ads.py` as a reference). The agent loop, approval flow, and audit trail stay identical.
+Implement your read/write methods following the connector template. The agent loop, approval flow, and audit trail stay identical.
 
 ### 3. Add Departments and Roles
 
@@ -102,12 +102,12 @@ src/skills/library/my_department/
       skill.yaml            # Skills for this role
 ```
 
-See the `marketing` department for a complete example of the hierarchy.
+See the `executive` department for a working example of the hierarchy.
 
 ### 4. Fix Bugs and Improve Existing Code
 
 - Check open issues for bugs or feature requests
-- The 11 example skills are starting points — improve their instructions, add context files, refine thresholds
+- The CEO role's skills are starting points — improve their instructions, add context files, refine thresholds
 - All write operations need test coverage
 
 ## Development Workflow

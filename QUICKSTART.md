@@ -2,7 +2,7 @@
 
 This guide takes you from `git clone` to a working Sidera instance with your first AI briefing.
 
-**Time estimate:** ~30 minutes for Docker setup, ~45 minutes with Slack + connectors.
+**Time estimate:** ~30 minutes for Docker setup, ~45 minutes with Slack.
 
 ---
 
@@ -13,11 +13,10 @@ This guide takes you from `git clone` to a working Sidera instance with your fir
 3. [Start the Infrastructure](#3-start-the-infrastructure)
 4. [Set Up the Database](#4-set-up-the-database)
 5. [Create a Slack App](#5-create-a-slack-app)
-6. [Connect Your First Data Source](#6-connect-your-first-data-source)
-7. [Run Your First Briefing](#7-run-your-first-briefing)
-8. [Talk to a Role](#8-talk-to-a-role)
-9. [Add Your Own Skills](#9-add-your-own-skills)
-10. [Next Steps](#10-next-steps)
+6. [Run Your First Briefing](#7-run-your-first-briefing)
+7. [Talk to a Role](#8-talk-to-a-role)
+8. [Add Your Own Skills](#9-add-your-own-skills)
+9. [Next Steps](#10-next-steps)
 
 ---
 
@@ -30,12 +29,12 @@ You need:
 - **An Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com/settings/keys)
 - **A Slack workspace** where you can create apps (optional but recommended)
 
-That's it. All other services (Google Ads, Meta, BigQuery, etc.) are optional — Sidera degrades gracefully without them.
+That's it. Connectors for your APIs are added later — Sidera works out of the box with just Claude and a database.
 
 ## 2. Clone and Configure
 
 ```bash
-git clone https://github.com/mzola/sidera.git
+git clone https://github.com/rankedwork-pixel/sidera.git
 cd sidera
 ```
 
@@ -225,66 +224,20 @@ In Slack, invite Sidera to your channel:
 
 You should see a list of departments, roles, and available skills.
 
-## 6. Connect Your First Data Source
-
-Sidera works without any data sources (agents still respond in conversations), but it's more useful with real data.
-
-### Google Ads
-
-1. Create OAuth credentials at [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → Create OAuth 2.0 Client ID
-2. Set these in `.env`:
-   ```
-   GOOGLE_ADS_CLIENT_ID=your-client-id.apps.googleusercontent.com
-   GOOGLE_ADS_CLIENT_SECRET=your-client-secret
-   GOOGLE_ADS_DEVELOPER_TOKEN=your-dev-token
-   GOOGLE_ADS_LOGIN_CUSTOMER_ID=your-mcc-id
-   ```
-3. Navigate to `http://localhost:8000/oauth/google-ads/authorize` to complete the OAuth flow
-4. Verify: `http://localhost:8000/oauth/google-ads/status`
-
-### Meta Ads
-
-1. Create an app at [developers.facebook.com](https://developers.facebook.com/apps) → Business type
-2. Set these in `.env`:
-   ```
-   META_APP_ID=your-app-id
-   META_APP_SECRET=your-app-secret
-   ```
-3. Navigate to `http://localhost:8000/oauth/meta/authorize` to complete the OAuth flow
-4. Verify: `http://localhost:8000/oauth/meta/status`
-
-### Google Drive
-
-Uses the same Google Cloud project as Google Ads:
-
-1. Enable the Drive, Docs, Sheets, and Slides APIs in your Google Cloud project
-2. Navigate to `http://localhost:8000/oauth/google-drive/authorize`
-3. Verify: `http://localhost:8000/oauth/google-drive/status`
-
-### BigQuery (Backend Data)
-
-1. Create a service account at Google Cloud → IAM → Service Accounts → Create Key → JSON
-2. Set in `.env`:
-   ```
-   BIGQUERY_PROJECT_ID=your-project-id
-   BIGQUERY_DATASET_ID=your_dataset
-   BIGQUERY_CREDENTIALS_JSON={"type": "service_account", ...}
-   ```
-
-## 7. Run Your First Briefing
+## 6. Run Your First Briefing
 
 ### Via Slack
 
 ```
-/sidera run role:head_of_it
+/sidera run role:ceo
 ```
 
-The Head of IT will check system health, scan for errors, and post a briefing to your channel.
+The CEO will check org health across all departments and post a briefing to your channel.
 
 Or run a specific skill:
 
 ```
-/sidera run system_health_check
+/sidera run org_health_check
 ```
 
 ### Via API
@@ -292,7 +245,7 @@ Or run a specific skill:
 ```bash
 curl -X POST http://localhost:8000/api/run \
   -H "Content-Type: application/json" \
-  -d '{"type": "role", "id": "head_of_it"}'
+  -d '{"type": "role", "id": "ceo"}'
 ```
 
 ### Via Inngest Dashboard
@@ -300,7 +253,7 @@ curl -X POST http://localhost:8000/api/run \
 Open `http://localhost:8288`, find the `sidera/role.run` function, and trigger it manually with:
 
 ```json
-{"data": {"role_id": "head_of_it"}}
+{"data": {"role_id": "ceo"}}
 ```
 
 ### What to expect
@@ -311,54 +264,55 @@ The agent will:
 3. If it finds actionable recommendations, each gets an **Approve** / **Reject** button
 4. You click a button, the action executes (or gets logged as rejected)
 
-## 8. Talk to a Role
+## 7. Talk to a Role
 
 In Slack, mention Sidera to start a conversation:
 
 ```
-@Sidera talk to the head of it
+@Sidera talk to the CEO
 ```
 
 Or use the slash command:
 
 ```
-/sidera chat head_of_it What's the system health looking like?
+/sidera chat ceo What's the system health looking like?
 ```
 
 The agent responds in character with full tool access. It can pull live data, analyze it, and propose actions — all within a Slack thread.
 
 **End a conversation** by simply stopping replies. Threads auto-expire after 24 hours or 20 turns.
 
-## 9. Add Your Own Skills
+## 8. Add Your Own Skills
 
 Create a new YAML file in the skill library:
 
 ```bash
-# Create a skill in the marketing department under the media buyer role
-touch src/skills/library/marketing/performance_media_buyer/my_new_skill.yaml
+# Create a skill in a department under a role
+mkdir -p src/skills/library/engineering/on_call_engineer
+touch src/skills/library/engineering/on_call_engineer/incident_triage/skill.yaml
 ```
 
 ```yaml
-name: My New Skill
-description: What this skill does
-category: analysis
+name: Incident Triage
+description: Triage incoming incidents and prioritize response
+category: monitoring
 model: sonnet
-schedule: "0 9 * * 1-5"  # 9 AM weekdays (optional)
+schedule: "*/15 * * * *"  # Every 15 minutes (optional)
 
 system_supplement: |
   MANDATORY ANALYSIS SEQUENCE:
-  1. First, ALWAYS pull data from [source] using [tool]
-  2. Then compute [metrics]
-  3. Cross-reference against [other source]
+  1. First, ALWAYS check system health using get_system_health
+  2. Then review recent failed runs using get_failed_runs
+  3. Cross-reference against recent audit events
   4. NEVER skip step 3 — without cross-referencing, your analysis is unreliable
 
   HARD RULES:
   - MUST show actual numbers, not vague descriptions
-  - MUST flag anything deviating more than 20% from the baseline
+  - MUST flag anything deviating from normal baselines
   - NEVER recommend actions without supporting data
 
 output_format: |
-  ## [Skill Name] Report
+  ## Incident Triage Report
   **Date:** {date}
   **Summary:** 2-3 sentence overview
   **Key Findings:** Bulleted list
@@ -366,15 +320,15 @@ output_format: |
 
 business_guidance: |
   HARD RULES:
-  - Backend data overrides platform-reported metrics
-  - Always provide context (week-over-week, vs. target)
+  - Check the simplest explanation first — misconfig before bug
   - Flag items only when actionable — don't create noise
+  - Escalate anything affecting production immediately
 ```
 
 The skill is immediately available — no restart needed. Test it:
 
 ```
-/sidera run my_new_skill
+/sidera run incident_triage
 ```
 
 ### Add a new department and role
@@ -414,7 +368,7 @@ briefing_skills:
 
 Then add skill YAML files in that role's directory.
 
-## 10. Next Steps
+## 9. Next Steps
 
 ### Deploy to production
 
@@ -442,33 +396,35 @@ In the Inngest dashboard (`http://localhost:8288`), the scheduler workflow runs 
 For low-risk, repetitive actions, create auto-execute rules:
 
 ```yaml
-# src/skills/library/marketing/performance_media_buyer/_rules.yaml
+# src/skills/library/<department>/<role>/_rules.yaml
 rules:
-  - id: pause_high_cpa
-    name: Auto-pause high CPA campaigns
-    action_types: [pause_campaign]
+  - id: auto_resolve_transient
+    name: Auto-resolve transient errors
+    action_types: [custom_action]
     conditions:
-      - field: cpa
-        operator: greater_than
-        value: 100
+      - field: error_type
+        operator: equals
+        value: transient
     constraints:
-      max_per_day: 3
-      cooldown_minutes: 60
-      platforms: [google_ads, meta]
+      max_per_day: 5
+      cooldown_minutes: 30
 ```
 
 Auto-execute is **off by default**. Enable globally with `AUTO_EXECUTE_ENABLED=true`.
 
-### Connect more data sources
+### Add a connector for your APIs
 
-- **SSH** — Set `SSH_ENABLED=true`, `SSH_HOST`, `SSH_USERNAME`, `SSH_KEY_PATH` for remote server access
-- **Recall.ai** — Set `RECALL_AI_API_KEY` for meeting transcript capture
-- **Computer Use** — Set `COMPUTER_USE_ENABLED=true` for desktop automation
+```bash
+cp src/templates/connector_template.py src/connectors/my_service.py
+cp src/templates/mcp_server_template.py src/mcp_servers/my_service.py
+```
+
+Implement your read/write methods. The agent loop, approval flow, memory, and audit trail all work automatically.
 
 ### Run the test suite
 
 ```bash
-make test          # 4200+ tests
+make test          # Full test suite
 make lint          # Lint check
 make cleanup       # Everything
 ```
@@ -497,11 +453,6 @@ docker compose logs postgres
 1. Open `http://localhost:8288` — the Inngest dev server UI shows registered functions and their status
 2. Ensure the app can reach Inngest: check `INNGEST_DEV=1` is set in development
 
-### "OAuth callback failed"
-
-1. Ensure `APP_BASE_URL` matches where your server is accessible (e.g., `http://localhost:8000` or your ngrok URL)
-2. Check that your OAuth redirect URI in Google/Meta matches `{APP_BASE_URL}/oauth/{provider}/callback`
-
 ### Reset everything
 
 ```bash
@@ -514,6 +465,6 @@ docker compose exec app alembic upgrade head  # Recreate tables
 
 ## Getting Help
 
-- **Issues:** [github.com/mzola/sidera/issues](https://github.com/mzola/sidera/issues)
-- **Docs:** See `docs/onboarding/` for architecture deep-dives and cost estimates
+- **Issues:** [github.com/rankedwork-pixel/sidera/issues](https://github.com/rankedwork-pixel/sidera/issues)
+- **Docs:** See `docs/onboarding/` for architecture deep-dives
 - **Skills reference:** Every YAML file in `src/skills/library/` is a working example
