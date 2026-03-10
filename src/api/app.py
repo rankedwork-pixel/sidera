@@ -167,15 +167,6 @@ def create_app() -> FastAPI:
     async def root():
         return {"service": "sidera", "status": "running"}
 
-    # --- OAuth routes (no API key — OAuth has its own state tokens) ---
-    from src.api.routes.google_ads_oauth import router as google_ads_oauth_router
-    from src.api.routes.google_drive_oauth import router as google_drive_oauth_router
-    from src.api.routes.meta_oauth import router as meta_oauth_router
-
-    app.include_router(google_ads_oauth_router)
-    app.include_router(google_drive_oauth_router)
-    app.include_router(meta_oauth_router)
-
     # --- Org chart management routes (API key protected) ---
     from src.api.routes.org_chart import router as org_chart_router
 
@@ -190,16 +181,6 @@ def create_app() -> FastAPI:
     from src.api.routes.gdpr import router as gdpr_router
 
     app.include_router(gdpr_router)
-
-    # --- Webhook routes (Recall.ai transcript events, etc.) ---
-    from src.api.routes.webhooks import router as webhooks_router
-
-    app.include_router(webhooks_router)
-
-    # --- Bootstrap routes (company onboarding pipeline) ---
-    from src.api.routes.bootstrap import router as bootstrap_router
-
-    app.include_router(bootstrap_router)
 
     # --- Slack routes ---
     try:

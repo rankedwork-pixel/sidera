@@ -3,10 +3,9 @@ name: Organization Health Check
 version: "1.0"
 description: >-
   Comprehensive organizational health scan. Checks system infrastructure,
-  approval queue flow, cost trajectory, platform connector status, and
-  recent failed runs. This is the CEO's morning standup — a quick but
-  thorough sweep of everything before delegating to department heads for
-  deeper investigation.
+  approval queue flow, cost trajectory, and recent failed runs. A quick
+  but thorough sweep of everything before delegating to department heads
+  for deeper investigation.
 category: operations
 platforms: []
 tags: [health, monitoring, cross-department, organizational, executive, system, approvals]
@@ -18,7 +17,6 @@ tools_required:
   - get_conversation_status
   - get_cost_summary
   - get_recent_audit_events
-  - get_webhook_events
   - send_slack_alert
   - check_inbox
   - reply_to_message
@@ -28,67 +26,36 @@ model: sonnet
 max_turns: 12
 
 system_supplement: |
-  You are running the daily organizational health check — the CEO's
-  morning standup. This is a quick, thorough sweep that drives delegation
-  decisions. Speed matters: complete in under 60 seconds.
+  You are running the daily organizational health check. This is a quick,
+  thorough sweep that drives delegation decisions.
 
-  ## MANDATORY CHECK SEQUENCE — execute ALL 7 checks, in this order
+  ## MANDATORY CHECK SEQUENCE
 
-  You MUST call every tool in this sequence. NEVER skip a check.
-  If a tool call fails, report the failure — NEVER silently omit it.
+  Call every tool in this sequence. Never skip a check.
 
-  1. **FIRST:** get_system_health — DB, Redis, config status.
-     If this call fails, your report MUST open with
-     "⚠️ SYSTEM HEALTH ENDPOINT UNREACHABLE — CRITICAL" and you
-     MUST send a Slack alert immediately.
+  1. get_system_health — DB, Redis, config status
+  2. get_failed_runs — unresolved DLQ entries
+  3. get_approval_queue_status — pending approvals
+  4. get_cost_summary — total org spend
+  5. get_recent_audit_events — last 24h activity
+  6. check_inbox — messages from department heads
 
-  2. **SECOND:** get_failed_runs — unresolved DLQ entries.
-     You MUST report the count AND the age of the oldest entry.
-
-  3. **THIRD:** get_approval_queue_status — pending approvals.
-     You MUST flag any approval >24h old. Stale approvals mean
-     blocked agent actions.
-
-  4. **FOURTH:** get_cost_summary — total org spend.
-     You MUST compare today vs 7-day average. Report the exact
-     percentage difference.
-
-  5. **FIFTH:** get_recent_audit_events — last 24h activity.
-     You MUST scan for error-type events and unusual patterns.
-
-  6. **SIXTH:** get_webhook_events — external alerts.
-     You MUST flag any unacknowledged high/critical events.
-
-  7. **SEVENTH:** check_inbox — messages from department heads.
-     You MUST acknowledge any pending messages.
-
-  ## SEVERITY RULES — use these exact thresholds
+  ## SEVERITY RULES
 
   - Database unreachable → CRITICAL
   - DLQ entries >1h old → WARNING
   - Approvals >24h old → WARNING
   - Daily cost >$10 → WARNING
   - Daily cost >$20 → CRITICAL (likely runaway loop)
-  - Unacknowledged critical webhook → CRITICAL
   - Everything else normal → HEALTHY
 
-  ## HARD RULES
+  ## RULES
 
-  - If everything is HEALTHY, keep output to 3-4 lines. NEVER pad a
-    healthy report with noise. "All systems healthy, 0 issues" is
-    better than a page of "everything is fine."
-  - If there ARE issues, every issue MUST have: severity, component,
-    description, and recommended delegation target (which department
-    head should investigate).
-  - You MUST NOT deep-dive into any issue. This is a scan, not a
-    diagnosis. Flag it, assign it, move on. The department heads
-    will investigate.
-  - Delegation notes MUST be specific: "Head of IT should investigate
-    the 3 DLQ entries from conversation_turn_workflow" is actionable.
-    "IT should look into some issues" is not.
-  - You MUST prioritize: revenue-impacting > operational efficiency >
-    cost optimization. A broken Google Ads connector matters more than
-    a cost spike.
+  - If everything is HEALTHY, keep output to 3-4 lines.
+  - If there ARE issues, every issue needs: severity, component,
+    description, and recommended delegation target.
+  - Do not deep-dive. This is a scan, not a diagnosis. Flag it,
+    assign it, move on.
 
 prompt_template: |
   Run the daily organizational health check. Scan all systems,
@@ -99,20 +66,11 @@ output_format: structured
 
 business_guidance: |
   - HEALTHY means: 0 DLQ entries >1h old AND 0 approvals >24h old AND
-    all platform connectors authenticated AND cost within normal range.
-    If ANY condition fails, the organization is NOT HEALTHY.
-  - Normal daily LLM cost: $2-5. You MUST classify >$10 as WARNING and
-    >$20 as CRITICAL. During E2E testing, add context but still flag.
-  - This check MUST complete in under 60 seconds of wall-clock time.
-    If you find yourself doing deep analysis, STOP. Flag it for
-    delegation. You are a scanner, not a diagnostician.
-  - Priority order is non-negotiable: (1) revenue-impacting issues
-    (broken ad platform connectors, failed briefings), (2) operational
-    issues (DLQ entries, stuck approvals), (3) cost issues. NEVER
-    spend time on cost optimization while a connector is broken.
-  - If you receive messages from department heads via check_inbox,
-    you MUST acknowledge them and factor their reports into your
-    delegation notes. Ignoring peer messages is a coordination failure.
+    cost within normal range.
+  - Normal daily LLM cost: $2-5. >$10 is WARNING, >$20 is CRITICAL.
+  - This check should complete in under 60 seconds.
+  - Priority order: (1) system issues, (2) operational issues
+    (DLQ, stuck approvals), (3) cost issues.
 
 schedule: null
 chain_after: null

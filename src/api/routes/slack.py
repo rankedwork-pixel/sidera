@@ -192,72 +192,31 @@ def _markdown_to_mrkdwn(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Long response → Google Doc redirect
+# Long response handling
 # ---------------------------------------------------------------------------
 
-# Threshold in characters — responses longer than this get written to a
-# Google Doc with a link posted in Slack instead of the raw text.
-_DRIVE_REDIRECT_THRESHOLD = 3000
+# Threshold in characters — responses longer than this get truncated.
+_LONG_RESPONSE_THRESHOLD = 3000
 
 
-def _maybe_redirect_to_drive(
+def _truncate_long_response(
     response_text: str,
-    role_label: str,
+    role_label: str,  # noqa: ARG001 — kept for call-site compat
     *,
-    doc_title_prefix: str = "",
+    doc_title_prefix: str = "",  # noqa: ARG001
 ) -> str:
-    """If *response_text* exceeds the threshold, write it to a new Google
-    Doc and return a short Slack message containing a summary excerpt plus
-    a link to the full document.
+    """Truncate very long responses for Slack readability.
 
-    Falls back to returning *response_text* unchanged when:
-    - the text is short enough for Slack
-    - Google Drive credentials are not configured
-    - the Drive API call fails for any reason
-
-    The function is **non-fatal** — it should never prevent a response
-    from reaching the user.
+    Returns *response_text* unchanged when short enough.
     """
-    if len(response_text) <= _DRIVE_REDIRECT_THRESHOLD:
+    if len(response_text) <= _LONG_RESPONSE_THRESHOLD:
         return response_text
 
-    try:
-        from src.connectors.google_drive import GoogleDriveConnector
-
-        drive = GoogleDriveConnector()
-    except Exception:
-        logger.debug("drive_redirect.no_connector", reason="Drive not configured")
-        return response_text
-
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
-    title_date = now.strftime("%Y-%m-%d %H:%M")
-    prefix = doc_title_prefix or role_label
-    doc_title = f"{prefix} — {title_date}"
-
-    try:
-        result = drive.create_document(title=doc_title, content=response_text)
-        if not result or not result.get("web_view_link"):
-            logger.warning("drive_redirect.create_failed", result=result)
-            return response_text
-
-        link = result["web_view_link"]
-
-        # Build a short summary: first ~600 chars of the response
-        excerpt = response_text[:600].rstrip()
-        if len(response_text) > 600:
-            # Try to break at the last newline within the excerpt
-            last_nl = excerpt.rfind("\n")
-            if last_nl > 200:
-                excerpt = excerpt[:last_nl]
-            excerpt += "\n..."
-
-        return f"{excerpt}\n\n:page_facing_up: *Full report:* <{link}|{doc_title}>"
-
-    except Exception:
-        logger.warning("drive_redirect.error", exc_info=True)
-        return response_text
+    excerpt = response_text[:2500].rstrip()
+    last_nl = excerpt.rfind("\n")
+    if last_nl > 500:
+        excerpt = excerpt[:last_nl]
+    return excerpt + "\n\n_...response truncated for Slack._"
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +442,7 @@ async def _execute_approved_action_inline(
             footer = f"\n_Cost: ${cost:.4f} | Turns: {turns}_"
 
             # Redirect long output to Google Drive (posts summary + link)
-            output = _maybe_redirect_to_drive(
+            output = _truncate_long_response(
                 output,
                 "Claude Code Task",
             )
@@ -833,7 +792,7 @@ async def _run_conversation_turn_inline(
         clean_response = _markdown_to_mrkdwn(clean_response)
 
         # Redirect long responses to Google Drive (posts summary + link)
-        clean_response = _maybe_redirect_to_drive(
+        clean_response = _truncate_long_response(
             clean_response,
             role_label,
         )
@@ -962,65 +921,6 @@ async def _run_conversation_turn_inline(
             pass
 
 
-async def _run_meeting_join_inline(
-    meeting_url: str,
-    role_id: str,
-    user_id: str,
-    channel_id: str,
-) -> None:
-    """Join a meeting directly without Inngest (dev mode).
-
-    Calls the MeetingSessionManager directly to join the meeting
-    via Recall.ai, bypassing the Inngest workflow.
-    """
-    try:
-        from src.meetings.session import get_meeting_manager
-        from src.skills.db_loader import load_registry_with_db
-
-        registry = await load_registry_with_db()
-        role = registry.get_role(role_id)
-        if role is None:
-            logger.error(
-                "inline_meeting.role_invalid",
-                role_id=role_id,
-            )
-            return
-
-        manager = get_meeting_manager()
-        ctx = await manager.join(
-            meeting_url=meeting_url,
-            role_id=role_id,
-            user_id=user_id,
-            channel_id=channel_id,
-        )
-
-        logger.info(
-            "inline_meeting.joined",
-            meeting_url=meeting_url,
-            role_id=role_id,
-            bot_id=ctx.bot_id,
-        )
-
-    except Exception as exc:
-        logger.error(
-            "inline_meeting.error",
-            meeting_url=meeting_url,
-            role_id=role_id,
-            error=str(exc),
-        )
-        # Try to notify Slack
-        try:
-            from src.connectors.slack import SlackConnector
-
-            connector = SlackConnector()
-            connector.send_alert(
-                channel_id=channel_id or None,
-                text=f":x: Failed to join meeting inline: {exc}",
-            )
-        except Exception:
-            pass
-
-
 async def _extract_and_download_images(
     event: dict,
     bot_token: str,
@@ -1135,17 +1035,6 @@ async def _dispatch_or_run_inline(
                 message_ts=data.get("message_ts", ""),
                 source_user_name=data.get("source_user_name", ""),
                 image_content=data.get("image_content"),
-            )
-        )
-    elif event_name == "sidera/meeting.join":
-        import asyncio
-
-        asyncio.create_task(
-            _run_meeting_join_inline(
-                meeting_url=data["meeting_url"],
-                role_id=data["role_id"],
-                user_id=data["user_id"],
-                channel_id=data.get("channel_id", ""),
             )
         )
     else:
@@ -2383,9 +2272,6 @@ async def handle_sidera_command(ack, body, client):
     - ``/sidera run manager:<role_id>`` — Explicitly run a manager workflow.
     - ``/sidera run dept:<dept_id>`` — Run all roles in a department.
     - ``/sidera memory <role_id>`` — Show recent memories for a role.
-    - ``/sidera meeting join <url> [as <role_id>]`` — Join a meeting as a voice participant.
-    - ``/sidera meeting status`` — Show active meetings.
-    - ``/sidera meeting leave <bot_id>`` — Leave a meeting.
     - ``/sidera org …`` — Manage dynamic org chart (list, show, add, update,
       remove, history for departments, roles, and skills).
     - ``/sidera users …`` — Manage users (list, whoami, show, add, set-role,
@@ -2427,9 +2313,6 @@ async def handle_sidera_command(ack, body, client):
                 f"- `{cmd} run dept:<dept_id>` — Run all roles in a department\n"
                 f"- `{cmd} memory <role_id>` — See memories for a role\n"
                 f"- `{cmd} chat <role_id> [message]` — Start a conversation with a role\n"
-                f"- `{cmd} meeting join <url> [as <role_id>]` — Join a meeting\n"
-                f"- `{cmd} meeting status` — Show active meetings\n"
-                f"- `{cmd} meeting leave <bot_id>` — Leave a meeting\n"
                 f"- `{cmd} org` — Manage dynamic org chart\n"
                 f"- `{cmd} users` — Manage user roles + clearance (admin only)\n"
                 f"- `{cmd} steward` — Manage agent stewardship assignments\n"
@@ -2467,193 +2350,6 @@ async def handle_sidera_command(ack, body, client):
             await client.chat_postMessage(channel=channel_id, text=msg)
 
         await _handle_steward_command(parts[1:], _say_steward, user_id, cmd=cmd)
-        return
-
-    # --- /sidera meeting … ---
-    if subcommand == "meeting":
-        meeting_parts = parts[1:] if len(parts) > 1 else []
-        meeting_action = meeting_parts[0].lower() if meeting_parts else ""
-
-        if not meeting_action:
-            await client.chat_postMessage(
-                channel=channel_id,
-                text=(
-                    f":microphone: *Meeting Commands*\n"
-                    f"- `{cmd} meeting join <url> [as <role_id>]`"
-                    f" — Join a meeting as a voice participant\n"
-                    f"- `{cmd} meeting status`"
-                    f" — Show active meetings\n"
-                    f"- `{cmd} meeting leave <bot_id>`"
-                    f" — Leave a meeting"
-                ),
-            )
-            return
-
-        # --- /sidera meeting join <url> [as <role_id>] ---
-        if meeting_action == "join":
-            if len(meeting_parts) < 2:
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":x: Usage: `{cmd} meeting join <meeting_url> [as <role_id>]`",
-                )
-                return
-
-            meeting_url = meeting_parts[1]
-
-            # Parse optional "as <role_id>"
-            role_id = "head_of_marketing"  # default to first manager found
-            if len(meeting_parts) >= 4 and meeting_parts[2].lower() == "as":
-                role_id = meeting_parts[3]
-
-            # Validate URL looks like a meeting link
-            if not any(
-                domain in meeting_url.lower()
-                for domain in ["meet.google.com", "zoom.us", "teams.microsoft.com", "webex.com"]
-            ):
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=(
-                        f":warning: `{meeting_url}` doesn't look like a meeting URL. "
-                        f"Supported: Google Meet, Zoom, Teams, WebEx."
-                    ),
-                )
-                return
-
-            # Validate role exists
-            try:
-                from src.skills.db_loader import load_registry_with_db
-
-                registry = await load_registry_with_db()
-                role = registry.get_role(role_id)
-                if role is None:
-                    await client.chat_postMessage(
-                        channel=channel_id,
-                        text=(
-                            f":x: Role `{role_id}` not found. "
-                            f"Use `{cmd} list roles` to see available roles."
-                        ),
-                    )
-                    return
-            except Exception as exc:
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":x: Failed to validate role: {exc}",
-                )
-                return
-
-            # Dispatch meeting join event (Inngest or inline fallback)
-            await client.chat_postMessage(
-                channel=channel_id,
-                text=(
-                    f":ear: *{role.name}* is joining the meeting to listen...\n"
-                    f"Meeting: {meeting_url}\n"
-                    f"Role: `{role_id}`\n\n"
-                    f"_The bot will join in a few seconds. "
-                    f"It will listen and capture the transcript for post-call analysis._"
-                ),
-            )
-            await _dispatch_or_run_inline(
-                event_name="sidera/meeting.join",
-                data={
-                    "meeting_url": meeting_url,
-                    "role_id": role_id,
-                    "user_id": user_id,
-                    "channel_id": channel_id,
-                },
-            )
-            return
-
-        # --- /sidera meeting status ---
-        if meeting_action == "status":
-            try:
-                from src.meetings.session import get_meeting_manager
-
-                manager = get_meeting_manager()
-                sessions = manager.get_all_active_sessions()
-
-                if not sessions:
-                    await client.chat_postMessage(
-                        channel=channel_id,
-                        text=":information_source: No active meetings.",
-                    )
-                    return
-
-                lines = [":microphone: *Active Meetings*\n"]
-                for bot_id, sess in sessions.items():
-                    lines.append(
-                        f"• *{sess.role_name}* (`{bot_id}`)\n"
-                        f"  Meeting: {sess.meeting_url}\n"
-                        f"  Turns: {sess.agent_turns} · "
-                        f"Cost: ${sess.total_cost_usd:.2f}"
-                    )
-
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text="\n".join(lines),
-                )
-            except Exception as exc:
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":x: Failed to get meeting status: {exc}",
-                )
-            return
-
-        # --- /sidera meeting leave <bot_id> ---
-        if meeting_action == "leave":
-            if len(meeting_parts) < 2:
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":x: Usage: `{cmd} meeting leave <bot_id>`",
-                )
-                return
-
-            bot_id = meeting_parts[1]
-
-            try:
-                from src.meetings.session import get_meeting_manager
-
-                manager = get_meeting_manager()
-                session = manager.get_active_session(bot_id)
-
-                if session is None:
-                    await client.chat_postMessage(
-                        channel=channel_id,
-                        text=f":x: No active meeting found for bot `{bot_id}`.",
-                    )
-                    return
-
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":wave: *{session.role_name}* is leaving the meeting...",
-                )
-
-                result = await manager.leave(bot_id)
-
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=(
-                        f":checkered_flag: *{session.role_name}* has left the meeting.\n"
-                        f"Turns: {result.get('agent_turns', 0)} · "
-                        f"Transcript entries: {result.get('transcript_entries', 0)} · "
-                        f"Cost: ${result.get('total_cost_usd', 0):.2f}\n\n"
-                        f"_Post-call summary and delegation will follow shortly._"
-                    ),
-                )
-            except Exception as exc:
-                await client.chat_postMessage(
-                    channel=channel_id,
-                    text=f":x: Failed to leave meeting: {exc}",
-                )
-            return
-
-        # Unknown meeting subcommand
-        await client.chat_postMessage(
-            channel=channel_id,
-            text=(
-                f":x: Unknown meeting command: `{meeting_action}`\n"
-                f"Try `{cmd} meeting join`, `{cmd} meeting status`, or `{cmd} meeting leave`."
-            ),
-        )
         return
 
     # --- /sidera list departments ---
@@ -3311,37 +3007,6 @@ async def handle_sidera_command(ack, body, client):
 # ---------------------------------------------------------------------------
 
 
-# Supported meeting URL domains for conversational meeting join detection
-_MEETING_DOMAINS = ("meet.google.com", "zoom.us", "teams.microsoft.com", "webex.com")
-_MEETING_URL_RE = _re.compile(
-    r"https?://(?:" + "|".join(d.replace(".", r"\.") for d in _MEETING_DOMAINS) + r")[^\s>]*",
-    _re.IGNORECASE,
-)
-
-
-def _sanitize_meeting_url(url: str) -> str:
-    """Strip query parameters and fragments from a meeting URL.
-
-    Meeting URLs like ``https://zoom.us/j/123?pwd=SECRET`` may contain
-    passwords or tokens in query params.  We only need the path portion
-    for the Recall.ai bot to join.
-    """
-    from urllib.parse import urlparse, urlunparse
-
-    parsed = urlparse(url)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
-
-
-def _detect_meeting_url(text: str) -> str | None:
-    """Return the first meeting URL found in *text*, or ``None``.
-
-    Supports Google Meet, Zoom, Microsoft Teams, and WebEx links.
-    The URL is sanitized to strip query parameters and fragments.
-    """
-    m = _MEETING_URL_RE.search(text)
-    return _sanitize_meeting_url(m.group(0)) if m else None
-
-
 async def _resolve_user_display_name(client, user_id: str) -> str:
     """Look up Slack display name for memory attribution.
 
@@ -3447,9 +3112,6 @@ async def handle_app_mention(event, client, say):
                         client.token or "",
                     )
 
-                    # Check for meeting URL in the reply
-                    detected_url = _detect_meeting_url(clean_text)
-
                     # Dispatch via debounce (batches rapid-fire messages)
                     await _debounce_conversation_turn(
                         debounce_key=thread_ts,
@@ -3462,33 +3124,6 @@ async def handle_app_mention(event, client, say):
                         source_user_name=source_user_name,
                         image_content=image_content or None,
                     )
-
-                    # If a meeting URL was detected, also join the meeting
-                    if detected_url:
-                        logger.info(
-                            "app_mention.thread_meeting_url_detected",
-                            meeting_url=detected_url,
-                            role_id=existing.role_id,
-                        )
-                        await client.chat_postMessage(
-                            channel=channel_id,
-                            thread_ts=thread_ts,
-                            text=(
-                                f":ear: Joining the meeting to listen...\n"
-                                f"Meeting: {detected_url}\n\n"
-                                f"_I'll capture the transcript and post a "
-                                f"summary here when the meeting ends._"
-                            ),
-                        )
-                        await _dispatch_or_run_inline(
-                            event_name="sidera/meeting.join",
-                            data={
-                                "meeting_url": detected_url,
-                                "role_id": existing.role_id,
-                                "user_id": user_id,
-                                "channel_id": channel_id,
-                            },
-                        )
 
                     return
         except Exception as exc:
@@ -3544,9 +3179,6 @@ async def handle_app_mention(event, client, say):
             client.token or "",
         )
 
-        # Check for meeting URL — if present, also dispatch meeting join
-        detected_url = _detect_meeting_url(clean_text)
-
         # Dispatch via debounce (batches rapid-fire messages)
         await _debounce_conversation_turn(
             debounce_key=effective_thread_ts,
@@ -3559,33 +3191,6 @@ async def handle_app_mention(event, client, say):
             source_user_name=source_user_name,
             image_content=image_content or None,
         )
-
-        # If a meeting URL was detected, also join the meeting
-        if detected_url:
-            logger.info(
-                "app_mention.meeting_url_detected",
-                meeting_url=detected_url,
-                role_id=role.id,
-            )
-            await client.chat_postMessage(
-                channel=channel_id,
-                thread_ts=effective_thread_ts,
-                text=(
-                    f":ear: *{role.name}* is joining the meeting to listen...\n"
-                    f"Meeting: {detected_url}\n\n"
-                    f"_I'll capture the transcript and post a summary "
-                    f"here when the meeting ends._"
-                ),
-            )
-            await _dispatch_or_run_inline(
-                event_name="sidera/meeting.join",
-                data={
-                    "meeting_url": detected_url,
-                    "role_id": role.id,
-                    "user_id": user_id,
-                    "channel_id": channel_id,
-                },
-            )
 
         logger.info(
             "app_mention.dispatched",
@@ -3693,9 +3298,6 @@ async def handle_thread_message(event, client):
             client.token or "",
         )
 
-        # Check for meeting URL — if present, also dispatch meeting join
-        detected_url = _detect_meeting_url(clean_text)
-
         # Dispatch via debounce (batches rapid-fire messages)
         await _debounce_conversation_turn(
             debounce_key=thread_ts,
@@ -3708,50 +3310,6 @@ async def handle_thread_message(event, client):
             source_user_name=source_user_name,
             image_content=image_content or None,
         )
-
-        # If a meeting URL was detected, also join the meeting
-        if detected_url:
-            logger.info(
-                "thread_message.meeting_url_detected",
-                meeting_url=detected_url,
-                role_id=thread.role_id,
-            )
-            # Load role name for the notification message
-            try:
-                from src.skills.db_loader import load_registry_with_db
-
-                reg = await load_registry_with_db()
-                role_obj = reg.get_role(thread.role_id)
-                role_name = role_obj.name if role_obj else thread.role_id
-            except Exception:
-                role_name = thread.role_id
-
-            from src.connectors.slack import SlackConnector
-
-            try:
-                sc = SlackConnector()
-                sc.post_thread_reply(
-                    channel_id,
-                    thread_ts,
-                    (
-                        f":ear: *{role_name}* is joining the meeting to listen...\n"
-                        f"Meeting: {detected_url}\n\n"
-                        f"_I'll capture the transcript and post a summary "
-                        f"here when the meeting ends._"
-                    ),
-                )
-            except Exception:
-                pass
-
-            await _dispatch_or_run_inline(
-                event_name="sidera/meeting.join",
-                data={
-                    "meeting_url": detected_url,
-                    "role_id": thread.role_id,
-                    "user_id": user_id,
-                    "channel_id": channel_id,
-                },
-            )
 
         logger.info(
             "thread_message.dispatched",

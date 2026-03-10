@@ -150,8 +150,12 @@ async def sync_role_output_to_drive(
             metadata=metadata,
         )
 
-        # Append to doc
-        from src.connectors.google_drive import GoogleDriveConnector
+        # Append to doc — requires Google Drive connector (install separately)
+        try:
+            from src.connectors.google_drive import GoogleDriveConnector
+        except ImportError:
+            logger.info("document_sync.skipped", reason="google_drive connector not installed")
+            return {"synced": False, "reason": "google_drive connector not installed"}
 
         connector = GoogleDriveConnector()
         success = connector.append_to_document(doc_id, entry_text)

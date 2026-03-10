@@ -1,79 +1,45 @@
-"""Inngest durable functions for Sidera's daily analysis cycle.
+"""Inngest durable functions for Sidera's workflow engine.
 
-Contains seventeen workflows:
+Contains thirteen workflows:
 
-1. **daily_briefing_workflow** — Runs at 7 AM weekdays. Pulls account
-   data, runs the SideraAgent analysis, sends the briefing to Slack,
-   posts interactive approval requests for each recommendation, waits
-   up to 24 hours for human decisions, and logs results.
+1. **daily_briefing_workflow** — Runs at 7 AM weekdays. Pulls data,
+   runs the SideraAgent analysis, sends the briefing to Slack, posts
+   interactive approval requests, waits for human decisions, logs results.
 
 2. **cost_monitor_workflow** — Runs every 30 minutes. Checks cumulative
-   LLM costs for the day and sends a Slack alert if usage exceeds 80 %
-   of the daily limit.
+   LLM costs and sends a Slack alert if usage exceeds 80% of daily limit.
 
 3. **skill_runner_workflow** — Triggered by ``sidera/skill.run`` event.
-   Loads a skill from the registry, executes it via SkillExecutor,
-   saves results, sends output to Slack, and optionally sends approval
-   requests and chains to a follow-up skill.
+   Loads a skill from the registry, executes it, sends output to Slack.
 
 4. **skill_scheduler_workflow** — Runs every minute. Checks for skills
    and roles with cron schedules that should fire and emits events.
 
-5. **token_refresh_workflow** — Runs at 5 AM daily. Proactively refreshes
-   OAuth tokens expiring within 7 days and alerts on failures.
+5. **role_runner_workflow** — Triggered by ``sidera/role.run`` event.
+   Runs all briefing_skills for a role via RoleExecutor.
 
-6. **role_runner_workflow** — Triggered by ``sidera/role.run`` event.
-   Runs all briefing_skills for a role via RoleExecutor and sends the
-   combined output to Slack.
+6. **department_runner_workflow** — Triggered by ``sidera/department.run``.
+   Runs all roles in a department via DepartmentExecutor.
 
-7. **department_runner_workflow** — Triggered by ``sidera/department.run``
-   event. Runs all roles in a department via DepartmentExecutor.
+7. **manager_runner_workflow** — Triggered by ``sidera/manager.run``.
+   Runs a manager role: own skills, delegation, sub-role execution, synthesis.
 
-8. **manager_runner_workflow** — Triggered by ``sidera/manager.run``
-   event. Runs a manager role: own skills, delegation decision,
-   sub-role execution, synthesis, and approval flow.
+8. **conversation_turn_workflow** — Triggered by ``sidera/conversation.turn``.
+   Handles a single conversation turn in a Slack thread.
 
-9. **conversation_turn_workflow** — Triggered by ``sidera/conversation.turn``
-   event. Handles a single conversation turn: loads thread context,
-   checks limits, builds role context, runs the agent, posts reply.
+9. **data_retention_workflow** — Runs at 3 AM daily. Purges expired data.
 
-10. **meeting_join_workflow** — Triggered by ``sidera/meeting.join``
-    event. Validates the role has voice capability, joins the meeting
-    via MeetingSessionManager, and starts the real-time audio pipeline.
+10. **heartbeat_runner_workflow** — Triggered by ``sidera/heartbeat.run``.
+    Runs a proactive heartbeat check-in for a role.
 
-11. **meeting_end_workflow** — Triggered by ``sidera/meeting.ended``
-    event. Summarizes the transcript, extracts action items, posts a
-    meeting summary to Slack, and optionally triggers manager delegation.
+11. **memory_consolidation_workflow** — Runs at 4 AM every Sunday.
+    Consolidates duplicate/overlapping memories.
 
-12. **data_retention_workflow** — Runs at 3 AM daily. Purges expired
-    data based on configurable retention periods.
+12. **claude_code_task_workflow** — Triggered by ``sidera/claude_code.task``.
+    Executes a Sidera skill as a headless Claude Code instance.
 
-13. **heartbeat_runner_workflow** — Triggered by ``sidera/heartbeat.run``
-    event. Runs a proactive heartbeat check-in for a role: checks
-    cooldown, loads context + pending messages, runs the agent with an
-    open-ended investigative prompt, posts findings to Slack, and logs
-    the result.
-
-14. **memory_consolidation_workflow** — Runs at 4 AM every Sunday.
-    Iterates over all (user_id, role_id) pairs with unconsolidated
-    memories, batches them, runs a Haiku call to identify duplicates
-    and overlaps, and merges them into consolidated memory entries.
-
-15. **claude_code_task_workflow** — Triggered by ``sidera/claude_code.task``
-    event. Executes a Sidera skill as a headless Claude Code instance
-    with full agentic capabilities. Loads context, runs the task,
-    saves results to DB, records cost, and optionally notifies Slack.
-
-16. **event_reactor_workflow** — Triggered by ``sidera/webhook.received``
-    event. Processes inbound webhook events from external monitoring
-    sources (Google Ads Scripts, Meta, BigQuery, custom). Classifies
-    severity, sends Slack alerts, and optionally triggers an agent
-    investigation (heartbeat-style) for high/critical events.
-
-17. **working_group_workflow** — Triggered by ``sidera/working_group.run``
-    event. Runs a multi-agent working group: creates DB session, runs
-    coordinator planning LLM call, executes member tasks sequentially
-    with checkpointing, synthesizes results, and posts to Slack.
+13. **working_group_workflow** — Triggered by ``sidera/working_group.run``.
+    Runs a multi-agent working group: plan, execute, synthesize.
 
 All functions use Inngest's step primitives (``step.run``,
 ``step.wait_for_event``) so that each stage is memoized and
@@ -221,130 +187,11 @@ async def _execute_action(
 
     platform = action_params.get("platform", "")
 
-    if platform == "google_ads":
-        from src.connectors.google_ads import GoogleAdsConnector
-
-        connector = GoogleAdsConnector()
-        customer_id = action_params["customer_id"]
-        campaign_id = action_params.get("campaign_id", "")
-
-        if action_type in ("budget_change", "update_budget"):
-            return connector.update_campaign_budget(
-                customer_id,
-                campaign_id,
-                int(action_params["new_budget_micros"]),
-                validate_cap=is_auto_approved,
-            )
-        elif action_type in ("pause_campaign",):
-            return connector.update_campaign_status(
-                customer_id,
-                campaign_id,
-                "PAUSED",
-            )
-        elif action_type in ("enable_campaign",):
-            return connector.update_campaign_status(
-                customer_id,
-                campaign_id,
-                "ENABLED",
-            )
-        elif action_type in ("bid_change", "update_bid_target"):
-            return connector.update_bid_strategy_target(
-                customer_id,
-                campaign_id,
-                target_cpa_micros=action_params.get("target_cpa_micros"),
-                target_roas=action_params.get("target_roas"),
-            )
-        elif action_type == "add_negative_keywords":
-            return connector.add_negative_keywords(
-                customer_id,
-                campaign_id,
-                action_params["keywords"],
-            )
-        elif action_type == "update_ad_schedule":
-            return connector.update_ad_schedule(
-                customer_id,
-                campaign_id,
-                action_params["schedule"],
-            )
-        elif action_type == "update_geo_bid_modifier":
-            return connector.update_geo_bid_modifier(
-                customer_id,
-                campaign_id,
-                int(action_params["geo_target_id"]),
-                float(action_params["bid_modifier"]),
-            )
-        elif action_type == "create_campaign":
-            return connector.create_campaign(
-                customer_id,
-                name=action_params["name"],
-                channel_type=action_params.get("channel_type", "SEARCH"),
-                daily_budget_micros=int(action_params["daily_budget_micros"]),
-                status=action_params.get("status", "PAUSED"),
-                bidding_strategy=action_params.get(
-                    "bidding_strategy",
-                    "MAXIMIZE_CLICKS",
-                ),
-            )
-        else:
-            raise ValueError(f"Unsupported Google Ads action: {action_type}")
-
-    elif platform == "meta":
-        from src.connectors.meta import MetaConnector
-
-        connector = MetaConnector()
-        account_id = action_params["account_id"]
-
-        if action_type in ("budget_change", "update_budget"):
-            return connector.update_campaign_budget(
-                account_id,
-                action_params["campaign_id"],
-                int(action_params["new_budget_cents"]),
-                action_params.get("budget_type", "daily"),
-                validate_cap=is_auto_approved,
-            )
-        elif action_type in ("pause_campaign",):
-            return connector.update_campaign_status(
-                account_id,
-                action_params["campaign_id"],
-                "PAUSED",
-            )
-        elif action_type in ("enable_campaign",):
-            return connector.update_campaign_status(
-                account_id,
-                action_params["campaign_id"],
-                "ACTIVE",
-            )
-        elif action_type == "pause_ad_set":
-            return connector.update_adset_status(
-                account_id,
-                action_params["adset_id"],
-                "PAUSED",
-            )
-        elif action_type == "update_ad_status":
-            return connector.update_ad_status(
-                account_id,
-                action_params["ad_id"],
-                action_params.get("status", "PAUSED"),
-            )
-        elif action_type == "update_adset_budget":
-            return connector.update_adset_budget(
-                account_id,
-                action_params["adset_id"],
-                int(action_params["new_budget_cents"]),
-                action_params.get("budget_type", "daily"),
-                validate_cap=is_auto_approved,
-            )
-        elif action_type == "update_adset_bid":
-            return connector.update_adset_bid(
-                account_id,
-                action_params["adset_id"],
-                int(action_params["bid_amount_cents"]),
-            )
-        else:
-            raise ValueError(f"Unsupported Meta action: {action_type}")
-
-    else:
-        raise ValueError(f"Unknown platform: {platform}")
+    # Platform-specific action execution — install connectors to enable
+    raise ValueError(
+        f"No connector installed for platform '{platform}'. "
+        f"Install the appropriate connector plugin to execute {action_type} actions."
+    )
 
 
 # =====================================================================
@@ -1401,6 +1248,108 @@ async def skill_runner_workflow(ctx: inngest.Context) -> dict:
 
 
 # =====================================================================
+# Cron expression matcher (used by skill scheduler)
+# =====================================================================
+
+
+def _cron_matches_now(cron_expr: str | None, now) -> bool:
+    """Cron expression matcher for minute-level scheduling.
+
+    Supports standard 5-field cron: minute hour day month weekday.
+    Handles: ``*``, exact values, steps (``*/15``), ranges (``1-5``),
+    comma-separated lists (``0,15,30,45``), and combinations (``1-5/2``).
+    Day names (``MON``-``SUN``) are supported for the weekday field.
+    Weekday uses 0=Monday through 6=Sunday.
+    """
+    if not cron_expr:
+        return False
+
+    parts = cron_expr.strip().split()
+    if len(parts) != 5:
+        return False
+
+    minute, hour, day, month, weekday = parts
+
+    day_names = {
+        "MON": 0, "TUE": 1, "WED": 2, "THU": 3,
+        "FRI": 4, "SAT": 5, "SUN": 6,
+    }
+
+    def _resolve_name(token: str, names: dict | None) -> int | None:
+        if names and token.upper() in names:
+            return names[token.upper()]
+        try:
+            return int(token)
+        except ValueError:
+            return None
+
+    def _expand_field(field: str, names: dict | None = None) -> set[int] | None:
+        if "," in field:
+            result: set[int] = set()
+            for part in field.split(","):
+                expanded = _expand_field(part.strip(), names)
+                if expanded is None:
+                    return None
+                result |= expanded
+            return result
+
+        if field.startswith("*/"):
+            try:
+                step = int(field[2:])
+                if step <= 0:
+                    return set()
+                return {v for v in range(60) if v % step == 0}
+            except ValueError:
+                return set()
+
+        if "-" in field:
+            step = 1
+            range_part = field
+            if "/" in field:
+                range_part, step_str = field.split("/", 1)
+                try:
+                    step = int(step_str)
+                except ValueError:
+                    return set()
+
+            range_parts = range_part.split("-", 1)
+            if len(range_parts) != 2:
+                return set()
+
+            start = _resolve_name(range_parts[0], names)
+            end = _resolve_name(range_parts[1], names)
+            if start is None or end is None:
+                return set()
+
+            if start <= end:
+                return set(range(start, end + 1, step))
+            else:
+                return set(range(start, 7, step)) | set(range(0, end + 1, step))
+
+        if field == "*":
+            return None
+
+        val = _resolve_name(field, names)
+        if val is not None:
+            return {val}
+        return set()
+
+    def _matches(field: str, value: int, names: dict | None = None) -> bool:
+        allowed = _expand_field(field, names)
+        if allowed is None:
+            return True
+        return value in allowed
+
+    return (
+        _matches(minute, now.minute)
+        and _matches(hour, now.hour)
+        and _matches(day, now.day)
+        and _matches(month, now.month)
+        and _matches(weekday, now.weekday(), day_names)
+    )
+
+
+# =====================================================================
 # Skill scheduler workflow
 # =====================================================================
 
@@ -1544,294 +1493,6 @@ async def skill_scheduler_workflow(ctx: inngest.Context) -> dict:
         except Exception:
             pass  # Don't fail the DLQ recording itself
         raise  # Re-raise so Inngest retries
-
-
-# =====================================================================
-# Token refresh workflow
-# =====================================================================
-
-
-@inngest_client.create_function(
-    fn_id="sidera-token-refresh",
-    name="Sidera Token Refresh",
-    trigger=inngest.TriggerCron(cron="0 5 * * *"),
-    retries=2,
-)
-async def token_refresh_workflow(ctx: inngest.Context) -> dict:
-    """Proactively refresh OAuth tokens expiring within 7 days.
-
-    Runs at 5 AM daily (2 hours before the briefing). Queries the
-    accounts table for tokens expiring within 7 days, refreshes each
-    one via the appropriate platform token endpoint, and saves the
-    new tokens (encrypted) back to the database.
-
-    If any refreshes fail, sends a Slack alert so the human can
-    intervene before the 7 AM briefing.
-    """
-
-    async def check_and_refresh() -> dict:
-        from src.db import service as db_service
-        from src.db.session import get_db_session
-
-        refreshed = 0
-        failed = 0
-        errors: list[str] = []
-
-        async with get_db_session() as session:
-            accounts = await db_service.get_accounts_expiring_soon(session, within_days=7)
-
-            for account in accounts:
-                try:
-                    new_tokens = await _refresh_oauth_token(account)
-                    if new_tokens:
-                        await db_service.update_account_tokens(
-                            session,
-                            account.id,
-                            access_token=new_tokens["access_token"],
-                            refresh_token=new_tokens.get(
-                                "refresh_token",
-                                account.oauth_refresh_token or "",
-                            ),
-                            expires_at=new_tokens.get("expires_at"),
-                        )
-                        refreshed += 1
-                except Exception as exc:
-                    from src.middleware.sentry_setup import capture_exception
-
-                    capture_exception(exc)
-                    failed += 1
-                    errors.append(f"{account.platform}:{account.platform_account_id}: {exc}")
-
-        return {
-            "refreshed": refreshed,
-            "failed": failed,
-            "errors": errors[:10],  # Cap error detail list
-        }
-
-    result = await ctx.step.run("check-and-refresh", check_and_refresh)
-
-    # Alert on failures
-    if result["failed"] > 0:
-
-        async def send_alert() -> dict:
-            from src.connectors.slack import SlackConnector
-
-            slack = SlackConnector()
-            return slack.send_alert(
-                channel_id=None,
-                alert_type="token_refresh_failed",
-                message=(f"Token refresh: {result['refreshed']} OK, {result['failed']} failed"),
-                details={
-                    "refreshed": result["refreshed"],
-                    "failed": result["failed"],
-                    "errors": result["errors"],
-                },
-            )
-
-        await ctx.step.run("alert-on-failure", send_alert)
-
-    return result
-
-
-async def _refresh_oauth_token(account) -> dict | None:
-    """Refresh an OAuth token for the given account.
-
-    Calls the appropriate token endpoint based on the account's platform:
-    - Google (google_ads, google_drive): POST to ``googleapis.com/token``
-    - Meta: GET ``graph.facebook.com/v18.0/oauth/access_token``
-
-    Args:
-        account: An Account model instance with platform, oauth_refresh_token,
-            and related fields.
-
-    Returns:
-        Dict with ``access_token``, optional ``refresh_token``, and optional
-        ``expires_at`` (as a datetime), or None if the platform is not
-        supported for refresh.
-    """
-    from datetime import datetime, timezone
-    from datetime import timedelta as _td
-
-    import httpx
-
-    from src.config import settings
-    from src.utils.encryption import decrypt_token, encrypt_token
-
-    platform = (
-        account.platform.value if hasattr(account.platform, "value") else str(account.platform)
-    )
-
-    if platform in ("google_ads", "google_drive"):
-        refresh_token = decrypt_token(account.oauth_refresh_token or "")
-        if not refresh_token:
-            return None
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": settings.google_ads_client_id,
-                    "client_secret": settings.google_ads_client_secret,
-                    "refresh_token": refresh_token,
-                    "grant_type": "refresh_token",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        expires_in = data.get("expires_in", 3600)
-        return {
-            "access_token": encrypt_token(data["access_token"]),
-            "refresh_token": encrypt_token(data.get("refresh_token", refresh_token)),
-            "expires_at": datetime.now(timezone.utc) + _td(seconds=expires_in),
-        }
-
-    if platform == "meta":
-        access_token = decrypt_token(account.oauth_access_token or "")
-        if not access_token:
-            return None
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://graph.facebook.com/v18.0/oauth/access_token",
-                params={
-                    "grant_type": "fb_exchange_token",
-                    "client_id": settings.meta_app_id,
-                    "client_secret": settings.meta_app_secret,
-                    "fb_exchange_token": access_token,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        expires_in = data.get("expires_in", 5_184_000)  # 60 days default
-        return {
-            "access_token": encrypt_token(data["access_token"]),
-            "expires_at": datetime.now(timezone.utc) + _td(seconds=expires_in),
-        }
-
-    return None  # Unsupported platform
-
-
-def _cron_matches_now(cron_expr: str | None, now) -> bool:
-    """Cron expression matcher for minute-level scheduling.
-
-    Supports standard 5-field cron: minute hour day month weekday.
-    Handles: ``*``, exact values, steps (``*/15``), ranges (``1-5``),
-    comma-separated lists (``0,15,30,45``), and combinations (``1-5/2``).
-    Day names (``MON``-``SUN``) are supported for the weekday field.
-    Weekday uses 0=Monday through 6=Sunday.
-
-    Args:
-        cron_expr: Cron expression string (e.g., ``"*/15 7-18 * * 1-5"``).
-        now: datetime object for the current time.
-
-    Returns:
-        True if the cron expression matches the current minute.
-    """
-    if not cron_expr:
-        return False
-
-    parts = cron_expr.strip().split()
-    if len(parts) != 5:
-        return False
-
-    minute, hour, day, month, weekday = parts
-
-    # Day name mapping
-    day_names = {
-        "MON": 0,
-        "TUE": 1,
-        "WED": 2,
-        "THU": 3,
-        "FRI": 4,
-        "SAT": 5,
-        "SUN": 6,
-    }
-
-    def _resolve_name(token: str, names: dict | None) -> int | None:
-        """Convert a day name to its numeric value, or parse as int."""
-        if names and token.upper() in names:
-            return names[token.upper()]
-        try:
-            return int(token)
-        except ValueError:
-            return None
-
-    def _expand_field(field: str, names: dict | None = None) -> set[int] | None:
-        """Expand a cron field into a set of matching values.
-
-        Returns None for ``*`` (matches everything) or a set of ints.
-        """
-        # Handle comma-separated lists first
-        if "," in field:
-            result: set[int] = set()
-            for part in field.split(","):
-                expanded = _expand_field(part.strip(), names)
-                if expanded is None:
-                    return None  # One part is *, matches everything
-                result |= expanded
-            return result
-
-        # Handle */N (step from start)
-        if field.startswith("*/"):
-            try:
-                step = int(field[2:])
-                if step <= 0:
-                    return set()
-                return {v for v in range(60) if v % step == 0}
-            except ValueError:
-                return set()
-
-        # Handle range: A-B or A-B/N
-        if "-" in field:
-            step = 1
-            range_part = field
-            if "/" in field:
-                range_part, step_str = field.split("/", 1)
-                try:
-                    step = int(step_str)
-                except ValueError:
-                    return set()
-
-            range_parts = range_part.split("-", 1)
-            if len(range_parts) != 2:
-                return set()
-
-            start = _resolve_name(range_parts[0], names)
-            end = _resolve_name(range_parts[1], names)
-            if start is None or end is None:
-                return set()
-
-            if start <= end:
-                return set(range(start, end + 1, step))
-            else:
-                # Wrap-around (e.g., 5-1 for weekdays)
-                return set(range(start, 7, step)) | set(range(0, end + 1, step))
-
-        # Plain * (matches everything)
-        if field == "*":
-            return None
-
-        # Single value
-        val = _resolve_name(field, names)
-        if val is not None:
-            return {val}
-        return set()
-
-    def _matches(field: str, value: int, names: dict | None = None) -> bool:
-        allowed = _expand_field(field, names)
-        if allowed is None:
-            return True  # * matches everything
-        return value in allowed
-
-    return (
-        _matches(minute, now.minute)
-        and _matches(hour, now.hour)
-        and _matches(day, now.day)
-        and _matches(month, now.month)
-        and _matches(weekday, now.weekday(), day_names)
-    )
 
 
 # =====================================================================
@@ -4120,481 +3781,7 @@ async def conversation_turn_workflow(
 
 
 # =====================================================================
-# 10. Meeting Join Workflow
-# =====================================================================
-
-
-@inngest_client.create_function(
-    fn_id="meeting-join",
-    trigger=inngest.TriggerEvent(event="sidera/meeting.join"),
-    retries=1,
-)
-async def meeting_join_workflow(ctx: inngest.Context) -> dict:
-    """Join a live meeting as a voice participant.
-
-    Triggered by ``sidera/meeting.join`` events emitted by the Slack
-    ``/sidera meeting join`` command.
-
-    Steps:
-    1. Validate role exists
-    2. Join the meeting via MeetingSessionManager (listen-only)
-    3. Wait for meeting to end (or timeout at max_duration)
-
-    Expected event data:
-    - meeting_url (str, required): Google Meet / Zoom URL
-    - role_id (str, required): The role that will join (listen-only)
-    - user_id (str, required): Who initiated the join
-    - channel_id (str, optional): Slack channel for notifications
-    """
-    meeting_url = ctx.event.data.get("meeting_url", "")
-    role_id = ctx.event.data.get("role_id", "")
-    user_id = ctx.event.data.get("user_id", "default")
-    channel_id = ctx.event.data.get("channel_id", "")
-
-    if not meeting_url:
-        raise inngest.NonRetriableError("meeting_url is required")
-    if not role_id:
-        raise inngest.NonRetriableError("role_id is required")
-
-    try:
-        # Step 1: Validate role exists
-        async def validate_role() -> dict:
-            from src.skills.db_loader import load_registry_with_db
-
-            registry = await load_registry_with_db()
-            role = registry.get_role(role_id)
-            if role is None:
-                raise inngest.NonRetriableError(f"Role '{role_id}' not found in registry")
-            return {
-                "role_name": role.name,
-                "is_manager": bool(role.manages),
-            }
-
-        await ctx.step.run("validate-role", validate_role)
-
-        # Step 2: Join the meeting
-        async def join_meeting() -> dict:
-            from src.meetings.session import get_meeting_manager
-
-            manager = get_meeting_manager()
-            meeting_ctx = await manager.join(
-                meeting_url=meeting_url,
-                role_id=role_id,
-                user_id=user_id,
-                channel_id=channel_id,
-            )
-            return {
-                "bot_id": meeting_ctx.bot_id,
-                "meeting_id": meeting_ctx.meeting_id,
-                "role_name": meeting_ctx.role_name,
-            }
-
-        join_data = await ctx.step.run("join-meeting", join_meeting)
-
-        _workflow_logger.info(
-            "meeting_join.success",
-            meeting_url=meeting_url,
-            role_id=role_id,
-            bot_id=join_data["bot_id"],
-            role_name=join_data["role_name"],
-        )
-
-        return {
-            "status": "joined",
-            "meeting_url": meeting_url,
-            "role_id": role_id,
-            "role_name": join_data["role_name"],
-            "bot_id": join_data["bot_id"],
-            "meeting_id": join_data["meeting_id"],
-        }
-
-    except inngest.NonRetriableError:
-        raise
-    except Exception as dlq_exc:
-        from src.middleware.sentry_setup import capture_exception
-
-        capture_exception(dlq_exc)
-
-        # Notify Slack of failure
-        try:
-            from src.connectors.slack import SlackConnector
-
-            connector = SlackConnector()
-            connector.send_alert(
-                channel_id=channel_id or None,
-                text=(
-                    f":x: Failed to join meeting as *{role_id}*: {dlq_exc}\n"
-                    f"Meeting URL: {meeting_url}"
-                ),
-            )
-        except Exception:
-            pass
-
-        # Record to DLQ
-        try:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.record_failed_run(
-                    session=session,
-                    workflow_name="meeting_join",
-                    event_name=ctx.event.name,
-                    event_data=ctx.event.data,
-                    error_message=str(dlq_exc),
-                    error_type=type(dlq_exc).__name__,
-                    user_id=user_id,
-                    run_id=ctx.run_id,
-                )
-        except Exception:
-            pass
-        raise
-
-
-# =====================================================================
-# 11. Meeting End Workflow
-# =====================================================================
-
-
-@inngest_client.create_function(
-    fn_id="meeting-end",
-    trigger=inngest.TriggerEvent(event="sidera/meeting.ended"),
-    retries=2,
-)
-async def meeting_end_workflow(ctx: inngest.Context) -> dict:
-    """Post-call processing after a meeting ends.
-
-    Triggered by ``sidera/meeting.ended`` events emitted by
-    ``MeetingSessionManager.leave()``.
-
-    Steps:
-    1. Load meeting session from DB (full transcript)
-    2. Summarize transcript + extract action items via LLM
-    3. Save summary + action items to DB
-    4. Emit ``sidera/manager.run`` with meeting_context if role is a manager
-    5. Post meeting summary to Slack
-
-    Expected event data:
-    - bot_id (str, required): Recall.ai bot UUID
-    - meeting_id (int, required): DB meeting_session ID
-    - role_id (str, required): Which role was in the meeting
-    - user_id (str, required): Who initiated the meeting
-    - channel_id (str, optional): Slack channel for output
-    - agent_turns (int): Number of times agent spoke
-    - transcript_entries (int): Number of transcript lines
-    - total_cost_usd (float): Total LLM cost during meeting
-    """
-    bot_id = ctx.event.data.get("bot_id", "")
-    meeting_id = ctx.event.data.get("meeting_id", 0)
-    role_id = ctx.event.data.get("role_id", "")
-    user_id = ctx.event.data.get("user_id", "default")
-    channel_id = ctx.event.data.get("channel_id", "")
-
-    if not bot_id or not meeting_id:
-        raise inngest.NonRetriableError("bot_id and meeting_id are required")
-
-    try:
-        # Step 1: Load meeting session and transcript from DB
-        async def load_meeting() -> dict:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                meeting = await db_service.get_meeting_session(
-                    session,
-                    meeting_id,
-                )
-            if meeting is None:
-                raise inngest.NonRetriableError(f"Meeting session {meeting_id} not found")
-
-            transcript_json = meeting.transcript_json or []
-            return {
-                "meeting_id": meeting.id,
-                "meeting_url": meeting.meeting_url or "",
-                "role_id": meeting.role_id or role_id,
-                "transcript": transcript_json,
-                "transcript_length": len(transcript_json),
-                "duration_seconds": meeting.duration_seconds or 0,
-                "agent_turns": meeting.agent_turns or 0,
-                "total_cost_usd": float(meeting.total_cost_usd or 0),
-                "participants_json": meeting.participants_json or [],
-            }
-
-        meeting_data = await ctx.step.run("load-meeting", load_meeting)
-
-        # Step 2: Summarize transcript + extract action items via LLM
-        async def summarize_meeting() -> dict:
-            from src.agent.core import SideraAgent
-            from src.skills.db_loader import load_registry_with_db
-
-            # Build transcript text
-            transcript = meeting_data.get("transcript", [])
-            if not transcript:
-                return {
-                    "summary": "No transcript was captured during this meeting.",
-                    "action_items": [],
-                }
-
-            transcript_text = "\n".join(
-                f"{entry.get('speaker', 'Unknown')}: {entry.get('text', '')}"
-                for entry in transcript
-            )
-
-            # Get role context
-            registry = await load_registry_with_db()
-            role = registry.get_role(meeting_data.get("role_id", ""))
-            role_name = role.name if role else meeting_data.get("role_id", "Agent")
-
-            # Use Sonnet for summarization
-            agent = SideraAgent()
-            participants = ", ".join(
-                p.get("name", "Unknown") for p in meeting_data.get("participants_json", [])
-            )
-            prompt = (
-                f"You are {role_name}. You just attended a meeting. "
-                f"Duration: {meeting_data.get('duration_seconds', 0) // 60} minutes. "
-                f"Participants: {participants}.\n\n"
-                f"## Meeting Transcript\n\n{transcript_text[:8000]}\n\n"
-                "## Instructions\n\n"
-                "1. Write a concise meeting summary "
-                "(3-5 bullet points of key decisions "
-                "and discussion topics).\n"
-                f"2. Extract specific action items with assignees where identifiable.\n"
-                f"3. Note any items that need your department's attention or follow-up.\n\n"
-                f"Format your response as:\n"
-                f"## Summary\n[bullet points]\n\n"
-                f"## Action Items\n[numbered list with assignees]\n\n"
-                f"## Department Follow-ups\n[items needing your attention]"
-            )
-
-            result = await agent.run_conversation_turn(
-                role_id=meeting_data.get("role_id", ""),
-                role_context=role.persona if role else "",
-                thread_history=[],
-                current_message=prompt,
-                user_id=user_id,
-                bot_user_id="",
-                turn_number=1,
-            )
-
-            # Extract action items as structured data
-            response_text = result.response_text
-            action_items = []
-            if "## Action Items" in response_text:
-                ai_section = response_text.split("## Action Items")[1]
-                if "##" in ai_section:
-                    ai_section = ai_section.split("##")[0]
-                # Parse numbered items
-                import re
-
-                items = re.findall(
-                    r"\d+\.\s*(.+?)(?=\n\d+\.|\n##|\Z)",
-                    ai_section,
-                    re.DOTALL,
-                )
-                action_items = [
-                    {"item": item.strip(), "status": "pending"} for item in items if item.strip()
-                ]
-
-            return {
-                "summary": response_text,
-                "action_items": action_items,
-                "cost": result.cost,
-            }
-
-        summary_data = await ctx.step.run(
-            "summarize-meeting",
-            summarize_meeting,
-        )
-
-        # Step 3: Save summary + action items to DB
-        async def save_summary() -> dict:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.update_meeting_transcript(
-                    session=session,
-                    meeting_id=meeting_id,
-                    transcript_json=meeting_data.get("transcript", []),
-                    transcript_summary=summary_data.get("summary", ""),
-                )
-                # Update meeting status to ended and store action items
-                from sqlalchemy import update as sql_update
-
-                from src.models.schema import MeetingSession
-
-                await session.execute(
-                    sql_update(MeetingSession)
-                    .where(MeetingSession.id == meeting_id)
-                    .values(
-                        action_items_json=summary_data.get("action_items", []),
-                    )
-                )
-                await session.commit()
-            return {"saved": True}
-
-        await ctx.step.run("save-summary", save_summary)
-
-        # Step: Sync meeting summary to Google Drive (living documents)
-        async def sync_meeting_to_drive() -> dict:
-            try:
-                from src.skills.document_sync import sync_role_output_to_drive
-
-                summary_text = summary_data.get("summary", "")
-                action_items = summary_data.get("action_items", [])
-                return await sync_role_output_to_drive(
-                    role_id=role_id,
-                    output_type="meetings",
-                    content=summary_text,
-                    metadata={
-                        "duration_seconds": meeting_data.get("duration_seconds", 0),
-                        "action_items_count": len(action_items),
-                        "cost_usd": meeting_data.get("total_cost_usd", 0),
-                    },
-                )
-            except Exception as exc:
-                _workflow_logger.warning(
-                    "meeting_end.drive_sync_failed",
-                    error=str(exc),
-                )
-                return {"synced": False, "error": str(exc)}
-
-        await ctx.step.run("sync-meeting-to-drive", sync_meeting_to_drive)
-
-        # Step 4: Post summary to Slack
-        async def post_summary() -> dict:
-            from src.connectors.slack import SlackConnector
-
-            connector = SlackConnector()
-            duration_min = meeting_data.get("duration_seconds", 0) // 60
-            agent_turns = meeting_data.get("agent_turns", 0)
-            action_count = len(summary_data.get("action_items", []))
-            cost = meeting_data.get("total_cost_usd", 0)
-            summary_cost = summary_data.get("cost", {}).get("total_cost_usd", 0)
-            total_cost = cost + summary_cost
-
-            header = (
-                f":microphone: *Meeting Summary* — {meeting_data.get('role_id', 'agent')}\n"
-                f"Duration: {duration_min} min · Agent spoke {agent_turns} times · "
-                f"{action_count} action items · Cost: ${total_cost:.2f}\n"
-                f"Meeting: {meeting_data.get('meeting_url', 'N/A')}\n\n"
-            )
-
-            full_text = header + summary_data.get("summary", "No summary available.")
-            return connector.send_alert(
-                channel_id=channel_id or None,
-                text=full_text,
-            )
-
-        slack_result = await ctx.step.run("post-summary", post_summary)
-
-        # Step 5: If role is a manager, emit sidera/manager.run with meeting context
-        async def trigger_delegation() -> dict:
-            from src.skills.db_loader import load_registry_with_db
-
-            registry = await load_registry_with_db()
-            role = registry.get_role(meeting_data.get("role_id", ""))
-
-            if role is None or not role.manages:
-                return {"delegated": False, "reason": "not_a_manager"}
-
-            # Emit manager.run event with meeting_context injected
-            event_data = {
-                "user_id": user_id,
-                "role_id": meeting_data.get("role_id", ""),
-                "channel_id": channel_id,
-                "meeting_context": {
-                    "meeting_id": meeting_id,
-                    "summary": summary_data.get("summary", ""),
-                    "action_items": summary_data.get("action_items", []),
-                    "transcript_length": meeting_data.get("transcript_length", 0),
-                    "duration_seconds": meeting_data.get("duration_seconds", 0),
-                    "participants": meeting_data.get("participants_json", []),
-                },
-            }
-
-            await ctx.step.send_event(
-                "trigger-delegation",
-                inngest.Event(
-                    name="sidera/manager.run",
-                    data=event_data,
-                ),
-            )
-
-            return {"delegated": True, "role_id": meeting_data.get("role_id", "")}
-
-        delegation_result = await ctx.step.run(
-            "trigger-delegation",
-            trigger_delegation,
-        )
-
-        # Step 6: Log audit event
-        async def log_audit() -> dict:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.log_event(
-                    session=session,
-                    user_id=user_id,
-                    event_type="meeting_ended",
-                    event_data={
-                        "meeting_id": meeting_id,
-                        "bot_id": bot_id,
-                        "role_id": meeting_data.get("role_id", ""),
-                        "duration_seconds": meeting_data.get("duration_seconds", 0),
-                        "agent_turns": meeting_data.get("agent_turns", 0),
-                        "transcript_length": meeting_data.get("transcript_length", 0),
-                        "action_items_count": len(summary_data.get("action_items", [])),
-                        "delegated": delegation_result.get("delegated", False),
-                        "total_cost_usd": meeting_data.get("total_cost_usd", 0),
-                    },
-                    source="meeting_end_workflow",
-                )
-            return {"logged": True}
-
-        await ctx.step.run("log-audit", log_audit)
-
-        return {
-            "status": "completed",
-            "meeting_id": meeting_id,
-            "role_id": meeting_data.get("role_id", ""),
-            "duration_seconds": meeting_data.get("duration_seconds", 0),
-            "transcript_length": meeting_data.get("transcript_length", 0),
-            "action_items": len(summary_data.get("action_items", [])),
-            "delegated": delegation_result.get("delegated", False),
-            "slack_ok": slack_result.get("ok", False),
-        }
-
-    except inngest.NonRetriableError:
-        raise
-    except Exception as dlq_exc:
-        from src.middleware.sentry_setup import capture_exception
-
-        capture_exception(dlq_exc)
-        try:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.record_failed_run(
-                    session=session,
-                    workflow_name="meeting_end",
-                    event_name=ctx.event.name,
-                    event_data=ctx.event.data,
-                    error_message=str(dlq_exc),
-                    error_type=type(dlq_exc).__name__,
-                    user_id=user_id,
-                    run_id=ctx.run_id,
-                )
-        except Exception:
-            pass
-        raise
-
-
-# =====================================================================
-# 12. Data Retention Workflow
+# Data Retention Workflow
 # =====================================================================
 
 
@@ -5479,364 +4666,6 @@ async def claude_code_task_workflow(ctx: inngest.Context) -> dict:
 
 
 # =====================================================================
-# Event reactor workflow (always-on monitoring)
-# =====================================================================
-
-
-@inngest_client.create_function(
-    fn_id="sidera-event-reactor",
-    name="Sidera Event Reactor",
-    trigger=inngest.TriggerEvent(event="sidera/webhook.received"),
-    retries=1,
-)
-async def event_reactor_workflow(ctx: inngest.Context) -> dict:
-    """Process an inbound webhook event from an external monitoring source.
-
-    Classifies severity, sends Slack alerts for medium+ events, and
-    triggers an agent investigation (heartbeat-style) for high/critical.
-
-    Expected event data:
-    - webhook_event_id (int, optional): DB record ID
-    - source (str): "google_ads", "meta", "bigquery", "custom:X"
-    - event_type (str): normalized event type
-    - severity (str): "low", "medium", "high", "critical"
-    - account_id (str, optional): platform account ID
-    - campaign_id (str, optional): platform campaign ID
-    - campaign_name (str, optional): campaign name
-    - summary (str): human-readable event summary
-    - details (dict, optional): structured event details
-    """
-    try:
-        data = ctx.event.data
-        event_id = data.get("webhook_event_id")
-        source = data.get("source", "unknown")
-        event_type = data.get("event_type", "custom")
-        severity = data.get("severity", "medium")
-        summary = data.get("summary", "Webhook event received")
-        details = data.get("details", {})
-
-        _workflow_logger.info(
-            "event_reactor.start",
-            event_id=event_id,
-            source=source,
-            event_type=event_type,
-            severity=severity,
-        )
-
-        # Step 1: Classify response level
-        async def classify_response() -> dict:
-            from src.config import settings
-
-            severity_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-            min_investigate = severity_order.get(settings.webhook_auto_investigate_severity, 2)
-            event_level = severity_order.get(severity, 1)
-
-            should_alert = event_level >= 1  # medium+
-            should_investigate = event_level >= min_investigate
-
-            # Rate-limit investigations
-            if should_investigate:
-                try:
-                    from src.db import service as db_service
-                    from src.db.session import get_db_session
-
-                    async with get_db_session() as session:
-                        recent = await db_service.get_recent_audit_events(
-                            session,
-                            event_type="webhook_investigation",
-                            limit=settings.webhook_max_investigations_per_hour,
-                        )
-                        if len(recent) >= settings.webhook_max_investigations_per_hour:
-                            should_investigate = False
-                except Exception:
-                    pass
-
-            return {
-                "should_alert": should_alert,
-                "should_investigate": should_investigate,
-                "severity": severity,
-            }
-
-        classification = await ctx.step.run("classify-response", classify_response)
-
-        # Step 2: Resolve which role should handle this event
-        async def resolve_role() -> dict:
-            # Check role event_subscriptions from registry
-            try:
-                from src.skills.db_loader import load_registry_with_db
-
-                registry = await load_registry_with_db()
-                for rid, role in registry.list_roles():
-                    subs = getattr(role, "event_subscriptions", ())
-                    if event_type in subs:
-                        return {"role_id": rid}
-            except Exception:
-                pass  # Fall through to defaults
-
-            # Fallback: static routing by source
-            role_map = {
-                "google_ads": "performance_media_buyer",
-                "meta": "performance_media_buyer",
-                "bigquery": "performance_media_buyer",
-            }
-            role_id = role_map.get(source, "")
-
-            if event_type == "system_alert":
-                role_id = "head_of_it"
-
-            if not role_id:
-                role_id = "head_of_marketing"
-
-            return {"role_id": role_id}
-
-        role_data = await ctx.step.run("resolve-role", resolve_role)
-        target_role_id = role_data.get("role_id", "head_of_marketing")
-
-        # Step 3: Update DB status
-        if event_id:
-
-            async def update_status() -> None:
-                from src.db import service as db_service
-                from src.db.session import get_db_session
-
-                status = "dispatched" if classification.get("should_alert") else "ignored"
-                try:
-                    async with get_db_session() as session:
-                        await db_service.update_webhook_event_status(
-                            session,
-                            event_id,
-                            status,
-                            dispatched_event="sidera/webhook.received",
-                            role_id=target_role_id,
-                        )
-                except Exception as exc:
-                    _workflow_logger.warning(
-                        "event_reactor.status_update_failed",
-                        error=str(exc),
-                    )
-
-            await ctx.step.run("update-status", update_status)
-
-        # Step 4: Send Slack alert for medium+ severity
-        if classification.get("should_alert"):
-
-            async def send_alert() -> dict:
-                from src.config import settings
-                from src.connectors.slack import SlackConnector
-
-                severity_emoji = {
-                    "low": ":information_source:",
-                    "medium": ":warning:",
-                    "high": ":rotating_light:",
-                    "critical": ":fire:",
-                }
-
-                emoji = severity_emoji.get(severity, ":bell:")
-                alert_text = (
-                    f"{emoji} *Webhook Alert — {severity.upper()}*\n"
-                    f"*Source:* {source} | *Type:* {event_type}\n"
-                    f"*Summary:* {summary}\n"
-                )
-
-                campaign_name = data.get("campaign_name", "")
-                account_id = data.get("account_id", "")
-                if campaign_name:
-                    alert_text += f"*Campaign:* {campaign_name}\n"
-                if account_id:
-                    alert_text += f"*Account:* {account_id}\n"
-
-                if classification.get("should_investigate"):
-                    alert_text += f"\n_Investigating via {target_role_id}..._"
-
-                channel = settings.slack_channel_id
-                try:
-                    connector = SlackConnector()
-                    connector.post_message(channel, alert_text)
-                    return {"posted": True}
-                except Exception as exc:
-                    _workflow_logger.warning(
-                        "event_reactor.slack_failed",
-                        error=str(exc),
-                    )
-                    return {"posted": False, "error": str(exc)}
-
-            await ctx.step.run("send-alert", send_alert)
-
-        # Step 5: Trigger agent investigation for high/critical
-        if classification.get("should_investigate"):
-
-            async def run_investigation() -> dict:
-                from src.agent.core import SideraAgent
-                from src.agent.prompts import (
-                    WEBHOOK_REACTION_SUPPLEMENT,
-                    build_webhook_reaction_prompt,
-                )
-                from src.mcp_servers.evolution import (
-                    clear_proposer_context,
-                    set_proposer_context,
-                )
-                from src.mcp_servers.messaging import (
-                    clear_messaging_context,
-                    set_messaging_context,
-                )
-                from src.skills.db_loader import load_registry_with_db
-                from src.skills.executor import compose_role_context
-
-                registry = await load_registry_with_db()
-                role = registry.get_role(target_role_id)
-                if role is None:
-                    return {
-                        "status": "skipped",
-                        "reason": f"Role '{target_role_id}' not found",
-                    }
-
-                dept = registry.get_department(role.department_id)
-                set_messaging_context(target_role_id, role.department_id, registry)
-                set_proposer_context(target_role_id, role.department_id)
-
-                # Build role context (no memory loading needed for reactive)
-                role_context = compose_role_context(
-                    department=dept,
-                    role=role,
-                    memory_context="",
-                    registry=registry,
-                )
-
-                # Build system prompt with webhook reaction supplement
-                system_prompt = role_context + "\n\n" + WEBHOOK_REACTION_SUPPLEMENT
-
-                # Build the user prompt with event context
-                user_prompt = build_webhook_reaction_prompt(
-                    role_name=role.name,
-                    event_type=event_type,
-                    severity=severity,
-                    source=source,
-                    summary=summary,
-                    details=details,
-                    campaign_name=data.get("campaign_name", ""),
-                    account_id=data.get("account_id", ""),
-                )
-
-                agent = SideraAgent()
-                try:
-                    # Use Sonnet for event investigations (higher quality than Haiku)
-                    from src.config import settings
-
-                    result = await agent.run_heartbeat_turn(
-                        role_id=target_role_id,
-                        role_context=system_prompt,
-                        user_id="webhook_reactor",
-                        is_manager=bool(getattr(role, "manages", ())),
-                        heartbeat_model=settings.model_standard,
-                        pending_messages_summary="",
-                        user_prompt_override=user_prompt,
-                    )
-                    return {
-                        "status": "completed",
-                        "output": result.get("output", "")[:2000],
-                        "cost": result.get("cost", {}),
-                    }
-                except Exception as exc:
-                    return {"status": "error", "error": str(exc)}
-                finally:
-                    clear_messaging_context()
-                    clear_proposer_context()
-
-            investigation = await ctx.step.run("run-investigation", run_investigation)
-
-            # Step 6: Post investigation results
-            if investigation.get("status") == "completed" and investigation.get("output"):
-
-                async def post_results() -> None:
-                    from src.config import settings
-                    from src.connectors.slack import SlackConnector
-
-                    output = investigation.get("output", "")
-                    text = (
-                        f":mag: *Investigation Results — {target_role_id}*\n"
-                        f"Re: {event_type} from {source}\n\n"
-                        f"{output}"
-                    )
-                    try:
-                        connector = SlackConnector()
-                        connector.post_message(settings.slack_channel_id, text)
-                    except Exception as exc:
-                        _workflow_logger.warning(
-                            "event_reactor.results_post_failed",
-                            error=str(exc),
-                        )
-
-                await ctx.step.run("post-results", post_results)
-
-        # Step 7: Audit log
-        async def log_audit() -> None:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            event_audit_type = (
-                "webhook_investigation"
-                if classification.get("should_investigate")
-                else "webhook_alert"
-            )
-
-            try:
-                async with get_db_session() as session:
-                    await db_service.log_event(
-                        session,
-                        user_id="webhook_reactor",
-                        event_type=event_audit_type,
-                        event_data={
-                            "webhook_event_id": event_id,
-                            "source": source,
-                            "event_type": event_type,
-                            "severity": severity,
-                            "summary": summary,
-                            "role_id": target_role_id,
-                            "investigated": classification.get("should_investigate", False),
-                        },
-                        source="event_reactor",
-                    )
-            except Exception:
-                pass
-
-        await ctx.step.run("log-audit", log_audit)
-
-        return {
-            "status": "completed",
-            "source": source,
-            "event_type": event_type,
-            "severity": severity,
-            "alerted": classification.get("should_alert", False),
-            "investigated": classification.get("should_investigate", False),
-            "role_id": target_role_id,
-        }
-
-    except Exception as dlq_exc:
-        _workflow_logger.error(
-            "event_reactor.failed",
-            error=str(dlq_exc),
-        )
-        try:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.record_failed_run(
-                    session=session,
-                    workflow_name="event_reactor",
-                    event_name=ctx.event.name,
-                    event_data=ctx.event.data,
-                    error_message=str(dlq_exc),
-                    error_type=type(dlq_exc).__name__,
-                    user_id="webhook_reactor",
-                    run_id=ctx.run_id,
-                )
-        except Exception:
-            pass
-        raise
-
-
-# =====================================================================
 # Working Group workflow
 # =====================================================================
 
@@ -6306,123 +5135,6 @@ async def working_group_workflow(ctx: inngest.Context) -> dict:
 
 
 # =====================================================================
-# 18. Bootstrap workflow -- ingest company docs and configure agents
-# =====================================================================
-
-
-@inngest_client.create_function(
-    fn_id="bootstrap-workflow",
-    trigger=inngest.TriggerEvent(event="sidera/bootstrap.run"),
-    retries=1,
-)
-async def bootstrap_workflow(ctx: inngest.Context) -> dict:
-    """Run the company bootstrap pipeline.
-
-    Expected event data:
-    - folder_id (str, required): Google Drive folder ID
-    - user_id (str, optional): User who initiated
-    - max_docs (int, optional): Max documents to crawl (default 100)
-    - channel_id (str, optional): Slack channel for results
-    """
-    try:
-        folder_id = ctx.event.data.get("folder_id", "")
-        user_id = ctx.event.data.get("user_id", "bootstrap")
-        max_docs = int(ctx.event.data.get("max_docs", 100))
-        channel_id = ctx.event.data.get("channel_id", "")
-
-        if not folder_id:
-            raise inngest.NonRetriableError("folder_id is required")
-
-        # Step 1: Run the full bootstrap pipeline (crawl -> classify -> extract -> generate)
-        async def run_pipeline() -> dict:
-            from src.bootstrap import run_bootstrap
-
-            plan = await run_bootstrap(folder_id, user_id=user_id, max_docs=max_docs)
-            return plan.to_dict()
-
-        plan_data = await ctx.step.run("run-bootstrap-pipeline", run_pipeline)
-
-        # Step 2: Post plan summary to Slack for review
-        async def post_plan_for_review() -> dict:
-            plan_id = plan_data.get("id", "unknown")
-            n_depts = len(plan_data.get("departments", []))
-            n_roles = len(plan_data.get("roles", []))
-            n_skills = len(plan_data.get("skills", []))
-            n_memories = len(plan_data.get("memories", []))
-            cost = plan_data.get("estimated_cost", 0)
-            n_docs = plan_data.get("documents_crawled", 0)
-            errors = plan_data.get("errors", [])
-
-            summary_lines = [
-                "*Bootstrap Plan Ready for Review*",
-                f"Plan ID: `{plan_id}`",
-                f"Documents crawled: {n_docs}",
-                "",
-                "*Generated configuration:*",
-                f"  Departments: {n_depts}",
-                f"  Roles: {n_roles}",
-                f"  Skills: {n_skills}",
-                f"  Seed memories: {n_memories}",
-                f"  Estimated cost: ${cost:.2f}",
-            ]
-
-            if errors:
-                summary_lines.append(f"\n:warning: {len(errors)} warning(s):")
-                for err in errors[:5]:
-                    summary_lines.append(f"  - {err}")
-
-            summary_lines.append(f"\nReview via API: `GET /api/bootstrap/{plan_id}`")
-            summary_lines.append(f"Approve: `POST /api/bootstrap/{plan_id}/approve`")
-
-            text = "\n".join(summary_lines)
-
-            # Post to Slack if channel configured
-            if channel_id:
-                try:
-                    from src.connectors.slack import SlackConnector
-
-                    slack = SlackConnector()
-                    slack.send_message(channel=channel_id, text=text)
-                except Exception as slack_exc:
-                    _workflow_logger.warning("bootstrap.slack_post_error", error=str(slack_exc))
-
-            return {"plan_id": plan_id, "posted": bool(channel_id)}
-
-        await ctx.step.run("post-plan-for-review", post_plan_for_review)
-
-        return {
-            "status": "plan_ready",
-            "plan_id": plan_data.get("id", ""),
-            "departments": len(plan_data.get("departments", [])),
-            "roles": len(plan_data.get("roles", [])),
-            "skills": len(plan_data.get("skills", [])),
-        }
-
-    except inngest.NonRetriableError:
-        raise
-    except Exception as exc:
-        _workflow_logger.error("bootstrap.workflow_error", error=str(exc))
-        try:
-            from src.db import service as db_service
-            from src.db.session import get_db_session
-
-            async with get_db_session() as session:
-                await db_service.record_failed_run(
-                    session,
-                    workflow_name="bootstrap_workflow",
-                    event_data=dict(ctx.event.data),
-                    error_message=str(exc),
-                    error_type=type(exc).__name__,
-                    user_id=ctx.event.data.get("user_id", ""),
-                    run_id=ctx.run_id,
-                )
-                await session.commit()
-        except Exception:
-            pass
-        raise
-
-
-# =====================================================================
 # Exports
 # =====================================================================
 
@@ -6431,18 +5143,13 @@ all_workflows = [
     cost_monitor_workflow,
     skill_runner_workflow,
     skill_scheduler_workflow,
-    token_refresh_workflow,
     role_runner_workflow,
     department_runner_workflow,
     manager_runner_workflow,
     conversation_turn_workflow,
-    meeting_join_workflow,
-    meeting_end_workflow,
     data_retention_workflow,
     heartbeat_runner_workflow,
     memory_consolidation_workflow,
     claude_code_task_workflow,
-    event_reactor_workflow,
     working_group_workflow,
-    bootstrap_workflow,
 ]

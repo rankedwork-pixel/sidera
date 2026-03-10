@@ -75,7 +75,7 @@ VALID_CATEGORIES = frozenset(
         "operations",
     }
 )
-VALID_PLATFORMS = frozenset({"google_ads", "meta", "bigquery", "google_drive"})
+VALID_PLATFORMS = frozenset({"custom"})
 
 
 # =============================================================================

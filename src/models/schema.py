@@ -62,9 +62,12 @@ class UserRole(str, PyEnum):
 
 
 class Platform(str, PyEnum):
-    GOOGLE_ADS = "google_ads"
-    META = "meta"
-    BING = "bing"
+    """Platform identifier for connected accounts.
+
+    Extensible — add new platforms as connectors are installed.
+    """
+
+    CUSTOM = "custom"
 
 
 class ApprovalStatus(str, PyEnum):
@@ -106,28 +109,22 @@ class ClearanceLevel(str, PyEnum):
 
 
 class ActionType(str, PyEnum):
-    BUDGET_CHANGE = "budget_change"
-    PAUSE_CAMPAIGN = "pause_campaign"
-    ENABLE_CAMPAIGN = "enable_campaign"
-    PAUSE_AD_SET = "pause_ad_set"
-    BID_CHANGE = "bid_change"
+    """Types of actions that flow through the approval pipeline.
+
+    Core framework types are listed here. Domain-specific action types
+    can be added as connectors are installed.
+    """
+
     RECOMMENDATION_ACCEPT = "recommendation_accept"
     RECOMMENDATION_REJECT = "recommendation_reject"
-    # Write action types
-    ADD_NEGATIVE_KEYWORDS = "add_negative_keywords"
-    UPDATE_AD_SCHEDULE = "update_ad_schedule"
-    UPDATE_GEO_BID_MODIFIER = "update_geo_bid_modifier"
-    UPDATE_AD_STATUS = "update_ad_status"
-    UPDATE_ADSET_BUDGET = "update_adset_budget"
-    UPDATE_ADSET_BID = "update_adset_bid"
-    # Campaign creation
-    CREATE_CAMPAIGN = "create_campaign"
     # Skill evolution
     SKILL_PROPOSAL = "skill_proposal"
     # Claude Code task execution
     CLAUDE_CODE_TASK = "claude_code_task"
     # Role evolution
     ROLE_PROPOSAL = "role_proposal"
+    # Generic connector actions
+    CUSTOM_ACTION = "custom_action"
 
 
 # --- Tables ---

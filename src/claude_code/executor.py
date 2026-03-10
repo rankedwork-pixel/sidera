@@ -271,11 +271,7 @@ class ClaudeCodeExecutor:
         """
         # Ensure MCP tools are registered in the global ToolRegistry.
         # These imports trigger @tool decorator registration on first import.
-        import src.mcp_servers.bigquery  # noqa: F401
         import src.mcp_servers.code_execution  # noqa: F401
-        import src.mcp_servers.google_ads  # noqa: F401
-        import src.mcp_servers.google_drive  # noqa: F401
-        import src.mcp_servers.meta  # noqa: F401
         import src.mcp_servers.skill_runner  # noqa: F401
         import src.mcp_servers.slack  # noqa: F401
         import src.mcp_servers.system  # noqa: F401
